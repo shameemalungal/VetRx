@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#faf8ff;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: 'class', theme: { extend: { colors: { 'on-surface-variant': '#3d4947', 'tertiary-fixed-dim': '#4edea3', 'outline': '#6d7a77', 'on-primary-fixed': '#00201d', 'inverse-on-surface': '#eef0ff', 'secondary-container': '#5bb8fe', 'on-background': '#131b2e', 'inverse-surface': '#283044', 'on-error': '#ffffff', 'outline-variant': '#bcc9c6', 'tertiary': '#006947', 'primary': '#00685f', 'secondary-fixed-dim': '#93ccff', 'on-secondary-fixed': '#001d31', 'primary-container': '#008378', 'surface-container-lowest': '#ffffff', 'secondary-fixed': '#cce5ff', 'surface-tint': '#006a61', 'primary-fixed': '#89f5e7', 'surface-container-highest': '#dae2fd', 'on-secondary-fixed-variant': '#004b73', 'inverse-primary': '#6bd8cb', 'on-primary-fixed-variant': '#005049', 'on-surface': '#131b2e', 'on-primary-container': '#f4fffc', 'on-secondary': '#ffffff', 'on-tertiary-fixed-variant': '#005236', 'error-container': '#ffdad6', 'on-primary': '#ffffff', 'surface-container-low': '#f2f3ff', 'background': '#faf8ff', 'error': '#ba1a1a', 'surface': '#faf8ff', 'on-secondary-container': '#00476e', 'on-tertiary-fixed': '#002113', 'tertiary-container': '#00855b', 'on-tertiary-container': '#f5fff6', 'surface-container': '#eaedff', 'secondary': '#006398', 'on-tertiary': '#ffffff', 'surface-dim': '#d2d9f4', 'surface-bright': '#faf8ff', 'surface-variant': '#dae2fd', 'primary-fixed-dim': '#6bd8cb', 'surface-container-high': '#e2e7ff', 'on-error-container': '#93000a', 'tertiary-fixed': '#6ffbbe' }, borderRadius: { 'DEFAULT': '0.25rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px' }, spacing: { 'space-xs': '0.25rem', 'space-2xl': '2rem', 'space-xxs': '0.125rem', 'space-xl': '1.5rem', 'space-3xl': '3rem', 'gutter-default': '1.25rem', 'space-md': '0.75rem', 'gutter-compact': '0.75rem', 'margin-screen': '1.5rem', 'space-base': '1rem', 'space-lg': '1.25rem', 'space-sm': '0.5rem' }, fontFamily: { 'headline-lg': ['Plus Jakarta Sans'], 'headline-lg-mobile': ['Plus Jakarta Sans'], 'data-mono': ['JetBrains Mono'], 'label-md': ['Inter'], 'headline-xl-mobile': ['Plus Jakarta Sans'], 'headline-xl': ['Plus Jakarta Sans'], 'body-md': ['Inter'], 'body-sm': ['Inter'], 'headline-sm': ['Plus Jakarta Sans'], 'body-lg': ['Inter'], 'label-lg': ['Inter'], 'headline-md': ['Plus Jakarta Sans'], 'label-sm': ['Inter'] }, fontSize: { 'headline-lg': ['24px', { lineHeight: '32px', letterSpacing: '-0.02em', fontWeight: '700' }], 'headline-lg-mobile': ['20px', { lineHeight: '28px', letterSpacing: '-0.015em', fontWeight: '700' }], 'data-mono': ['13px', { lineHeight: '18px', letterSpacing: '-0.01em', fontWeight: '500' }], 'label-md': ['12px', { lineHeight: '16px', letterSpacing: '0.01em', fontWeight: '600' }], 'headline-xl-mobile': ['26px', { lineHeight: '34px', letterSpacing: '-0.02em', fontWeight: '700' }], 'headline-xl': ['32px', { lineHeight: '40px', letterSpacing: '-0.025em', fontWeight: '700' }], 'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }], 'body-sm': ['13px', { lineHeight: '18px', fontWeight: '400' }], 'headline-sm': ['16px', { lineHeight: '24px', fontWeight: '600' }], 'body-lg': ['16px', { lineHeight: '24px', fontWeight: '400' }], 'label-lg': ['14px', { lineHeight: '20px', letterSpacing: '0.005em', fontWeight: '600' }], 'headline-md': ['18px', { lineHeight: '26px', letterSpacing: '-0.01em', fontWeight: '600' }], 'label-sm': ['11px', { lineHeight: '14px', letterSpacing: '0.04em', fontWeight: '700' }] } } } };</script><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface font-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 inset-x-0 z-50 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] pt-safe"><div class="h-14 px-space-base flex items-center justify-between"><div class="flex items-center gap-space-sm"><img alt="Modern minimalist veterinary Rx medical cross and pet paw silhouette fusion logo mark, clean vector teal aesthetic #0D9488, crisp geometry on transparent background. Design context: - Primary color: #0d9488
+- Font: plusJakartaSans
+- Mode: light
+- Roundness: rounded-md
+. The logo should be visually consistent with these brand tokens." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VM1y23xiZsA1-TRxojioWMyeegtT0Lb8bpD1KRIhDVjkOSPPQ9hqNdizdu4HXE5Smr_VXOBMhcu8IgtsLcExJqej6HK0c3ybG8XWIQBn-hnDa1xPJfmhWb2aYNPNOLk2klEPDxgtfBPaqmPoyPvU2AP8E7EWo3b52pvwDlEjM9TiFkG0J1NNuW_nFFtDmelJTGtVPes1zikfH6IhGBoUVs4KHQz4BlPQBKJ4cg4O0e9wTYQf41JxD3LOM"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-on-surface leading-none tracking-tight">VetRx</span><span class="font-label-sm text-label-sm text-on-surface-variant leading-none mt-space-xxs">Prescriptions</span></div></div><div class="flex items-center gap-space-sm"><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[22px]">notifications</span></button><img alt="Profile" class="w-8 h-8 rounded-full object-cover shadow-[0_1px_4px_rgba(0,0,0,0.08)]" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/></div></div></header><main class="flex flex-col relative w-full pt-14 pb-24 bg-surface px-space-base"><div class="flex flex-col w-full relative">
+<!-- Underlying Prescriptions View (Dimmed Context Behind Active Modal Sheet) -->
+<div class="flex flex-col gap-space-base pb-6 opacity-40 pointer-events-none select-none filter blur-[1px] transition-all duration-300">
+<!-- Patient Mini Card -->
+<div class="bg-surface-container-lowest p-space-base rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[26px]">pets</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface">Barnaby</span>
+<span class="bg-primary-fixed text-on-primary-fixed px-space-xs py-0.5 rounded-full font-label-sm text-label-sm">Canine</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Golden Retriever · 4.2 yrs · 31.8 kg</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline">tune</span>
+</div>
+<!-- Active Prescription List Preview (Backgrounded) -->
+<div class="bg-surface-container-lowest p-space-base rounded-xl shadow-sm flex flex-col gap-space-sm">
+<span class="font-label-md text-label-md text-outline tracking-wider uppercase">Active Draft Items</span>
+<div class="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Amoxicillin 500 mg</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">1 tab · PO · BID</p>
+</div>
+<span class="font-data-mono text-data-mono text-primary font-bold">$34.20</span>
+</div>
+<div class="bg-surface-container-low p-space-md rounded-lg flex items-center justify-between">
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Meloxicam 1.5 mg/ml</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">0.4 ml · PO · SID</p>
+</div>
+<span class="font-data-mono text-data-mono text-primary font-bold">$22.50</span>
+</div>
+</div>
+</div>
+<!-- Persistent Scrim / Sheet Overlay Backing -->
+<div class="fixed inset-0 z-40 bg-inverse-surface/40 backdrop-blur-sm transition-opacity duration-300"></div>
+<!-- Dedicated Mobile Bottom Sheet Container (Occupies ~80% Viewport, 390px Mobile Optimized) -->
+<aside aria-labelledby="sheet-title" aria-modal="true" class="fixed inset-x-0 bottom-0 z-50 max-w-[430px] mx-auto w-full max-h-[724px] bg-surface-container-lowest rounded-t-[28px] shadow-2xl flex flex-col overflow-hidden pb-16 transform transition-transform duration-300 ease-out" id="protocol-bottom-sheet" role="dialog">
+<!-- Top Grab Handle / Tactile Drag Notch Area -->
+<div class="w-full flex flex-col items-center pt-space-md pb-space-xs bg-surface-container-lowest cursor-grab active:cursor-grabbing touch-none select-none">
+<div class="w-12 h-1.5 rounded-full bg-outline-variant/60"></div>
+</div>
+<!-- Sheet Header Section -->
+<div class="px-space-lg pt-space-xs pb-space-sm flex flex-col gap-space-xs bg-surface-container-lowest">
+<div class="flex items-center justify-between">
+<div class="inline-flex items-center gap-space-xs bg-secondary-fixed text-on-secondary-fixed px-space-md py-1 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-secondary">medical_services</span>
+<span class="font-label-sm text-label-sm font-bold">Canine Acute Otitis Externa</span>
+</div>
+<button aria-label="Close protocol reconciliation modal" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface active:scale-95 transition-transform" id="close-sheet-btn">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mt-space-xs" id="sheet-title">
+        2 Medicines Already in Prescription
+      </h2>
+<!-- Reassurance Clinical Banner -->
+<div class="bg-surface-container-low px-space-md py-space-sm rounded-lg flex items-center gap-space-sm mt-space-xxs">
+<span class="material-symbols-outlined text-primary text-[18px] shrink-0" style="font-variation-settings: 'FILL' 1;">info</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-medium">
+          Existing medicines will not be duplicated.
+        </span>
+</div>
+</div>
+<!-- Scrollable Protocol Itemized Review Body -->
+<div class="flex-1 overflow-y-auto px-space-lg py-space-sm flex flex-col gap-space-md overscroll-contain">
+<!-- SECTION: Already Added (De-duplicated Items) -->
+<div class="flex flex-col gap-space-xs">
+<div class="flex items-center justify-between px-space-xxs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-outline">Already Added (2)</span>
+<span class="font-label-sm text-label-sm text-tertiary font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+            Preserved
+          </span>
+</div>
+<!-- Medicine Item 1: Amoxicillin -->
+<div class="bg-surface-container-low p-space-md rounded-xl flex items-center justify-between transition-all hover:bg-surface-container">
+<div class="flex items-start gap-space-sm min-w-0 pr-space-xs">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">medication</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">Amoxicillin 500 mg</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">1 tab · PO · BID</span>
+<span class="font-data-mono text-label-sm text-outline mt-1">Disp: 14 tabs · 7 days</span>
+</div>
+</div>
+<!-- Subtle In-Prescription Checkmark Badge -->
+<div class="flex items-center gap-1 bg-surface-container-highest text-on-surface-variant px-space-sm py-1 rounded-full shrink-0">
+<span class="material-symbols-outlined text-tertiary text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-sm text-label-sm">In Rx</span>
+</div>
+</div>
+<!-- Medicine Item 2: Meloxicam -->
+<div class="bg-surface-container-low p-space-md rounded-xl flex items-center justify-between transition-all hover:bg-surface-container">
+<div class="flex items-start gap-space-sm min-w-0 pr-space-xs">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-outline shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">vaccines</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">Meloxicam 1.5 mg/ml</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">0.4 ml · PO · SID</span>
+<span class="font-data-mono text-label-sm text-outline mt-1">Disp: 10 ml oral susp</span>
+</div>
+</div>
+<!-- Subtle In-Prescription Checkmark Badge -->
+<div class="flex items-center gap-1 bg-surface-container-highest text-on-surface-variant px-space-sm py-1 rounded-full shrink-0">
+<span class="material-symbols-outlined text-tertiary text-[16px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label-sm text-label-sm">In Rx</span>
+</div>
+</div>
+</div>
+<!-- SECTION: New Medicine to Add -->
+<div class="flex flex-col gap-space-xs mt-space-xs">
+<div class="flex items-center justify-between px-space-xxs">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-bold">New Medicine to Add (1)</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">Unfulfilled in Protocol</span>
+</div>
+<!-- Medicine Item 3: Posatex Otic Drops (Highlighted) -->
+<div class="bg-primary-fixed/20 p-space-md rounded-xl flex items-center justify-between shadow-sm">
+<div class="flex items-start gap-space-sm min-w-0 pr-space-xs">
+<div class="w-8 h-8 rounded-lg bg-primary text-on-primary flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">healing</span>
+</div>
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-sm text-headline-sm text-on-surface truncate">Posatex Otic Drops 15 ml</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">4 drops · Otic · BID · 7 days</span>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-data-mono text-label-sm text-primary-container font-semibold">Orbifloxacin / Mometasone</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-data-mono text-label-sm text-on-surface-variant">Qty: 1 btl</span>
+</div>
+</div>
+</div>
+<!-- Highlighted Teal Action Badge -->
+<div class="flex items-center gap-1 bg-primary text-on-primary px-space-sm py-1 rounded-full shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[14px]">add</span>
+<span class="font-label-sm text-label-sm">New</span>
+</div>
+</div>
+</div>
+<!-- Protocol Summary Micro-Footer Detail -->
+<div class="mt-space-xxs p-space-sm bg-surface-container rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-space-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">receipt</span>
+<span class="font-body-sm text-body-sm">Added Ledger Increment:</span>
+</div>
+<span class="font-data-mono text-headline-sm text-on-surface font-bold">+$28.40</span>
+</div>
+</div>
+<!-- Vertical Action Button Dock (Optimized for Mobile Thumb Reach) -->
+<div class="p-space-lg pt-space-sm pb-space-md flex flex-col gap-space-sm bg-surface-container-lowest shadow-[0_-4px_16px_rgba(19,27,46,0.04)]">
+<!-- 1. Primary Solid Teal Button -->
+<button class="w-full h-12 bg-primary text-on-primary rounded-xl font-label-lg text-label-lg flex items-center justify-center gap-space-sm shadow-md active:bg-primary-container transition-colors" id="btn-add-missing" type="button">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+<span>Add Missing Medicines (1)</span>
+</button>
+<!-- 2. Secondary Soft Lavender Button -->
+<button class="w-full h-11 bg-surface-container-high text-on-surface rounded-xl font-label-lg text-label-lg flex items-center justify-center gap-space-sm active:bg-surface-container-highest transition-colors" id="btn-replace-existing" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">sync</span>
+<span>Replace Existing Medicines</span>
+</button>
+<!-- 3. Cancel / Ghost Button -->
+<button class="w-full h-11 text-on-surface-variant font-label-lg text-label-lg flex items-center justify-center active:text-on-surface transition-colors" id="btn-cancel" type="button">
+<span>Cancel</span>
+</button>
+</div>
+</aside>
+</div>
+<!-- Interactive Client-side Logic for Modal Lifecycle and Feedback -->
+<script>
+  (function() {
+    const sheet = document.getElementById('protocol-bottom-sheet');
+    const btnCancel = document.getElementById('btn-cancel');
+    const btnClose = document.getElementById('close-sheet-btn');
+    const btnAdd = document.getElementById('btn-add-missing');
+    const btnReplace = document.getElementById('btn-replace-existing');
+
+    const dismissSheet = () => {
+      if (!sheet) return;
+      sheet.style.transform = 'translateY(100%)';
+      setTimeout(() => {
+        sheet.style.display = 'none';
+      }, 250);
+    };
+
+    if (btnCancel) btnCancel.addEventListener('click', dismissSheet);
+    if (btnClose) btnClose.addEventListener('click', dismissSheet);
+
+    if (btnAdd) {
+      btnAdd.addEventListener('click', () => {
+        btnAdd.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span><span>Applying Posatex...</span>`;
+        setTimeout(() => {
+          dismissSheet();
+        }, 450);
+      });
+    }
+
+    if (btnReplace) {
+      btnReplace.addEventListener('click', () => {
+        btnReplace.innerHTML = `<span class="material-symbols-outlined text-[20px] animate-spin">progress_activity</span><span>Rebuilding 3 items...</span>`;
+        setTimeout(() => {
+          dismissSheet();
+        }, 500);
+      });
+    }
+  })();
+</script></main><nav class="fixed bottom-0 inset-x-0 z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_12px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-bold"><div class="flex justify-around items-center h-16 px-space-sm"><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant transition-colors group" data-path="home" href="#"><span class="material-symbols-outlined text-[22px] mb-space-xxs group-hover:text-primary">dashboard</span><span class="font-label-sm text-label-sm">Home</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant transition-colors group" data-path="patients" href="#"><span class="material-symbols-outlined text-[22px] mb-space-xxs group-hover:text-primary">pets</span><span class="font-label-sm text-label-sm">Patients</span></a><a aria-current="page" class="flex flex-col items-center justify-center min-w-[56px] h-11 transition-colors group text-primary font-bold" data-path="prescriptions" href="#"><span class="material-symbols-outlined text-[22px] mb-space-xxs group-hover:text-primary">prescriptions</span><span class="font-label-sm text-label-sm">Prescriptions</span></a><a class="flex flex-col items-center justify-center min-w-[56px] h-11 text-on-surface-variant transition-colors group" data-path="invoices" href="#"><span class="material-symbols-outlined text-[22px] mb-space-xxs group-hover:text-primary">receipt_long</span><span class="font-label-sm text-label-sm">Invoices</span></a></div></nav></body></html>

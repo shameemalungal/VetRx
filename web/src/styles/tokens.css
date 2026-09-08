@@ -1,0 +1,161 @@
+/* =============================================================
+   VetRx Design Tokens — generated from DESIGN.md
+   ============================================================= */
+
+:root {
+  /* ── Colour: Surface ─────────────────────────────────────── */
+  --color-surface:                  #faf8ff;
+  --color-surface-dim:              #d2d9f4;
+  --color-surface-bright:           #faf8ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low:    #f2f3ff;
+  --color-surface-container:        #eaedff;
+  --color-surface-container-high:   #e2e7ff;
+  --color-surface-container-highest:#dae2fd;
+  --color-on-surface:               #131b2e;
+  --color-on-surface-variant:       #3d4947;
+  --color-inverse-surface:          #283044;
+  --color-inverse-on-surface:       #eef0ff;
+  --color-surface-variant:          #dae2fd;
+  --color-surface-tint:             #006a61;
+
+  /* ── Colour: Outline ─────────────────────────────────────── */
+  --color-outline:                  #6d7a77;
+  --color-outline-variant:          #bcc9c6;
+
+  /* ── Colour: Primary ─────────────────────────────────────── */
+  --color-primary:                  #00685f;
+  --color-on-primary:               #ffffff;
+  --color-primary-container:        #008378;
+  --color-on-primary-container:     #f4fffc;
+  --color-inverse-primary:          #6bd8cb;
+  --color-primary-fixed:            #89f5e7;
+  --color-primary-fixed-dim:        #6bd8cb;
+  --color-on-primary-fixed:         #00201d;
+  --color-on-primary-fixed-variant: #005049;
+
+  /* ── Colour: Secondary ───────────────────────────────────── */
+  --color-secondary:                #006398;
+  --color-on-secondary:             #ffffff;
+  --color-secondary-container:      #5bb8fe;
+  --color-on-secondary-container:   #00476e;
+  --color-secondary-fixed:          #cce5ff;
+  --color-secondary-fixed-dim:      #93ccff;
+  --color-on-secondary-fixed:       #001d31;
+  --color-on-secondary-fixed-variant:#004b73;
+
+  /* ── Colour: Tertiary ────────────────────────────────────── */
+  --color-tertiary:                 #006947;
+  --color-on-tertiary:              #ffffff;
+  --color-tertiary-container:       #00855b;
+  --color-on-tertiary-container:    #f5fff6;
+  --color-tertiary-fixed:           #6ffbbe;
+  --color-tertiary-fixed-dim:       #4edea3;
+  --color-on-tertiary-fixed:        #002113;
+  --color-on-tertiary-fixed-variant:#005236;
+
+  /* ── Colour: Error ───────────────────────────────────────── */
+  --color-error:                    #ba1a1a;
+  --color-on-error:                 #ffffff;
+  --color-error-container:          #ffdad6;
+  --color-on-error-container:       #93000a;
+
+  /* ── Colour: Background ──────────────────────────────────── */
+  --color-background:               #faf8ff;
+  --color-on-background:            #131b2e;
+
+  /* ── Semantic aliases (used in component code) ───────────── */
+  --color-canvas:       var(--color-background);
+  --color-card:         var(--color-surface-container-lowest);
+  --color-border:       var(--color-outline-variant);
+  --color-border-input: #cbd5e1;
+  --color-text:         var(--color-on-surface);
+  --color-text-muted:   var(--color-on-surface-variant);
+  --color-focus-ring:   rgba(0, 104, 95, 0.18);
+
+  /* Status colours (contextual) */
+  --color-warning:         #f59e0b;
+  --color-warning-surface: #fef3c7;
+  --color-warning-text:    #92400e;
+  --color-danger:          #ef4444;
+  --color-danger-surface:  #fef2f2;
+  --color-danger-text:     #991b1b;
+  --color-success:         #10b981;
+  --color-success-surface: #ecfdf5;
+  --color-success-text:    #065f46;
+
+  /* ── Typography ──────────────────────────────────────────── */
+  --font-heading:   'Plus Jakarta Sans', sans-serif;
+  --font-body:      'Inter', sans-serif;
+  --font-mono:      'JetBrains Mono', monospace;
+
+  --text-headline-xl:      2rem;       /* 32px */
+  --text-headline-xl-lh:   2.5rem;
+  --text-headline-lg:      1.5rem;     /* 24px */
+  --text-headline-lg-lh:   2rem;
+  --text-headline-md:      1.125rem;   /* 18px */
+  --text-headline-md-lh:   1.625rem;
+  --text-headline-sm:      1rem;       /* 16px */
+  --text-headline-sm-lh:   1.5rem;
+
+  --text-body-lg:    1rem;             /* 16px */
+  --text-body-lg-lh: 1.5rem;
+  --text-body-md:    0.875rem;         /* 14px */
+  --text-body-md-lh: 1.25rem;
+  --text-body-sm:    0.8125rem;        /* 13px */
+  --text-body-sm-lh: 1.125rem;
+
+  --text-label-lg:    0.875rem;        /* 14px */
+  --text-label-lg-lh: 1.25rem;
+  --text-label-md:    0.75rem;         /* 12px */
+  --text-label-md-lh: 1rem;
+  --text-label-sm:    0.6875rem;       /* 11px */
+  --text-label-sm-lh: 0.875rem;
+
+  --text-mono:    0.8125rem;           /* 13px */
+  --text-mono-lh: 1.125rem;
+
+  /* Mobile scale-down */
+  --text-headline-xl-mobile:   1.625rem;  /* 26px */
+  --text-headline-xl-mobile-lh:2.125rem;
+  --text-headline-lg-mobile:   1.25rem;   /* 20px */
+  --text-headline-lg-mobile-lh:1.75rem;
+
+  /* ── Radius ──────────────────────────────────────────────── */
+  --radius-sm:   0.25rem;
+  --radius:      0.5rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1rem;
+  --radius-xl:   1.5rem;
+  --radius-full: 9999px;
+
+  /* ── Spacing ─────────────────────────────────────────────── */
+  --space-xxs:  0.125rem;
+  --space-xs:   0.25rem;
+  --space-sm:   0.5rem;
+  --space-md:   0.75rem;
+  --space-base: 1rem;
+  --space-lg:   1.25rem;
+  --space-xl:   1.5rem;
+  --space-2xl:  2rem;
+  --space-3xl:  3rem;
+
+  --gutter-compact: 0.75rem;
+  --gutter:         1.25rem;
+  --margin-screen:  1.5rem;
+
+  /* ── Elevation / Shadow ──────────────────────────────────── */
+  --shadow-1: 0 1px 3px 0 rgba(15,23,42,.04), 0 1px 2px -1px rgba(15,23,42,.02);
+  --shadow-2: 0 4px 6px -1px rgba(15,23,42,.05), 0 2px 4px -2px rgba(15,23,42,.03);
+  --shadow-3: 0 20px 25px -5px rgba(15,23,42,.08), 0 8px 10px -6px rgba(15,23,42,.04);
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  --sidebar-width:    240px;
+  --topbar-height:    56px;
+  --bottom-nav-height:64px;
+
+  /* ── Transitions ─────────────────────────────────────────── */
+  --transition-fast:   100ms ease;
+  --transition-base:   180ms ease;
+  --transition-slow:   280ms ease;
+}

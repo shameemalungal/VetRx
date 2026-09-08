@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VetRx Suite - Add Treatment Item</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: '#f0fdfa',
+              100: '#ccfbf1',
+              200: '#99f6e4',
+              500: '#14b8a6',
+              600: '#0d9488',
+              700: '#0f766e',
+              800: '#115e59',
+              900: '#134e4a',
+            },
+            surface: {
+              DEFAULT: '#f8f9fc',
+              card: '#ffffff',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        overscroll-behavior: none;
+        font-family: 'Inter', sans-serif;
+      }
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body class="bg-[#f8f9fc] text-slate-800 antialiased min-h-screen flex">
+<!-- Fixed Left Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-72 bg-white border-r border-slate-200 z-50 flex flex-col justify-between select-none">
+<div class="flex flex-col">
+<!-- Clinic Brand Header -->
+<div class="p-5 border-b border-slate-100">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-md shadow-teal-600/20">
+<span class="material-symbols-outlined text-[24px]">local_hospital</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-display font-extrabold text-xl tracking-tight text-slate-900">VetRx</span>
+<span class="px-1.5 py-0.5 rounded-md bg-teal-50 text-teal-700 text-[10px] font-bold tracking-wider uppercase border border-teal-100">PRO</span>
+</div>
+<p class="text-[11px] text-slate-500 font-medium leading-none mt-0.5">Clinical Suite</p>
+</div>
+</div>
+<!-- Location Dropdown Selector Pill -->
+<button class="mt-3.5 w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200/70 text-slate-700 text-xs transition-colors" type="button">
+<div class="flex items-center gap-2 truncate">
+<span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+<span class="font-medium truncate text-slate-700">Oakwood Animal Hospital</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 text-[16px] shrink-0">unfold_more</span>
+</button>
+</div>
+<!-- Navigation Links -->
+<div class="px-3 pt-4">
+<span class="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Clinical Workspace</span>
+<nav class="mt-2 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] text-slate-400">grid_view</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-slate-400">prescriptions</span>
+<span>Prescriptions</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 text-xs font-semibold font-mono">12</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] text-slate-400">pets</span>
+<span>Patients</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] text-slate-400">medication</span>
+<span>Medicines</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] text-slate-400">medical_services</span>
+<span>Treatment Packages</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-teal-600 text-white font-medium text-sm shadow-sm shadow-teal-600/30" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] text-white">receipt_long</span>
+<span>Invoices</span>
+</div>
+<span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] text-slate-400">tune</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+</div>
+<!-- Pinned Doctor Profile Footer Card -->
+<div class="p-3 border-t border-slate-100 m-3 rounded-2xl bg-slate-50 border border-slate-200/60">
+<div class="flex items-center gap-3">
+<div class="relative shrink-0">
+<img alt="Dr. Sarah Jenkins" class="w-10 h-10 rounded-full object-cover ring-2 ring-white" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+</div>
+<div class="min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<p class="text-xs font-bold text-slate-800 truncate font-display">Dr. Sarah Jenkins</p>
+<button class="text-slate-400 hover:text-slate-600 p-0.5 rounded" title="Switch Account">
+<span class="material-symbols-outlined text-[16px]">logout</span>
+</button>
+</div>
+<p class="text-[11px] text-slate-500 truncate">Lead Surgeon • DVM</p>
+</div>
+</div>
+<div class="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+<span class="font-mono text-slate-400">LIC: #VET-94821</span>
+<span class="inline-flex items-center gap-1 text-emerald-700 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> On Shift
+        </span>
+</div>
+</div>
+</aside>
+<!-- Right Main App Viewport -->
+<div class="pl-72 flex-1 flex flex-col min-h-screen">
+<!-- Top Header Bar -->
+<header class="fixed top-0 left-72 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 z-40 px-8 flex items-center justify-between">
+<!-- Search Box & Dispensary Status -->
+<div class="flex items-center gap-6 flex-1 max-w-2xl">
+<div class="relative w-full max-w-md">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[18px]">search</span>
+</span>
+<input class="w-full h-9 pl-9 pr-12 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition" placeholder="Search patient MRN, owner, drug, or invoice #" type="text"/>
+<div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+<kbd class="px-1.5 py-0.5 rounded border border-slate-200 bg-white font-mono text-[10px] text-slate-500">⌘K</kbd>
+</div>
+</div>
+<div class="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-medium">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span>Dispensary Online</span>
+<span class="text-emerald-400 font-mono text-[10px] ml-1">Bay 04</span>
+</div>
+</div>
+<!-- Action Buttons & Badges -->
+<div class="flex items-center gap-3">
+<button class="h-9 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs transition flex items-center gap-1.5 shadow-sm" type="button">
+<span class="material-symbols-outlined text-[17px] text-slate-500">prescriptions</span>
+<span>+ New Rx</span>
+</button>
+<button class="h-9 px-3.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs transition flex items-center gap-1.5 shadow-sm shadow-teal-600/20" type="button">
+<span class="material-symbols-outlined text-[17px]">add</span>
+<span>+ New Invoice</span>
+</button>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<button aria-label="Notifications" class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition relative" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+</button>
+<button aria-label="Clinical Help" class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition" type="button">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-slate-100 ml-1" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full pt-16 px-8 pb-12 flex-1 relative">
+<!-- Background Behind Modal: Simulated Create Invoice Workspace -->
+<div class="mt-6 filter blur-[4px] opacity-40 pointer-events-none select-none flex flex-col gap-6">
+<!-- Invoice Header Row Mockup -->
+<div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">receipt_long</span>
+</div>
+<div>
+<div class="flex items-center gap-3">
+<h1 class="text-lg font-bold text-slate-900 font-display">Invoice #INV-2026-00125</h1>
+<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold uppercase font-mono">Draft</span>
+</div>
+<p class="text-xs text-slate-500 mt-1">Patient: Bruno (Golden Retriever, 32.4 kg) • Owner: Rajesh Menon</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="text-right">
+<div class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Subtotal</div>
+<div class="text-xl font-bold font-mono text-slate-900">₹ 2,450.00</div>
+</div>
+<button class="h-10 px-5 rounded-xl bg-teal-600 text-white font-medium text-sm">Issue Invoice</button>
+</div>
+</div>
+<!-- Ledger Grid Mockup -->
+<div class="grid grid-cols-12 gap-6">
+<div class="col-span-8 bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+<div class="h-6 w-48 bg-slate-100 rounded-lg"></div>
+<div class="space-y-3">
+<div class="h-16 bg-slate-50 rounded-xl border border-slate-100"></div>
+<div class="h-16 bg-slate-50 rounded-xl border border-slate-100"></div>
+<div class="h-16 bg-slate-50 rounded-xl border border-slate-100"></div>
+</div>
+</div>
+<div class="col-span-4 bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+<div class="h-6 w-32 bg-slate-100 rounded-lg"></div>
+<div class="h-44 bg-slate-50 rounded-xl border border-slate-100"></div>
+<div class="h-10 bg-teal-600 rounded-xl"></div>
+</div>
+</div>
+</div>
+<!-- Modal Dialog Overlay (Active Focus Screen) -->
+<div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="modal-backdrop">
+<div aria-labelledby="modal-headline" aria-modal="true" class="w-full max-w-[650px] bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col transform transition-all" id="treatment-dialog" role="dialog">
+<!-- Top Accent Bar -->
+<div class="h-1 w-full bg-teal-600"></div>
+<!-- Modal Header -->
+<div class="px-6 pt-6 pb-4 flex items-start justify-between border-b border-slate-100">
+<div class="flex items-start gap-3.5">
+<div class="w-11 h-11 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[24px]">library_add</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h2 class="font-display font-bold text-lg text-slate-900" id="modal-headline">Add Treatment Item to Invoice</h2>
+<span class="px-2 py-0.5 rounded-full bg-teal-50 border border-teal-100 text-teal-700 font-mono text-[11px] font-semibold">INV-2026-00125</span>
+</div>
+<p class="text-xs text-slate-500 mt-1">
+                  Select a clinical service or billing category to append to invoice <span class="font-mono text-slate-700 font-medium">INV-2026-00125</span>.
+                </p>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition" onclick="dismissModal()" type="button">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Patient Context Pill Banner -->
+<div class="mx-6 mt-4 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs">
+<div class="flex items-center gap-2.5 text-slate-700">
+<div class="flex items-center gap-1.5 font-semibold text-slate-900">
+<span class="material-symbols-outlined text-teal-600 text-[18px]">pets</span>
+<span>Bruno</span>
+</div>
+<span class="text-slate-300">•</span>
+<span class="text-slate-600">Canine / Golden Ret.</span>
+<span class="text-slate-300">•</span>
+<span class="font-mono font-medium text-slate-700">32.4 kg</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-teal-700 font-medium text-[11px] font-mono">Standard Tier 1</span>
+</div>
+<!-- 6 Service Selection Cards (2-column layout) -->
+<div class="p-6 grid grid-cols-2 gap-3.5">
+<!-- 1. Medicine -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Medicine', 'Rx Formulary')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">medication</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-100 font-mono text-[11px] font-semibold">
+                  Rx Formulary
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Medicine</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Dispensed medicines, syrups, and pharmaceutical supplies</p>
+</div>
+</button>
+<!-- 2. Consultation Fee -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Consultation Fee', '₹500.00')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">stethoscope</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 font-mono text-[11px] font-bold">
+                  Standard ₹500
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Consultation Fee</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Clinical examination, diagnosis, and physician consults</p>
+</div>
+</button>
+<!-- 3. Procedure Fee -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Procedure Fee', 'In-clinic')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">vaccines</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[11px] font-medium">
+                  In-clinic
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Procedure Fee</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Surgical, minor clinical procedures, and wound dressing</p>
+</div>
+</button>
+<!-- 4. Lab Fee -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Lab Fee', 'Diagnostic')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">science</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 font-mono text-[11px] font-medium">
+                  Diagnostic
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Lab Fee</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Diagnostic laboratory tests, cytology, and blood panels</p>
+</div>
+</button>
+<!-- 5. Travel Fee -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Travel Fee', 'Distance-based')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">directions_car</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[11px] font-medium">
+                  Distance-based
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Travel Fee</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Home visits, farm calls, and emergency ambulance transit</p>
+</div>
+</button>
+<!-- 6. Other Services -->
+<button class="group relative flex flex-col justify-between text-left p-4 rounded-xl border border-slate-200/80 bg-white hover:border-teal-500 hover:bg-teal-50/20 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500/30 transition-all cursor-pointer" onclick="selectOption('Other Services', 'Custom')" type="button">
+<div class="flex items-start justify-between w-full mb-3">
+<div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[22px]">sell</span>
+</div>
+<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[11px] font-medium">
+                  Custom
+                </span>
+</div>
+<div>
+<div class="flex items-center justify-between">
+<h3 class="font-display font-semibold text-sm text-slate-900 group-hover:text-teal-700 transition">Other Services</h3>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition text-[16px]">chevron_right</span>
+</div>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed">Boarding, grooming, medical certifications, and misc fees</p>
+</div>
+</button>
+</div>
+<!-- Selection Confirmation Toast (Dynamic) -->
+<div class="hidden mx-6 mb-4 px-4 py-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-between text-xs animate-fade-in" id="selection-notice">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-teal-600 text-[18px]">check_circle</span>
+<span class="font-medium" id="selection-text">Selected: Medicine (Rx Formulary)</span>
+</div>
+<span class="font-mono text-[10px] uppercase font-bold text-teal-600 tracking-wider">Ready to continue</span>
+</div>
+<!-- Dialog Footer -->
+<div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+<div class="flex items-center gap-1.5 text-slate-400 text-xs">
+<kbd class="px-1.5 py-0.5 rounded border border-slate-200 bg-white font-mono text-[10px] text-slate-500">ESC</kbd>
+<span>to dismiss</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-9 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-medium text-xs transition" onclick="dismissModal()" type="button">
+                Cancel
+              </button>
+<button class="h-9 px-4 rounded-xl bg-slate-200 text-slate-400 cursor-not-allowed font-medium text-xs transition flex items-center gap-1.5" disabled="" id="confirm-btn" type="button">
+<span>Continue to Form</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<script>
+    function dismissModal() {
+      const backdrop = document.getElementById('modal-backdrop');
+      const dialog = document.getElementById('treatment-dialog');
+      if (backdrop && dialog) {
+        dialog.classList.add('scale-95', 'opacity-0');
+        backdrop.classList.add('opacity-0');
+        setTimeout(() => {
+          backdrop.classList.add('hidden');
+        }, 150);
+      }
+    }
+
+    function selectOption(title, tag) {
+      const notice = document.getElementById('selection-notice');
+      const text = document.getElementById('selection-text');
+      const confirmBtn = document.getElementById('confirm-btn');
+
+      if (notice && text && confirmBtn) {
+        notice.classList.remove('hidden');
+        text.innerText = `Selected: ${title} (${tag})`;
+
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+        confirmBtn.classList.add('bg-teal-600', 'hover:bg-teal-700', 'text-white', 'cursor-pointer', 'shadow-sm', 'shadow-teal-600/20');
+      }
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') {
+        dismissModal();
+      }
+    });
+  </script>
+</body></html>

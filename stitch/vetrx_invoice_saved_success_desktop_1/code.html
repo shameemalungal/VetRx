@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Invoice Saved Successfully - VetRx Suite</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    @layer base {
+      html, body { margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+      body { overscroll-behavior: none; }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+    }
+  </style>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "on-tertiary-container": "#f5fff6",
+            "secondary-fixed-dim": "#93ccff",
+            "on-secondary": "#ffffff",
+            "surface-variant": "#dae2fd",
+            "on-secondary-container": "#00476e",
+            "surface-bright": "#faf8ff",
+            "inverse-on-surface": "#eef0ff",
+            "error-container": "#ffdad6",
+            "surface-container-highest": "#dae2fd",
+            "secondary-container": "#5bb8fe",
+            "on-error": "#ffffff",
+            "on-tertiary": "#ffffff",
+            "on-primary": "#ffffff",
+            "surface-container-high": "#e2e7ff",
+            "on-surface-variant": "#3d4947",
+            "on-surface": "#131b2e",
+            "primary": "#00685f",
+            "on-primary-fixed-variant": "#005049",
+            "primary-fixed-dim": "#6bd8cb",
+            "background": "#faf8ff",
+            "on-secondary-fixed": "#001d31",
+            "surface-container-lowest": "#ffffff",
+            "surface-dim": "#d2d9f4",
+            "error": "#ba1a1a",
+            "on-error-container": "#93000a",
+            "surface-container": "#eaedff",
+            "on-primary-container": "#f4fffc",
+            "outline": "#6d7a77",
+            "on-primary-fixed": "#00201d",
+            "surface-tint": "#006a61",
+            "on-tertiary-fixed": "#002113",
+            "inverse-surface": "#283044",
+            "tertiary-fixed": "#6ffbbe",
+            "outline-variant": "#bcc9c6",
+            "tertiary-fixed-dim": "#4edea3",
+            "secondary": "#006398",
+            "surface-container-low": "#f2f3ff",
+            "secondary-fixed": "#cce5ff",
+            "tertiary-container": "#00855b",
+            "primary-container": "#008378",
+            "tertiary": "#006947",
+            "primary-fixed": "#89f5e7",
+            "on-background": "#131b2e",
+            "on-secondary-fixed-variant": "#004b73",
+            "inverse-primary": "#6bd8cb",
+            "on-tertiary-fixed-variant": "#005236",
+            "surface": "#faf8ff",
+            "vet-teal": "#0d9488",
+            "vet-teal-dark": "#00685f"
+          },
+          fontFamily: {
+            "headline": ["Plus Jakarta Sans", "sans-serif"],
+            "data-mono": ["JetBrains Mono", "monospace"],
+            "body": ["Inter", "sans-serif"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen">
+<!-- Desktop Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-72 bg-surface-container-lowest border-r border-slate-100 shadow-[0_1px_8px_rgba(0,0,0,0.03)] z-50 flex flex-col justify-between select-none">
+<div class="flex flex-col">
+<!-- Clinic Brand Header / Branch Switcher -->
+<div class="h-16 px-6 flex items-center justify-between border-b border-slate-100 bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-vet-teal/10 flex items-center justify-center text-vet-teal">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">medical_services</span>
+</div>
+<div class="flex flex-col leading-tight">
+<div class="flex items-center gap-1.5">
+<span class="font-headline font-bold text-[17px] text-vet-teal tracking-tight">VetRx</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface text-[10px] font-bold tracking-wider uppercase">SUITE</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium truncate">Oakwood Animal Hospital</span>
+</div>
+</div>
+<button class="text-slate-400 hover:text-slate-700 transition-colors p-1" title="Switch Clinic Branch">
+<span class="material-symbols-outlined text-[18px]">unfold_more</span>
+</button>
+</div>
+<!-- Navigation Section -->
+<div class="px-6 pt-5 pb-2">
+<span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Clinical Workspace</span>
+</div>
+<nav class="px-3 space-y-1 flex flex-col">
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px]">prescriptions</span>
+<span>Prescriptions</span>
+</div>
+<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-data-mono text-[11px] font-bold">12</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<span class="material-symbols-outlined text-[20px]">pets</span>
+<span>Patients</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<span class="material-symbols-outlined text-[20px]">medication</span>
+<span>Medicines</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<span class="material-symbols-outlined text-[20px]">medical_services</span>
+<span>Treatment Packages</span>
+</a>
+<!-- Active Invoices item -->
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-vet-teal text-white font-semibold text-[14px] shadow-[0_2px_8px_rgba(13,148,136,0.25)]" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span>Invoices</span>
+</div>
+<span class="w-1.5 h-1.5 rounded-full bg-white"></span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium text-[14px]" href="#">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- Doctor User Profile Footer -->
+<div class="p-3 m-3 rounded-2xl bg-surface-container-low border border-slate-100">
+<div class="flex items-center gap-3">
+<div class="relative flex-shrink-0">
+<img alt="Dr. Sarah Jenkins" class="w-10 h-10 rounded-full object-cover ring-2 ring-white" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-headline text-[13px] text-slate-900 font-bold truncate">Dr. Sarah Jenkins</span>
+<span class="material-symbols-outlined text-vet-teal text-[16px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<span class="text-[11px] text-slate-500 font-medium truncate">DVM • Lead Surgeon</span>
+</div>
+</div>
+<div class="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-slate-500">
+<span class="font-data-mono text-[10px] tracking-wider font-medium">LIC: #VET-94821</span>
+<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-[10px]">On Shift</span>
+</div>
+</div>
+</aside>
+<!-- Main View Container -->
+<div class="pl-72 flex flex-col min-h-screen">
+<!-- Top Header Bar -->
+<header class="fixed top-0 left-72 right-0 h-16 bg-surface/90 backdrop-blur-xl border-b border-slate-100 z-40 px-8 flex items-center justify-between">
+<div class="flex items-center gap-6 flex-1 max-w-2xl">
+<div class="relative w-full max-w-md">
+<span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[19px]">search</span>
+</span>
+<input class="w-full h-10 pl-10 pr-12 rounded-xl bg-white border border-slate-200/80 text-on-surface text-[13px] focus:outline-none focus:ring-2 focus:ring-vet-teal/20 focus:border-vet-teal placeholder:text-slate-400" placeholder="Search patient MRN, owner, drug, or invoice #" type="text"/>
+<div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+<kbd class="px-1.5 py-0.5 rounded bg-slate-100 font-data-mono text-[10px] text-slate-500 border border-slate-200">⌘K</kbd>
+</div>
+</div>
+<div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200/70 shadow-xs">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-xs font-semibold text-slate-700">Dispensary Online</span>
+<span class="font-data-mono text-[10px] text-slate-400 font-medium ml-1">Bay 04</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-9 px-3.5 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200 font-headline font-semibold text-[13px] transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Invoice</span>
+</button>
+<button class="h-9 px-3.5 rounded-xl bg-vet-teal text-white hover:bg-teal-700 font-headline font-semibold text-[13px] transition-colors flex items-center gap-1.5 shadow-[0_2px_6px_rgba(13,148,136,0.25)]" type="button">
+<span class="material-symbols-outlined text-[18px]">prescriptions</span>
+<span>+ New Rx</span>
+</button>
+<div class="h-6 w-px bg-slate-200 mx-1"></div>
+<button aria-label="Notifications" class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-600 hover:bg-white transition-colors relative" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500"></span>
+</button>
+<div class="flex items-center gap-2 pl-1 cursor-pointer">
+<img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+<span class="material-symbols-outlined text-slate-400 text-[18px]">expand_more</span>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="w-full pt-16 px-8 pb-16 flex-1 flex flex-col items-center justify-center bg-[#faf8ff]">
+<div class="w-full max-w-2xl py-8 flex flex-col items-center">
+<!-- Top Breadcrumb & Status Tracker -->
+<div class="w-full flex items-center justify-between mb-4">
+<div class="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+<a class="hover:text-vet-teal transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[15px]">receipt_long</span>
+<span>Invoices</span>
+</a>
+<span class="material-symbols-outlined text-[13px] text-slate-400">chevron_right</span>
+<span class="font-data-mono text-slate-500">INV-2026-00125</span>
+<span class="material-symbols-outlined text-[13px] text-slate-400">chevron_right</span>
+<span class="text-vet-teal font-semibold">Confirmation</span>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 font-data-mono text-[11px] font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<span>Ledger Sync: Completed (0.42s)</span>
+</div>
+</div>
+<!-- Success Confirmation Card -->
+<div class="w-full bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8 sm:p-10 text-center relative overflow-hidden">
+<!-- Top subtle glow -->
+<div class="absolute -top-12 left-1/2 -translate-x-1/2 w-64 h-32 bg-vet-teal/10 blur-2xl pointer-events-none rounded-full"></div>
+<!-- Prominent circular success checkmark icon -->
+<div class="relative mx-auto mb-5 w-20 h-20 rounded-full bg-teal-50 flex items-center justify-center ring-8 ring-teal-50/50">
+<div class="w-14 h-14 rounded-full bg-vet-teal flex items-center justify-center text-white shadow-md shadow-teal-700/20">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1, 'wght' 600;">check</span>
+</div>
+<span class="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-white shadow-xs border border-slate-100 flex items-center justify-center text-emerald-600">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+</span>
+</div>
+<!-- Headings -->
+<h1 class="font-headline font-bold text-2xl sm:text-[28px] text-slate-900 tracking-tight">Invoice Saved Successfully</h1>
+<p class="text-slate-600 text-[14px] mt-2 max-w-lg mx-auto leading-relaxed">
+            Invoice <span class="font-data-mono text-vet-teal font-bold">INV-2026-00125</span> has been recorded and synced to clinic billing records.
+          </p>
+<!-- Fiscal & Patient Summary Card -->
+<div class="mt-7 text-left bg-slate-50/80 rounded-2xl border border-slate-200/80 p-5 space-y-4">
+<!-- Row 1: Invoice ID & Status Badge -->
+<div class="flex items-center justify-between pb-3 border-b border-slate-200/60">
+<div>
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Invoice ID</span>
+<div class="flex items-center gap-2">
+<span class="font-data-mono font-bold text-[16px] text-slate-900">INV-2026-00125</span>
+<button class="text-slate-400 hover:text-vet-teal transition-colors" onclick="navigator.clipboard?.writeText('INV-2026-00125'); alert('Copied Invoice ID');" title="Copy Invoice ID" type="button">
+<span class="material-symbols-outlined text-[16px]">content_copy</span>
+</button>
+</div>
+</div>
+<div class="text-right">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Payment Verification</span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+<span>Paid via UPI</span>
+</span>
+</div>
+</div>
+<!-- Row 2: Patient & Owner info -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 py-1">
+<!-- Patient -->
+<div class="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200/70">
+<img alt="Bruno" class="w-11 h-11 rounded-lg object-cover flex-shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPZoMGKDJR4m7th5enAQGLrWpTE_gIXSZ4rXnRet4jPvGx3x-pHyq6cQjbHN-GXsmXd2Uv1wLsxdAqQzqr4lZtwIcMJ0BLAXHUgtiE8RIwj6SyoK42NXHgDkg6ICbYBO4A8zTj0eJ7a6P_MMytUi2eFh0WJqZeBJDvjdzD4oTg609CLUrSnHI0915bJ8YDvrLeNh7SX-4bPdCRMtLEepx4FdAxY4nmEUeHs5bZY0MSXaxmEWz0nNlD"/>
+<div class="min-w-0">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Patient</span>
+<div class="font-headline font-bold text-slate-900 text-[14px] truncate">Bruno</div>
+<div class="flex items-center gap-1 text-[11px] text-slate-500 truncate mt-0.5">
+<span class="material-symbols-outlined text-[13px]">pets</span>
+<span>Canine • Labrador Retriever</span>
+</div>
+</div>
+</div>
+<!-- Owner -->
+<div class="flex items-center gap-3 bg-white p-3 rounded-xl border border-slate-200/70">
+<img alt="Ahmed Kumar" class="w-11 h-11 rounded-lg object-cover flex-shrink-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdIe_cBjOdyPIiSXMMHX4uIJbVDXM3VaQGCdFTDmBWa0610gO-juupGdoLFiqyMPjhn-1X42cM6AVZgdcwHfQZWk25e2M7lj8qAAdzMD5AKTOCljjQZcGDJqMlylV8eehChIAb89PRNgTxwdZ0pLUp9uqh8HB3YgHWo5rlYigz-0w4WsWIPgeVrCcOZulwrXyCZjuQl8n_CGr4f_I0LWLy9Z2VcOHv09vOjj0RjJxIxzb-gyLLQgA7"/>
+<div class="min-w-0">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Client / Owner</span>
+<div class="font-headline font-bold text-slate-900 text-[14px] truncate">Ahmed Kumar</div>
+<div class="flex items-center gap-1 text-[11px] text-slate-500 font-data-mono truncate mt-0.5">
+<span class="material-symbols-outlined text-[13px]">call</span>
+<span>+91 98765 43210</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Row 3: Rx link & Total Amount -->
+<div class="pt-2 border-t border-slate-200/60 flex items-center justify-between flex-wrap gap-2">
+<div class="flex items-center gap-1.5 text-xs text-slate-600">
+<span class="material-symbols-outlined text-[16px] text-vet-teal">prescriptions</span>
+<span>Associated Prescription:</span>
+<a class="font-data-mono text-vet-teal hover:underline font-bold" href="#">RX-2026-0892</a>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Paid:</span>
+<span class="font-headline font-bold text-xl text-vet-teal font-data-mono">₹1,600.00</span>
+</div>
+</div>
+<!-- Row 4: Inventory Sync Badge -->
+<div class="p-2.5 rounded-xl bg-teal-50/70 border border-teal-100 flex items-center justify-between text-xs">
+<div class="flex items-center gap-2 text-teal-900">
+<span class="material-symbols-outlined text-[18px] text-vet-teal" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="font-medium">Dispensary deduction: <strong class="text-teal-950 font-bold">100% Synced</strong></span>
+</div>
+<span class="font-data-mono text-[11px] text-teal-800 font-medium">Batch #LOT-AMX-2026 &amp; #LOT-MLX-901</span>
+</div>
+</div>
+<!-- Actions Grid / Stack -->
+<div class="mt-6 space-y-3">
+<!-- Primary Action -->
+<button class="w-full py-3.5 px-6 rounded-xl bg-vet-teal hover:bg-teal-700 text-white font-headline font-semibold text-[15px] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-teal-700/20" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+<span>View Invoice</span>
+</button>
+<!-- Secondary Actions Row -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+<button class="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-headline font-semibold text-[13px] transition-colors flex items-center justify-center gap-1.5" onclick="window.print()" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+<span>Print Tax Invoice</span>
+</button>
+<button class="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-headline font-semibold text-[13px] transition-colors flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Save PDF</span>
+</button>
+<button class="py-2.5 px-4 rounded-xl bg-teal-50 hover:bg-teal-100 text-vet-teal font-headline font-semibold text-[13px] transition-colors flex items-center justify-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span>Create New Invoice</span>
+</button>
+</div>
+</div>
+<!-- Bottom Text Link -->
+<div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center">
+<a class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-600 hover:text-vet-teal transition-colors" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span>Back to Invoices List</span>
+</a>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

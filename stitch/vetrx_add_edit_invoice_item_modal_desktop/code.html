@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#0d9488",
+            "primary-hover": "#0f766e",
+            "primary-light": "#f0fdfa",
+            "primary-border": "#ccfbf1",
+            "on-primary": "#ffffff",
+            surface: "#faf8ff",
+            "surface-card": "#ffffff",
+            "surface-dim": "#f1f3fa",
+            "on-surface": "#131b2e",
+            "on-surface-variant": "#64748b",
+            outline: "#cbd5e1",
+            "outline-light": "#e2e8f0",
+            success: "#059669",
+            "success-bg": "#ecfdf5",
+          },
+          fontFamily: {
+            headline: ["Plus Jakarta Sans", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"],
+          },
+          borderRadius: {
+            xl: "0.75rem",
+            "2xl": "1rem",
+            "3xl": "1.5rem",
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    body { font-family: 'Inter', sans-serif; }
+    .font-headline { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.filled {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+  </style>
+</head>
+<body class="bg-surface text-on-surface antialiased overflow-hidden min-h-screen">
+<!-- Desktop Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-72 bg-white border-r border-slate-200/80 shadow-[0_1px_8px_rgba(0,0,0,0.03)] z-30 flex flex-col justify-between select-none">
+<div class="flex flex-col">
+<!-- Clinic Brand Header -->
+<div class="h-16 px-5 flex items-center gap-3 border-b border-slate-100">
+<div class="w-10 h-10 rounded-xl bg-teal-600/10 flex items-center justify-center text-primary font-bold">
+<span class="material-symbols-outlined text-[24px] filled">pets</span>
+</div>
+<div class="flex flex-col leading-none">
+<div class="flex items-center gap-1.5">
+<span class="font-headline font-bold text-lg text-primary tracking-tight">VetRx</span>
+<span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold tracking-wider uppercase">Suite</span>
+</div>
+<span class="text-[12px] text-slate-500 font-medium mt-0.5">Oakwood Animal Hospital</span>
+</div>
+</div>
+<!-- Navigation Section Label -->
+<div class="px-5 pt-5 pb-2">
+<span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Clinical Workspace</span>
+</div>
+<!-- Navigation Links -->
+<nav class="px-3 space-y-1 flex flex-col">
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px]">prescriptions</span>
+<span>Prescriptions</span>
+</div>
+<span class="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-mono text-[11px] font-semibold">12</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">pets</span>
+<span>Patients</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">medication</span>
+<span>Medicines</span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">medical_services</span>
+<span>Treatment Packages</span>
+</a>
+<!-- Invoices Active State -->
+<a aria-current="page" class="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm shadow-sm transition-colors" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[20px] filled">receipt_long</span>
+<span>Invoices</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-white/90"></span>
+</a>
+<a class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+<span>Settings</span>
+</a>
+</nav>
+</div>
+<!-- Doctor Profile Box -->
+<div class="p-3 m-3 rounded-2xl bg-slate-50 border border-slate-200/60">
+<div class="flex items-center gap-3">
+<div class="relative flex-shrink-0">
+<img alt="Dr. Sarah Jenkins" class="w-10 h-10 rounded-full object-cover ring-2 ring-white" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+<span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between gap-1">
+<span class="font-headline text-[13px] text-slate-900 font-bold truncate">Dr. Sarah Jenkins</span>
+<span class="material-symbols-outlined text-teal-600 text-[16px] filled">verified</span>
+</div>
+<span class="text-[11px] text-slate-500 truncate">DVM • Lead Surgeon</span>
+</div>
+</div>
+<div class="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-slate-500">
+<span class="font-mono text-[10px] tracking-wider text-slate-500 font-medium">LIC: #VET-94821</span>
+<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-headline text-[10px] font-semibold">On Shift</span>
+</div>
+</div>
+</aside>
+<!-- Main View Container -->
+<div class="pl-72 flex flex-col min-h-screen">
+<!-- Top Header Bar -->
+<header class="fixed top-0 left-72 right-0 h-16 bg-white/90 backdrop-blur-md border-b border-slate-200/80 z-20 px-6 flex items-center justify-between">
+<div class="flex items-center gap-5 flex-1 max-w-2xl">
+<div class="relative w-full max-w-md">
+<span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[19px]">search</span>
+</span>
+<input class="w-full h-10 pl-10 pr-12 rounded-xl bg-slate-100/80 border-0 text-slate-800 placeholder:text-slate-400 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all cursor-pointer" placeholder="Search patient MRN, owner, drug, or invoice #" readonly="" type="text"/>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+<kbd class="px-1.5 py-0.5 rounded bg-white text-[11px] font-mono font-medium text-slate-500 border border-slate-200 shadow-2xs">⌘K</kbd>
+</div>
+</div>
+<div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/60">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-[12px] font-semibold text-emerald-700 font-headline">Dispensary Online</span>
+<span class="font-mono text-[10px] text-emerald-600 ml-0.5 font-medium">Bay 04</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2">
+<button class="h-9 px-3.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-headline font-semibold text-xs transition-colors flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">receipt_long</span>
+<span>+ New Invoice</span>
+</button>
+<button class="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-headline font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5" type="button">
+<span class="material-symbols-outlined text-[16px]">prescriptions</span>
+<span>+ New Rx</span>
+</button>
+</div>
+<div class="h-5 w-px bg-slate-200 mx-1"></div>
+<div class="flex items-center gap-1">
+<button aria-label="Notifications" class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors relative" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+</button>
+<button aria-label="Help" class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+</div>
+<div class="flex items-center gap-2 pl-2">
+<img alt="User" class="w-8 h-8 rounded-full object-cover ring-2 ring-slate-100" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/>
+<span class="material-symbols-outlined text-slate-400 text-[18px]">expand_more</span>
+</div>
+</div>
+</header>
+<!-- Dimmed Inactive Background Workspace (Behind Modal) -->
+<main class="w-full pt-20 px-8 pb-12 flex-1 filter blur-[3px] opacity-40 select-none pointer-events-none">
+<div class="max-w-6xl mx-auto space-y-6">
+<div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-teal-50 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[26px]">receipt_long</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h1 class="font-headline font-bold text-xl text-slate-900">Invoice #INV-2026-00125</h1>
+<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-mono text-[11px] font-semibold">Draft</span>
+</div>
+<p class="text-sm text-slate-500 mt-0.5">Patient: Bruno (Labrador Retriever, 32.4 kg) • Owner: Rajesh Sharma</p>
+</div>
+</div>
+<div class="text-right">
+<span class="text-xs text-slate-400 uppercase font-semibold block">Invoice Total</span>
+<span class="font-headline font-bold text-2xl text-slate-900 font-mono">₹1,840.00</span>
+</div>
+</div>
+<div class="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
+<h2 class="font-headline font-bold text-base text-slate-900">Current Items (2)</h2>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+<div>
+<p class="font-headline font-semibold text-slate-900 text-sm">Comprehensive Clinical Consultation</p>
+<p class="text-xs text-slate-500">General physical exam + vitals check</p>
+</div>
+<span class="font-mono font-semibold text-slate-900">₹750.00</span>
+</div>
+<div class="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+<div>
+<p class="font-headline font-semibold text-slate-900 text-sm">Canine CBC &amp; Blood Smear</p>
+<p class="text-xs text-slate-500">In-house hematology analyzer panel</p>
+</div>
+<span class="font-mono font-semibold text-slate-900">₹1,090.00</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Dark Modal Backdrop -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" id="modalOverlay">
+<!-- Centered Modal Container -->
+<div aria-labelledby="modal-title" aria-modal="true" class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden" role="dialog">
+<!-- Modal Header -->
+<div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">post_add</span>
+</div>
+<div>
+<h2 class="font-headline text-lg font-bold text-slate-900 tracking-tight" id="modal-title">Add Invoice Item</h2>
+<p class="text-xs text-slate-500 mt-0.5">INV-2026-00125 • <span class="font-semibold text-slate-700">Bruno</span> (Labrador Retriever)</p>
+</div>
+</div>
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors" id="closeModalBtn" type="button">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<!-- Item Type Selector Tabs -->
+<div class="px-6 pt-3 pb-3 bg-slate-50/70 border-b border-slate-100">
+<div class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-200/60 overflow-x-auto" role="tablist">
+<!-- Medicine Active Pill Tab -->
+<button aria-selected="true" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white font-headline text-xs font-semibold shadow-xs whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">medication</span>
+<span>Medicine</span>
+</button>
+<button aria-selected="false" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">clinical_notes</span>
+<span>Consultation Fee</span>
+</button>
+<button aria-selected="false" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">medical_services</span>
+<span>Procedure Fee</span>
+</button>
+<button aria-selected="false" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">biotech</span>
+<span>Lab Fee</span>
+</button>
+<button aria-selected="false" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">directions_car</span>
+<span>Travel Fee</span>
+</button>
+<button aria-selected="false" class="item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all" role="tab" type="button">
+<span class="material-symbols-outlined text-[16px]">more_horiz</span>
+<span>Other</span>
+</button>
+</div>
+</div>
+<!-- Scrollable Form Body -->
+<div class="px-6 py-5 overflow-y-auto space-y-4 flex-1">
+<!-- Search Medicine Input -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="font-headline text-xs font-bold text-slate-800 flex items-center gap-1" for="medicineSearch">
+                Select Dispensary Drug
+                <span class="text-rose-500">*</span>
+</label>
+<span class="font-mono text-[11px] text-slate-400">Batch #AMX-2026-B8</span>
+</div>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+<span class="material-symbols-outlined text-[18px]">search</span>
+</span>
+<input class="w-full h-10 pl-10 pr-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" id="medicineSearch" type="text" value="Amoxicillin 500 mg (Clavamox / Augmentin equivalent)"/>
+<span class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
+<span class="material-symbols-outlined text-[18px] filled">check_circle</span>
+</span>
+</div>
+<!-- Metadata & Stock Chips -->
+<div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary">pill</span>
+                  Oral Tablet • 500 mg
+                </span>
+<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono text-[11px] font-semibold flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  In Stock: 240 units
+                </span>
+</div>
+<span class="text-[11px] font-medium text-slate-400">Schedule H • Prescription Mandatory</span>
+</div>
+</div>
+<!-- Prescription Link Banner -->
+<div class="rounded-xl p-3.5 bg-emerald-50/80 border border-emerald-200/70 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-[18px] filled">verified</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<span class="font-headline text-xs font-bold text-emerald-950">Linked to Rx #RX-2026-0892</span>
+<span class="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-headline text-[10px] font-bold">Bruno</span>
+</div>
+<p class="text-xs text-emerald-800 mt-0.5 leading-snug">Prescribed: 10 tablets (1 tab BID x 5 days) by Dr. Sarah Jenkins</p>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 border border-emerald-200 text-emerald-800 font-headline font-semibold text-[11px] flex-shrink-0 transition-colors" type="button">
+              View Rx
+            </button>
+</div>
+<!-- Quantity, Unit, Unit Price, Discount Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end pt-1">
+<!-- Quantity & Unit Combo -->
+<div class="sm:col-span-1 space-y-1">
+<label class="font-headline text-xs font-bold text-slate-700 block" for="quantityInput">Quantity</label>
+<div class="flex items-center rounded-xl bg-slate-50 border border-slate-200 focus-within:ring-2 focus-within:ring-primary focus-within:bg-white focus-within:border-transparent overflow-hidden">
+<input class="w-14 h-10 px-2 bg-transparent font-mono text-sm font-semibold text-slate-900 text-center focus:outline-none border-0" id="quantityInput" min="1" type="number" value="10"/>
+<div class="h-5 w-px bg-slate-200"></div>
+<div class="relative flex-1">
+<select aria-label="Dispensing unit" class="w-full h-10 pl-2 pr-6 bg-transparent text-xs font-medium text-slate-700 appearance-none cursor-pointer focus:outline-none border-0" id="unitSelect">
+<option selected="" value="tablets">tablets</option>
+<option value="capsules">capsules</option>
+<option value="strips">strips</option>
+<option value="vials">vials</option>
+</select>
+<span class="material-symbols-outlined text-slate-400 text-[16px] absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Unit Price in INR -->
+<div class="sm:col-span-1 space-y-1">
+<label class="font-headline text-xs font-bold text-slate-700 block" for="unitPriceInput">Unit Price (₹)</label>
+<div class="relative rounded-xl bg-slate-50 border border-slate-200 focus-within:ring-2 focus-within:ring-primary focus-within:bg-white focus-within:border-transparent overflow-hidden">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none font-mono text-xs text-slate-400">₹</span>
+<input class="w-full h-10 pl-7 pr-2.5 bg-transparent font-mono text-sm font-semibold text-slate-900 focus:outline-none border-0" id="unitPriceInput" step="0.50" type="number" value="25.00"/>
+</div>
+</div>
+<!-- Discount in INR -->
+<div class="sm:col-span-1 space-y-1">
+<div class="flex items-center justify-between">
+<label class="font-headline text-xs font-bold text-slate-700 block" for="discountInput">Discount (₹)</label>
+<span class="text-[10px] text-slate-400 font-medium">Optional</span>
+</div>
+<div class="relative rounded-xl bg-slate-50 border border-slate-200 focus-within:ring-2 focus-within:ring-primary focus-within:bg-white focus-within:border-transparent overflow-hidden">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none font-mono text-xs text-slate-400">₹</span>
+<input class="w-full h-10 pl-7 pr-2.5 bg-transparent font-mono text-sm font-semibold text-slate-900 focus:outline-none border-0" id="discountInput" placeholder="0.00" step="1.00" type="number" value="0.00"/>
+</div>
+</div>
+<!-- Total Amount Field -->
+<div class="sm:col-span-1 space-y-1">
+<span class="font-headline text-xs font-bold text-slate-700 block">Total Amount</span>
+<div class="h-10 px-3 rounded-xl bg-teal-50/80 border border-teal-200/70 flex items-center justify-between">
+<span class="text-[11px] font-bold text-teal-700 font-headline uppercase">INR</span>
+<span class="font-mono text-sm font-bold text-primary" id="displayTotalAmount">₹250.00</span>
+</div>
+</div>
+</div>
+<!-- Live Computed Total Banner -->
+<div class="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-teal-50 to-emerald-50/70 border border-teal-200/60 flex items-center justify-between flex-wrap gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">calculate</span>
+<span class="font-mono text-xs font-semibold text-teal-950" id="previewCalculationBadge">
+                Calculated Total: 10 tablets × ₹25.00 = ₹250.00
+              </span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-headline text-[10px] font-bold uppercase tracking-wider">Tax Exempt - Healthcare</span>
+</div>
+<!-- Clinical Administration Instructions / SIG notes -->
+<div class="space-y-1.5">
+<div class="flex items-center justify-between">
+<label class="font-headline text-xs font-bold text-slate-800" for="clinicalInstructions">Clinical Administration Instructions / SIG Notes</label>
+<span class="text-[11px] text-slate-400">Printed on Client Invoice &amp; Pill Envelope</span>
+</div>
+<textarea class="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none leading-relaxed" id="clinicalInstructions" rows="2">Give after food with clean drinking water. Complete full 5-day course.</textarea>
+<!-- Quick SIG Pills -->
+<div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+<span class="font-headline text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-1">Quick-Insert:</span>
+<button class="quick-tag px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-colors" data-tag="q12h (BID)" type="button">q12h (BID)</button>
+<button class="quick-tag px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-colors" data-tag="with food" type="button">with food</button>
+<button class="quick-tag px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-colors" data-tag="empty stomach" type="button">empty stomach</button>
+<button class="quick-tag px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs transition-colors" data-tag="PRN pain" type="button">PRN pain</button>
+</div>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="px-6 py-4 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs text-slate-500 font-medium">All currency amounts in Indian Rupee (₹ INR)</span>
+</div>
+<div class="flex items-center gap-2.5">
+<button class="h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-headline font-semibold text-xs transition-colors" id="cancelBtn" type="button">
+              Cancel
+            </button>
+<button class="h-10 px-5 rounded-xl bg-primary hover:bg-primary-hover text-white font-headline font-bold text-xs shadow-md flex items-center gap-2 transition-all" id="addItemBtn" type="button">
+<span class="material-symbols-outlined text-[17px]">add_shopping_cart</span>
+<span id="addItemBtnText">Add Item to Invoice (₹250.00)</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+    (function() {
+      const qtyInput = document.getElementById('quantityInput');
+      const unitSelect = document.getElementById('unitSelect');
+      const unitPriceInput = document.getElementById('unitPriceInput');
+      const discountInput = document.getElementById('discountInput');
+      const totalDisplay = document.getElementById('displayTotalAmount');
+      const previewBadge = document.getElementById('previewCalculationBadge');
+      const instructions = document.getElementById('clinicalInstructions');
+      const closeBtn = document.getElementById('closeModalBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const addBtn = document.getElementById('addItemBtn');
+      const addBtnText = document.getElementById('addItemBtnText');
+      const modalOverlay = document.getElementById('modalOverlay');
+
+      function calculateTotal() {
+        const qty = Math.max(0, parseFloat(qtyInput.value) || 0);
+        const unitPrice = Math.max(0, parseFloat(unitPriceInput.value) || 0);
+        const discount = Math.max(0, parseFloat(discountInput.value) || 0);
+        const selectedUnit = unitSelect.value;
+
+        const subtotal = qty * unitPrice;
+        const netTotal = Math.max(0, subtotal - discount);
+
+        totalDisplay.textContent = `₹${netTotal.toFixed(2)}`;
+        addBtnText.textContent = `Add Item to Invoice (₹${netTotal.toFixed(2)})`;
+        
+        let calculationText = `Calculated Total: ${qty} ${selectedUnit} × ₹${unitPrice.toFixed(2)}`;
+        if (discount > 0) {
+          calculationText += ` - ₹${discount.toFixed(2)} discount`;
+        }
+        calculationText += ` = ₹${netTotal.toFixed(2)}`;
+        
+        previewBadge.textContent = calculationText;
+      }
+
+      qtyInput.addEventListener('input', calculateTotal);
+      unitPriceInput.addEventListener('input', calculateTotal);
+      discountInput.addEventListener('input', calculateTotal);
+      unitSelect.addEventListener('change', calculateTotal);
+
+      // Quick Tag Insertion
+      document.querySelectorAll('.quick-tag').forEach(tag => {
+        tag.addEventListener('click', function() {
+          const insertText = this.getAttribute('data-tag');
+          if (!instructions.value.includes(insertText)) {
+            instructions.value = instructions.value.trim() + ' • ' + insertText + '.';
+          }
+        });
+      });
+
+      // Item Type Tabs
+      const tabs = document.querySelectorAll('.item-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          tabs.forEach(t => {
+            t.setAttribute('aria-selected', 'false');
+            t.className = 'item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 font-headline text-xs font-semibold whitespace-nowrap transition-all';
+          });
+          this.setAttribute('aria-selected', 'true');
+          this.className = 'item-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white font-headline text-xs font-semibold shadow-xs whitespace-nowrap transition-all';
+        });
+      });
+
+      // Close modal simulation
+      const closeModal = () => {
+        modalOverlay.style.transition = 'opacity 0.2s ease-out';
+        modalOverlay.style.opacity = '0';
+        modalOverlay.style.pointerEvents = 'none';
+        setTimeout(() => {
+          modalOverlay.style.opacity = '1';
+          modalOverlay.style.pointerEvents = 'auto';
+        }, 1500);
+      };
+
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+      if (addBtn) {
+        addBtn.addEventListener('click', () => {
+          const originalContent = addBtn.innerHTML;
+          addBtn.innerHTML = '<span class="material-symbols-outlined text-[17px] animate-spin">sync</span><span>Adding...</span>';
+          setTimeout(() => {
+            addBtn.innerHTML = '<span class="material-symbols-outlined text-[17px] filled">check_circle</span><span>Added to Invoice!</span>';
+            setTimeout(() => {
+              addBtn.innerHTML = originalContent;
+            }, 1200);
+          }, 450);
+        });
+      }
+    })();
+  </script>
+</body></html>

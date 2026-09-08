@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container": "#eaedff",
+            "error-container": "#ffdad6",
+            "surface-bright": "#faf8ff",
+            "inverse-on-surface": "#eef0ff",
+            "on-primary-container": "#f4fffc",
+            "on-surface": "#131b2e",
+            "surface-container-highest": "#dae2fd",
+            "primary": "#0d9488",
+            "primary-dark": "#0f766e",
+            "primary-container": "#ccfbf1",
+            "outline": "#64748b",
+            "outline-variant": "#cbd5e1",
+            "surface": "#faf8ff",
+            "surface-container-high": "#e2e7ff",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#f8fafc",
+            "on-surface-variant": "#475569"
+          },
+          fontFamily: {
+            sans: ["Plus Jakarta Sans", "sans-serif"],
+            body: ["Inter", "sans-serif"],
+            mono: ["JetBrains Mono", "monospace"]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#f8fafc] text-on-surface antialiased min-h-screen flex flex-col items-center">
+<!-- Native Mobile Frame Container (Max 430px / 390px native mobile experience) -->
+<div class="w-full max-w-[420px] min-h-screen bg-[#f8fafc] flex flex-col relative pb-28 shadow-sm">
+<!-- Compact Mobile Top Header -->
+<header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md px-4 py-3.5 border-b border-slate-200/80 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-xl bg-[#0d9488] flex items-center justify-center text-white shadow-sm shadow-teal-700/20">
+<span class="material-symbols-outlined text-[22px]">pets</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5">
+<span class="font-bold text-[17px] text-slate-900 tracking-tight leading-none">VetRx</span>
+<span class="text-[10px] font-bold uppercase tracking-wide bg-teal-50 text-[#0d9488] px-1.5 py-0.5 rounded">Mobile</span>
+</div>
+<span class="text-[11px] font-medium text-slate-500 font-body leading-tight mt-0.5">Oakwood Animal Hosp.</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button aria-label="Notifications" class="relative w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 text-slate-700 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#0d9488]"></span>
+</button>
+<div class="relative">
+<img alt="Dr. Sarah Jenkins" class="w-10 h-10 rounded-full object-cover border-2 border-teal-600/30" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCDHTmBAHteoK26ERsyWk8qUbqqx5J3qF_NhREHqAecg5YAVX8eTJBXKhbuQUKDAq1Utu6WpVkd4UM2ssVr_qLOX8GjzqnadD2VcRoKnfUZ1hFKwQd4VdeCyFfgd3HIXvLUOiG3QgVyotBkN-DiSp6epfYTIvoyoM8xw2CW7qcGsHOOxk7OOuUmbdWtUVf9UKmx5AaBN44Acef3Nx_2NhiXKukKab1kBH5sOrWFgh7otXGIMJGDuJBq"/>
+<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></span>
+</div>
+</div>
+</header>
+<!-- Main Screen Content Area -->
+<main class="flex-1 px-4 pt-4 flex flex-col">
+<!-- Step Indicator & Workflow Progress -->
+<div class="mb-4">
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 border border-teal-200/60 text-[#0d9488] mb-2.5">
+<span class="material-symbols-outlined text-[15px]">checklist</span>
+<span class="text-xs font-semibold tracking-tight">Step 1 of 4 · Select Animal</span>
+</div>
+<h1 class="text-[26px] font-extrabold text-slate-900 tracking-tight leading-tight">Select Animal</h1>
+<p class="text-xs text-slate-500 font-body mt-1">Select an animal to start the prescription.</p>
+<!-- Workflow Step Mini-Pills -->
+<div class="grid grid-cols-4 gap-1.5 mt-3.5">
+<div class="h-1.5 rounded-full bg-[#0d9488]"></div>
+<div class="h-1.5 rounded-full bg-slate-200"></div>
+<div class="h-1.5 rounded-full bg-slate-200"></div>
+<div class="h-1.5 rounded-full bg-slate-200"></div>
+</div>
+<div class="flex justify-between items-center text-[10px] text-slate-400 font-medium mt-1">
+<span class="text-[#0d9488] font-bold">1. Animal</span>
+<span>2. Clinical</span>
+<span>3. Medicines</span>
+<span>4. Generate</span>
+</div>
+</div>
+<!-- Prominent Search Bar (48px+ touch target) -->
+<div class="relative w-full mb-3.5">
+<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[20px] pointer-events-none">search</span>
+<input class="w-full h-12 pl-11 pr-10 rounded-2xl bg-white border border-slate-200/90 text-slate-800 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0d9488] focus:border-transparent shadow-sm transition-all" id="patient-search-input" placeholder="Search owner, animal or phone" type="search"/>
+<button aria-label="Clear search" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1" id="clear-search" type="button">
+<span class="material-symbols-outlined text-[18px]">cancel</span>
+</button>
+</div>
+<!-- Quick Filter Chips -->
+<div class="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar py-0.5">
+<button class="filter-btn active min-h-[40px] px-4 py-2 rounded-full text-xs font-semibold bg-[#0d9488] text-white shadow-sm flex items-center gap-1.5 transition-all" data-filter="all" type="button">
+<span>All</span>
+<span class="text-[11px] opacity-80 font-mono">(3)</span>
+</button>
+<button class="filter-btn min-h-[40px] px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 transition-all" data-filter="canine" type="button">
+<span class="material-symbols-outlined text-[16px]">sound_detection_dog_barking</span>
+<span>Canine</span>
+</button>
+<button class="filter-btn min-h-[40px] px-4 py-2 rounded-full text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 transition-all" data-filter="feline" type="button">
+<span class="material-symbols-outlined text-[16px]">pets</span>
+<span>Feline</span>
+</button>
+</div>
+<!-- Section: Existing Owners Quick Toggle View -->
+<div class="mb-4 bg-white border border-slate-200/80 rounded-2xl p-3 shadow-xs">
+<button aria-expanded="false" class="w-full flex items-center justify-between text-left py-1" id="owner-toggle-btn" type="button">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-lg bg-teal-50 text-[#0d9488] flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">group</span>
+</div>
+<div>
+<p class="text-xs font-bold text-slate-800">Browse by Owner</p>
+<p class="text-[11px] text-slate-400 font-body">Tap an owner to reveal their animals</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400 text-[20px] transition-transform duration-200" id="owner-toggle-icon">expand_more</span>
+</button>
+<!-- Collapsible Owner Selection List -->
+<div class="hidden mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-2" id="owners-dropdown">
+<!-- Owner 1 -->
+<div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold text-slate-800">Ahmed Kumar</p>
+<p class="text-[11px] text-slate-500 font-body">+1 (555) 382-9012 · 1 Registered Animal</p>
+</div>
+<span class="text-[11px] font-semibold text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">1 Animal</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-200/50">
+<span class="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-[#0d9488]">sound_detection_dog_barking</span>
+                Bruno (Labrador)
+              </span>
+<button class="px-2.5 py-1 rounded-lg bg-[#0d9488] text-white text-[11px] font-semibold flex items-center gap-1 active:scale-95" type="button">
+                Select
+              </button>
+</div>
+</div>
+<!-- Owner 2 -->
+<div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold text-slate-800">Fathima Noor</p>
+<p class="text-[11px] text-slate-500 font-body">+1 (555) 749-1104 · 1 Registered Animal</p>
+</div>
+<span class="text-[11px] font-semibold text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">1 Animal</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-200/50">
+<span class="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-[#0d9488]">pets</span>
+                Milo (Persian)
+              </span>
+<button class="px-2.5 py-1 rounded-lg bg-[#0d9488] text-white text-[11px] font-semibold flex items-center gap-1 active:scale-95" type="button">
+                Select
+              </button>
+</div>
+</div>
+<!-- Owner 3 -->
+<div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<div>
+<p class="text-xs font-bold text-slate-800">Joseph Vance</p>
+<p class="text-[11px] text-slate-500 font-body">+1 (555) 602-8840 · 1 Registered Animal</p>
+</div>
+<span class="text-[11px] font-semibold text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">1 Animal</span>
+</div>
+<div class="flex items-center justify-between pt-1 border-t border-slate-200/50">
+<span class="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-[#0d9488]">sound_detection_dog_barking</span>
+                Rocky (Beagle)
+              </span>
+<button class="px-2.5 py-1 rounded-lg bg-[#0d9488] text-white text-[11px] font-semibold flex items-center gap-1 active:scale-95" type="button">
+                Select
+              </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent Animals Header -->
+<div class="flex items-center justify-between mb-3 px-0.5">
+<h2 class="text-[15px] font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-[#0d9488]">schedule</span>
+          Recent Animals
+        </h2>
+<span class="text-xs text-slate-400 font-medium">3 checked-in</span>
+</div>
+<!-- Vertically Stacked Full-Width Animal Cards -->
+<div class="flex flex-col gap-3.5" id="animal-card-list">
+<!-- Card 1: Bruno (Dog with Photo) -->
+<article class="animal-card bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col gap-3" data-name="Bruno" data-owner="Ahmed Kumar" data-species="canine">
+<div class="flex items-start gap-3.5">
+<img alt="Bruno" class="w-16 h-16 rounded-2xl object-cover bg-slate-100 shrink-0 border border-slate-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8ujNDjwb_BLHvwzbqsP6rrdKdKnFMLzFHf9V1yKF3VrHY93IDALpZ7avElxzqG7Ryqcjcp2LnHc45D54yKq1KNmRwrAcUhEuJtZP52QsEEds98M89k45-M3Wo9KBxj10_Ee6gjpEBhoocKIBD6uFfvlCjzPlm_jzMZYHKMj6Q7jARU_RuZAjYdQmP8oqaPOAZ3QwaFPAR1XM9QalBYMDU8U3MXA7HSsxM4gqBR_jhuFH78uqRIKJU"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-baseline justify-between">
+<h3 class="text-lg font-bold text-slate-900 truncate">Bruno</h3>
+<span class="text-xs font-bold font-mono text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">24.0 kg</span>
+</div>
+<p class="text-xs font-semibold text-slate-600 font-body">Canine · Labrador Retriever</p>
+<div class="flex items-center gap-2 mt-1.5 text-xs text-slate-500 font-body flex-wrap">
+<span>Male (Intact)</span>
+<span class="text-slate-300">•</span>
+<span>4 yrs 2 mos</span>
+</div>
+<div class="flex items-center gap-1 mt-1 text-xs text-slate-700 font-medium">
+<span class="material-symbols-outlined text-[15px] text-slate-400">person</span>
+<span class="truncate">Owner: <strong class="font-semibold text-slate-800">Ahmed Kumar</strong></span>
+</div>
+</div>
+</div>
+<!-- Primary Button: Touch target 48px+ -->
+<button class="w-full h-12 min-h-[48px] rounded-xl bg-[#0d9488] active:bg-[#0f766e] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]" type="button">
+<span>Select &amp; Start Rx</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</article>
+<!-- Card 2: Milo (Cat with Photo) -->
+<article class="animal-card bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col gap-3" data-name="Milo" data-owner="Fathima Noor" data-species="feline">
+<div class="flex items-start gap-3.5">
+<img alt="Milo" class="w-16 h-16 rounded-2xl object-cover bg-slate-100 shrink-0 border border-slate-100" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDciMbSD2k3CZ2bFPTn7U6b_ujyiLJ2yKBa3YOcTjDnsTk0P9kI1e5rUuiWnyGg0u47XEZYVgrWp_5rMk5qdBnzA19fqtr1QEdFbhhY6ghCjH8g7gsNaEGTRsvLglI7cjqJH-_fNOvpTdc9hcG8uhV60igUw11fRfcpucL9rjeLihRccXsB0DYdj5nU7WiGcZl_-bv-XNUMqPZ32r2tcBK1-4IKqtAWYrDTYShRn_FDTJ1zlsCvHPVM"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-baseline justify-between">
+<h3 class="text-lg font-bold text-slate-900 truncate">Milo</h3>
+<span class="text-xs font-bold font-mono text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">4.2 kg</span>
+</div>
+<p class="text-xs font-semibold text-slate-600 font-body">Feline · Persian</p>
+<div class="flex items-center gap-2 mt-1.5 text-xs text-slate-500 font-body flex-wrap">
+<span>Male (Neutered)</span>
+<span class="text-slate-300">•</span>
+<span>2 yrs 6 mos</span>
+</div>
+<div class="flex items-center gap-1 mt-1 text-xs text-slate-700 font-medium">
+<span class="material-symbols-outlined text-[15px] text-slate-400">person</span>
+<span class="truncate">Owner: <strong class="font-semibold text-slate-800">Fathima Noor</strong></span>
+</div>
+</div>
+</div>
+<!-- Primary Button -->
+<button class="w-full h-12 min-h-[48px] rounded-xl bg-[#0d9488] active:bg-[#0f766e] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]" type="button">
+<span>Select &amp; Start Rx</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</article>
+<!-- Card 3: Rocky (Dog with Species Avatar Fallback example) -->
+<article class="animal-card bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col gap-3" data-name="Rocky" data-owner="Joseph Vance" data-species="canine">
+<div class="flex items-start gap-3.5">
+<!-- Species/Paw avatar fallback design -->
+<div class="w-16 h-16 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-[#0d9488] shrink-0">
+<span class="material-symbols-outlined text-[30px]">sound_detection_dog_barking</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-baseline justify-between">
+<h3 class="text-lg font-bold text-slate-900 truncate">Rocky</h3>
+<span class="text-xs font-bold font-mono text-[#0d9488] bg-teal-50 px-2 py-0.5 rounded-md">18.0 kg</span>
+</div>
+<p class="text-xs font-semibold text-slate-600 font-body">Canine · Beagle</p>
+<div class="flex items-center gap-2 mt-1.5 text-xs text-slate-500 font-body flex-wrap">
+<span>Male</span>
+<span class="text-slate-300">•</span>
+<span>5 yrs</span>
+</div>
+<div class="flex items-center gap-1 mt-1 text-xs text-slate-700 font-medium">
+<span class="material-symbols-outlined text-[15px] text-slate-400">person</span>
+<span class="truncate">Owner: <strong class="font-semibold text-slate-800">Joseph Vance</strong></span>
+</div>
+</div>
+</div>
+<!-- Primary Button -->
+<button class="w-full h-12 min-h-[48px] rounded-xl bg-[#0d9488] active:bg-[#0f766e] text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99]" type="button">
+<span>Select &amp; Start Rx</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</article>
+</div>
+<!-- Full-Width Add New Owner Button (Touch target 48px+) -->
+<div class="mt-4 mb-2">
+<button class="w-full h-12 min-h-[48px] rounded-2xl bg-white border-2 border-dashed border-teal-600/40 text-[#0d9488] font-bold text-sm flex items-center justify-center gap-2 hover:bg-teal-50/50 active:bg-teal-100 transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-[20px]">person_add</span>
+<span>+ Add New Owner</span>
+</button>
+</div>
+</main>
+<!-- Native Mobile Bottom Navigation Bar -->
+<!-- Exactly: Home, Patients, Prescriptions, Invoices -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white/95 backdrop-blur-lg border-t border-slate-200/90 px-3 py-2 z-50 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+<div class="grid grid-cols-4 gap-1">
+<!-- Tab 1: Home -->
+<a class="min-h-[50px] flex flex-col items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">grid_view</span>
+<span class="text-[11px] font-medium mt-0.5">Home</span>
+</a>
+<!-- Tab 2: Patients (Active Context) -->
+<a class="min-h-[50px] flex flex-col items-center justify-center rounded-xl text-[#0d9488] bg-teal-50/80 font-bold transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">pets</span>
+<span class="text-[11px] mt-0.5">Patients</span>
+</a>
+<!-- Tab 3: Prescriptions (Active Workflow Context) -->
+<a class="min-h-[50px] flex flex-col items-center justify-center rounded-xl text-[#0d9488] font-bold relative transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]" style="font-variation-settings: 'FILL' 1;">prescriptions</span>
+<span class="text-[11px] mt-0.5">Prescriptions</span>
+<span class="absolute top-1 right-5 w-2 h-2 rounded-full bg-[#0d9488]"></span>
+</a>
+<!-- Tab 4: Invoices -->
+<a class="min-h-[50px] flex flex-col items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 transition-colors" href="#">
+<span class="material-symbols-outlined text-[22px]">receipt_long</span>
+<span class="text-[11px] font-medium mt-0.5">Invoices</span>
+</a>
+</div>
+<!-- iOS Home Indicator Spacing -->
+<div class="h-1.5 w-32 bg-slate-300 rounded-full mx-auto mt-2 mb-0.5"></div>
+</nav>
+</div>
+<!-- Interactive JavaScript Logic -->
+<script>
+    // Search filtering & clear functionality
+    const searchInput = document.getElementById('patient-search-input');
+    const clearBtn = document.getElementById('clear-search');
+    const animalCards = document.querySelectorAll('.animal-card');
+
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      clearBtn.classList.toggle('hidden', query.length === 0);
+
+      animalCards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(query)) {
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+    });
+
+    clearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      clearBtn.classList.add('hidden');
+      animalCards.forEach(card => card.classList.remove('hidden'));
+      searchInput.focus();
+    });
+
+    // Quick filter chips
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.classList.remove('bg-[#0d9488]', 'text-white', 'shadow-sm');
+          b.classList.add('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+        });
+        btn.classList.add('bg-[#0d9488]', 'text-white', 'shadow-sm');
+        btn.classList.remove('bg-white', 'text-slate-600', 'border', 'border-slate-200');
+
+        const filter = btn.getAttribute('data-filter');
+        animalCards.forEach(card => {
+          if (filter === 'all' || card.getAttribute('data-species') === filter) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        });
+      });
+    });
+
+    // Browse by Owner Dropdown Accordion
+    const ownerToggle = document.getElementById('owner-toggle-btn');
+    const ownerDropdown = document.getElementById('owners-dropdown');
+    const ownerIcon = document.getElementById('owner-toggle-icon');
+
+    ownerToggle.addEventListener('click', () => {
+      const isExpanded = ownerDropdown.classList.contains('hidden');
+      if (isExpanded) {
+        ownerDropdown.classList.remove('hidden');
+        ownerIcon.style.transform = 'rotate(180deg)';
+        ownerToggle.setAttribute('aria-expanded', 'true');
+      } else {
+        ownerDropdown.classList.add('hidden');
+        ownerIcon.style.transform = 'rotate(0deg)';
+        ownerToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  </script>
+</body></html>

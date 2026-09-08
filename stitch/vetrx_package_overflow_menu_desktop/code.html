@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><title>VetRx - Veterinary Clinical Workspace</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;600&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base { html, body { margin: 0; padding: 0; } body { overscroll-behavior: none; } main > :first-child { margin-top: 0 !important; } main > :last-child { margin-bottom: 0 !important; } } ::-webkit-scrollbar { display: none; }</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-surface-variant": "#3d4947", "tertiary-fixed-dim": "#4edea3", "outline": "#6d7a77", "on-primary-fixed": "#00201d", "inverse-on-surface": "#eef0ff", "secondary-container": "#5bb8fe", "on-background": "#131b2e", "inverse-surface": "#283044", "on-error": "#ffffff", "outline-variant": "#bcc9c6", "tertiary": "#006947", "primary": "#00685f", "secondary-fixed-dim": "#93ccff", "on-secondary-fixed": "#001d31", "primary-container": "#008378", "surface-container-lowest": "#ffffff", "secondary-fixed": "#cce5ff", "surface-tint": "#006a61", "primary-fixed": "#89f5e7", "surface-container-highest": "#dae2fd", "on-secondary-fixed-variant": "#004b73", "inverse-primary": "#6bd8cb", "on-primary-fixed-variant": "#005049", "on-surface": "#131b2e", "on-primary-container": "#f4fffc", "on-secondary": "#ffffff", "on-tertiary-fixed-variant": "#005236", "error-container": "#ffdad6", "on-primary": "#ffffff", "surface-container-low": "#f2f3ff", "background": "#faf8ff", "error": "#ba1a1a", "surface": "#faf8ff", "on-secondary-container": "#00476e", "on-tertiary-fixed": "#002113", "tertiary-container": "#00855b", "on-tertiary-container": "#f5fff6", "surface-container": "#eaedff", "secondary": "#006398", "on-tertiary": "#ffffff", "surface-dim": "#d2d9f4", "surface-bright": "#faf8ff", "surface-variant": "#dae2fd", "primary-fixed-dim": "#6bd8cb", "surface-container-high": "#e2e7ff", "on-error-container": "#93000a", "tertiary-fixed": "#6ffbbe" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xs": "0.25rem", "space-2xl": "2rem", "space-xxs": "0.125rem", "space-xl": "1.5rem", "space-3xl": "3rem", "gutter-default": "1.25rem", "space-md": "0.75rem", "gutter-compact": "0.75rem", "margin-screen": "1.5rem", "space-base": "1rem", "space-lg": "1.25rem", "space-sm": "0.5rem" }, "fontFamily": { "headline-lg": [ "Plus Jakarta Sans" ], "headline-lg-mobile": [ "Plus Jakarta Sans" ], "data-mono": [ "JetBrains Mono" ], "label-md": [ "Inter" ], "headline-xl-mobile": [ "Plus Jakarta Sans" ], "headline-xl": [ "Plus Jakarta Sans" ], "body-md": [ "Inter" ], "body-sm": [ "Inter" ], "headline-sm": [ "Plus Jakarta Sans" ], "body-lg": [ "Inter" ], "label-lg": [ "Inter" ], "headline-md": [ "Plus Jakarta Sans" ], "label-sm": [ "Inter" ] }, "fontSize": { "headline-lg": [ "24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700" } ], "headline-lg-mobile": [ "20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "700" } ], "data-mono": [ "13px", { "lineHeight": "18px", "letterSpacing": "-0.01em", "fontWeight": "500" } ], "label-md": [ "12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "600" } ], "headline-xl-mobile": [ "26px", { "lineHeight": "34px", "letterSpacing": "-0.02em", "fontWeight": "700" } ], "headline-xl": [ "32px", { "lineHeight": "40px", "letterSpacing": "-0.025em", "fontWeight": "700" } ], "body-md": [ "14px", { "lineHeight": "20px", "fontWeight": "400" } ], "body-sm": [ "13px", { "lineHeight": "18px", "fontWeight": "400" } ], "headline-sm": [ "16px", { "lineHeight": "24px", "fontWeight": "600" } ], "body-lg": [ "16px", { "lineHeight": "24px", "fontWeight": "400" } ], "label-lg": [ "14px", { "lineHeight": "20px", "letterSpacing": "0.005em", "fontWeight": "600" } ], "headline-md": [ "18px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600" } ], "label-sm": [ "11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "700" } ] } } } };</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none"><div class="flex flex-col flex-1 min-h-0"><div class="h-16 px-space-lg flex items-center gap-space-sm bg-surface-container-lowest"><img alt="Modern minimalist veterinary Rx medical cross and pet paw silhouette fusion logo mark, clean vector teal aesthetic #0D9488, crisp geometry on transparent background. Design context: - Primary color: #0d9488
+- Font: plusJakartaSans
+- Mode: light
+- Roundness: rounded-md
+. The logo should be visually consistent with these brand tokens." class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VM1y23xiZsA1-TRxojioWMyeegtT0Lb8bpD1KRIhDVjkOSPPQ9hqNdizdu4HXE5Smr_VXOBMhcu8IgtsLcExJqej6HK0c3ybG8XWIQBn-hnDa1xPJfmhWb2aYNPNOLk2klEPDxgtfBPaqmPoyPvU2AP8E7EWo3b52pvwDlEjM9TiFkG0J1NNuW_nFFtDmelJTGtVPes1zikfH6IhGBoUVs4KHQz4BlPQBKJ4cg4O0e9wTYQf41JxD3LOM"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm tracking-tight text-primary leading-none">VetRx</span><span class="font-label-sm text-label-sm text-on-surface-variant tracking-wider uppercase mt-space-xxs">Clinical Suite</span></div></div><div class="px-space-md py-space-sm"><div class="bg-surface-container-low px-space-sm py-space-xs rounded-lg flex items-center justify-between"><div class="flex items-center gap-space-xs min-w-0"><span class="material-symbols-outlined text-primary text-[18px]">local_hospital</span><div class="truncate"><p class="font-label-md text-label-md text-on-surface truncate leading-tight">Oakwood Animal Hospital</p><p class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Room 3B • Active Shift</p></div></div><button class="p-space-xxs text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0" title="Switch Clinic" type="button"><span class="material-symbols-outlined text-[16px]">swap_horiz</span></button></div></div><nav class="flex-1 px-space-md py-space-xs space-y-space-xxs overflow-y-auto" data-active-classes="bg-primary-container text-on-primary-container font-headline-sm text-headline-sm shadow-sm"><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="dashboard" href="#"><span class="material-symbols-outlined text-[20px]">grid_view</span><span>Dashboard</span></a><a class="flex items-center justify-between px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="prescriptions" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">prescriptions</span><span>Prescriptions</span></div><span class="font-data-mono text-data-mono bg-surface-container-high text-on-surface px-space-xs rounded">12</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="patients" href="#"><span class="material-symbols-outlined text-[20px]">pets</span><span>Patients</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="medicines" href="#"><span class="material-symbols-outlined text-[20px]">medication</span><span>Medicines</span></a><a aria-current="page" class="flex items-center justify-between px-space-md py-space-sm rounded-lg transition-colors bg-primary-container text-on-primary-container font-headline-sm text-headline-sm shadow-sm" data-path="treatment-packages" href="#"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-[20px]">medical_services</span><span>Treatment Packages</span></div><span class="w-2 h-2 rounded-full bg-tertiary"></span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="invoices" href="#"><span class="material-symbols-outlined text-[20px]">receipt_long</span><span>Invoices</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors font-label-lg text-label-lg" data-path="settings" href="#"><span class="material-symbols-outlined text-[20px]">settings</span><span>Settings</span></a></nav></div><div class="p-space-md bg-surface-container-lowest shadow-[0_-1px_8px_rgba(0,0,0,0.02)]"><div class="flex items-center justify-between p-space-sm rounded-xl bg-surface-container-low"><div class="flex items-center gap-space-sm min-w-0"><img alt="Profile" class="w-8 h-8 rounded-full object-cover flex-shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/><div class="truncate"><p class="font-label-lg text-label-lg text-on-surface truncate leading-tight">Dr. Sarah Jenkins</p><p class="font-label-sm text-label-sm text-on-surface-variant leading-tight">Lead Surgeon, DVM</p></div></div><button class="p-space-xxs text-on-surface-variant hover:text-primary transition-colors flex-shrink-0" title="Switch Clinic Profile" type="button"><span class="material-symbols-outlined text-[18px]">unfold_more</span></button></div></div></aside><div class="pl-64"><header class="fixed top-0 left-64 right-0 h-16 bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-md flex-1 max-w-2xl"><div class="relative w-full flex items-center"><span class="material-symbols-outlined absolute left-space-md text-on-surface-variant text-[20px] pointer-events-none">search</span><input class="w-full h-10 pl-10 pr-16 bg-surface-container-lowest rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition-all" placeholder="Search patients, microchips, Rx IDs, or packages..." type="search"/><div class="absolute right-space-sm flex items-center gap-space-xxs pointer-events-none"><kbd class="font-data-mono text-label-sm bg-surface-container-high text-on-surface px-space-xs py-space-xxs rounded">⌘K</kbd></div></div></div><div class="flex items-center gap-space-md"><div class="hidden lg:flex items-center gap-space-xs px-space-sm py-space-xs rounded-lg bg-surface-container-lowest shadow-[0_1px_3px_rgba(15,23,42,0.04)]"><span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span><span class="font-label-sm text-label-sm text-on-surface">Oakwood Animal Hospital</span></div><div class="flex items-center gap-space-xs"><button class="flex items-center gap-space-xs px-space-md h-9 bg-primary hover:bg-primary-container text-on-primary rounded-lg font-label-lg text-label-lg transition-colors shadow-sm" type="button"><span class="material-symbols-outlined text-[18px]">add</span><span>New Rx</span></button><button class="relative p-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Clinical Notifications" type="button"><span class="material-symbols-outlined text-[22px]">notifications</span><span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full ring-2 ring-surface"></span></button><button class="p-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" title="Quick Dose Calculator" type="button"><span class="material-symbols-outlined text-[22px]">calculate</span></button><div class="h-6 w-px bg-outline-variant/30 mx-space-xxs"></div><a class="flex items-center" data-path="settings" href="#"><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1X1IybeNHdExMiCmeV_CqYnYKPSr8cTe5MqOS93iUHbPcufG5kkfL_soK7kBETbuur_1Wgg-oG0eCD8iC6fd9qK5kMcL0DXAqvWAKu_Hh762W_ODsFo5W3JJYlsjTj07PcrPDv2vxtz6gMfyJtYnbwEO9cigsl4C9HBcX-bpMhalbi5Ros0JjtNRl5DyFpDx6uPwpleBDMI-sLDRCrP2fHMyYdgD5azYXL6fBt4cTY7LzqsGACyk7FUF-U"/></a></div></div></header><main class="relative pt-16 bg-surface min-h-screen w-full px-space-lg py-space-lg"><div class="flex flex-col w-full">
+<div class="flex flex-col gap-space-lg w-full max-w-[1360px] mx-auto pb-space-3xl">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md pt-space-xs">
+<div class="flex flex-col gap-space-xxs">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md">
+<span>Clinical Prescribing</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-semibold">Standard Care Protocols</span>
+</div>
+<div class="flex items-baseline gap-space-sm">
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Treatment Packages</h1>
+<span class="px-space-xs py-space-xxs rounded bg-surface-container-high font-data-mono text-data-mono text-on-surface-variant font-medium">38 Total</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Standardized multi-drug dispensing recipes and bundle regimens. One-click population into active electronic prescriptions.</p>
+</div>
+<div class="flex items-center gap-space-sm flex-shrink-0">
+<button class="flex items-center gap-space-xs px-space-md py-space-sm bg-surface-container-lowest text-on-surface rounded-lg shadow-sm hover:bg-surface-container-high transition-colors font-label-lg text-label-lg" type="button">
+<span class="material-symbols-outlined text-[20px] text-primary">file_download</span>
+<span>Import Protocol</span>
+</button>
+<button class="flex items-center gap-space-xs px-space-lg py-space-sm bg-primary text-on-primary rounded-lg shadow-md hover:bg-primary-container transition-all font-label-lg text-label-lg" type="button">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>New Package</span>
+</button>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mr-space-xs">Species:</span>
+<button class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors" type="button">
+          All (38)
+        </button>
+<button class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-primary-container text-on-primary-container shadow-sm flex items-center gap-space-xs" type="button">
+<span class="material-symbols-outlined text-[16px]">sound_detection_dog_barking</span>
+<span>Canine (22)</span>
+</button>
+<button class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors flex items-center gap-space-xs" type="button">
+<span class="material-symbols-outlined text-[16px]">pets</span>
+<span>Feline (11)</span>
+</button>
+<button class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button">
+          Equine (3)
+        </button>
+<button class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors" type="button">
+          Universal (2)
+        </button>
+</div>
+<div class="flex items-center gap-space-sm flex-1 lg:max-w-md">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-space-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full h-10 pl-9 pr-space-md bg-surface-container-low rounded-lg font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all" placeholder="Search treatment packages, active salts..." type="search" value="Otitis"/>
+</div>
+<button class="p-space-sm bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant rounded-lg transition-colors flex items-center justify-center" title="Filter options" type="button">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-space-lg relative">
+<div class="relative rounded-2xl bg-surface-container-lowest p-space-lg shadow-xl ring-2 ring-primary transition-all flex flex-col justify-between z-30">
+<div class="flex flex-col gap-space-md">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-space-xxs">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="inline-flex items-center gap-space-xxs px-space-xs py-space-xxs rounded-md bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">sound_detection_dog_barking</span>
+                  Canine
+                </span>
+<span class="inline-flex items-center px-space-xs py-space-xxs rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+                  Dermatology / ENT
+                </span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mt-space-xs">Canine Acute Otitis Externa</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Triple action: broad-spectrum systemic coverage, topical suspension, and cox-2 NSAID analgesia.</p>
+</div>
+<div class="relative flex-shrink-0">
+<button class="w-9 h-9 flex items-center justify-center rounded-lg bg-surface-container-high text-primary hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm" id="active-overflow-trigger" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+<div class="absolute right-0 top-11 w-64 bg-surface-container-lowest rounded-xl shadow-2xl z-50 py-space-xs ring-1 ring-black/5 flex flex-col" id="active-popover-menu">
+<div class="px-space-md py-space-xs border-b border-surface-container-high">
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Package Actions</p>
+</div>
+<button class="group flex items-center gap-space-sm px-space-md py-space-sm text-left hover:bg-primary/10 text-primary font-label-lg text-label-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px] text-primary" style="font-variation-settings: 'FILL' 1;">prescriptions</span>
+<div class="flex flex-col">
+<span class="font-semibold text-primary">Apply to Prescription</span>
+<span class="font-body-sm text-label-sm text-on-surface-variant group-hover:text-primary/80">Populate active patient cart</span>
+</div>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-left hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">edit</span>
+<span>Edit Package</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-left hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">content_copy</span>
+<span>Duplicate Package</span>
+</button>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-left hover:bg-surface-container-high text-on-surface font-label-lg text-label-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">visibility</span>
+<span>View Package Details</span>
+</button>
+<div class="my-space-xs h-px bg-surface-container-high"></div>
+<button class="flex items-center gap-space-sm px-space-md py-space-sm text-left hover:bg-error-container/40 text-error font-label-lg text-label-lg transition-colors" type="button">
+<span class="material-symbols-outlined text-[18px] text-error">delete</span>
+<span>Delete Package</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-sm rounded-xl">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold uppercase tracking-wider">Formula Components</span>
+<span class="font-label-sm text-label-sm text-primary font-medium">3 Medicines</span>
+</div>
+<div class="flex flex-col gap-space-xs mt-space-xxs">
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg shadow-sm">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Amoxycillin &amp; Clavulanate</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">500 mg • 1 tab PO q12h x 7d</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface font-medium flex-shrink-0">₹320.00</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg shadow-sm">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Posatex Otic Suspension</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">15 ml • 4 drops AS/AD q24h x 7d</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface font-medium flex-shrink-0">₹850.00</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg shadow-sm">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-tertiary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Meloxicam Oral Suspension</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">1.5 mg/ml • 0.2 mg/kg day 1, then 0.1 mg/kg</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface font-medium flex-shrink-0">₹175.00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-md border-t border-surface-container-high mt-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span class="font-data-mono text-label-md text-on-surface-variant">Used 18 times</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Est. Regimen Total</span>
+<span class="font-headline-md text-headline-md text-primary font-bold">₹1,345.00</span>
+</div>
+</div>
+</div>
+<div class="rounded-2xl bg-surface-container-lowest/80 opacity-75 hover:opacity-100 transition-opacity p-space-lg shadow-sm flex flex-col justify-between">
+<div class="flex flex-col gap-space-md">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-space-xxs">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="inline-flex items-center gap-space-xxs px-space-xs py-space-xxs rounded-md bg-secondary/10 text-secondary font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">pets</span>
+                  Feline
+                </span>
+<span class="inline-flex items-center px-space-xs py-space-xxs rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+                  Respiratory
+                </span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mt-space-xs">Feline Upper Respiratory Infection (URI)</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Standardized symptomatic and antimicrobial bundle for feline herpes/calicivirus complex flare-ups.</p>
+</div>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-sm rounded-xl">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold uppercase tracking-wider">Formula Components</span>
+<span class="font-label-sm text-label-sm text-secondary font-medium">3 Medicines</span>
+</div>
+<div class="flex flex-col gap-space-xs mt-space-xxs">
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Doxycycline Monohydrate</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">50 mg • 1/2 tab PO q12h with food</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface flex-shrink-0">₹190.00</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-tertiary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">L-Lysine Supplement Gel</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">100 ml • 1 pump (250 mg) PO q12h</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface flex-shrink-0">₹440.00</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Tobramycin Eye Drops 0.3%</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">5 ml • 1 drop OU q8h x 5d</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface flex-shrink-0">₹160.00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-md border-t border-surface-container-high mt-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span class="font-data-mono text-label-md text-on-surface-variant">Used 41 times</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Est. Regimen Total</span>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">₹790.00</span>
+</div>
+</div>
+</div>
+<div class="rounded-2xl bg-surface-container-lowest/80 opacity-75 hover:opacity-100 transition-opacity p-space-lg shadow-sm flex flex-col justify-between">
+<div class="flex flex-col gap-space-md">
+<div class="flex items-start justify-between gap-space-sm">
+<div class="flex flex-col gap-space-xxs">
+<div class="flex items-center gap-space-xs flex-wrap">
+<span class="inline-flex items-center gap-space-xxs px-space-xs py-space-xxs rounded-md bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">sound_detection_dog_barking</span>
+                  Canine
+                </span>
+<span class="inline-flex items-center px-space-xs py-space-xxs rounded-md bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">
+                  Preventative Care
+                </span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mt-space-xs">Routine Deworming &amp; Tick Shield</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Comprehensive quarterly endo- and ecto-parasitic prophylactic regimen for dogs 10-25 kg.</p>
+</div>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-xs bg-surface-container-low p-space-sm rounded-xl">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold uppercase tracking-wider">Formula Components</span>
+<span class="font-label-sm text-label-sm text-primary font-medium">2 Medicines</span>
+</div>
+<div class="flex flex-col gap-space-xs mt-space-xxs">
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Sarolaner (Simparica 40 mg)</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">1 chewable tab • PO once every 30 days</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface flex-shrink-0">₹720.00</span>
+</div>
+<div class="flex items-center justify-between bg-surface-container-lowest p-space-xs rounded-lg">
+<div class="flex items-center gap-space-xs min-w-0">
+<span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
+<div class="truncate">
+<p class="font-headline-sm text-body-md text-on-surface font-semibold truncate">Praziquantel + Pyrantel Embonate</p>
+<p class="font-data-mono text-label-sm text-on-surface-variant">1 tab per 10 kg • PO stat, repeat 14d</p>
+</div>
+</div>
+<span class="font-data-mono text-body-sm text-on-surface flex-shrink-0">₹140.00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-md border-t border-surface-container-high mt-space-md">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
+<span class="font-data-mono text-label-md text-on-surface-variant">Used 89 times</span>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Est. Regimen Total</span>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">₹860.00</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md mt-space-md">
+<div class="p-space-md rounded-xl bg-surface-container-lowest flex items-center gap-space-md shadow-sm">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[26px]">history_edu</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Dispensed This Month</span>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">142 Bundles</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-lowest flex items-center gap-space-md shadow-sm">
+<div class="w-12 h-12 rounded-xl bg-tertiary/10 flex items-center justify-center text-tertiary flex-shrink-0">
+<span class="material-symbols-outlined text-[26px]">savings</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Clinical Time Saved</span>
+<span class="font-headline-md text-headline-md text-on-surface font-bold">~19.4 Hours</span>
+</div>
+</div>
+<div class="p-space-md rounded-xl bg-surface-container-lowest flex items-center gap-space-md shadow-sm">
+<div class="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary flex-shrink-0">
+<span class="material-symbols-outlined text-[26px]">inventory_2</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Stock Alert Status</span>
+<span class="font-headline-md text-headline-md text-tertiary font-bold">All In Stock</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function() {
+    const trigger = document.getElementById('active-overflow-trigger');
+    const popover = document.getElementById('active-popover-menu');
+    if (trigger && popover) {
+      trigger.addEventListener('click', function(e) {
+        e.stopPropagation();
+        popover.classList.toggle('hidden');
+      });
+      document.addEventListener('click', function(e) {
+        if (!popover.contains(e.target) && e.target !== trigger) {
+          // Keep visually open for default presentation context unless clicked
+        }
+      });
+    }
+  })();
+</script></main></div></body></html>
