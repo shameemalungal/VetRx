@@ -635,6 +635,25 @@
   color: var(--color-primary);
 }
 
+
+/* Official-document ribbon: stable one-line A4 print header. */
+.invoice-official-ribbon {
+  min-width: 0;
+}
+
+.invoice-official-ribbon > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.invoice-official-ribbon > div:first-child > span:last-child {
+  white-space: nowrap;
+}
+
+.invoice-official-ribbon > div:last-child {
+  flex: 0 0 auto;
+}
+
 /* =============================================================
    PRINT READY TAX INVOICE & RECEIPT (A4 Canvas)
    ============================================================= */
@@ -843,7 +862,7 @@
 
 @page {
   size: A4 portrait;
-  margin: 8mm 10mm;
+  margin: 6mm 8mm;
 }
 
 @media print {
@@ -889,7 +908,7 @@
     width: 100% !important;
     border: none !important;
     box-shadow: none !important;
-    padding: 2mm 2mm !important;
+    padding: 1.5mm 1.5mm !important;
     min-height: auto !important;
     page-break-after: auto;
     break-after: auto;
@@ -902,42 +921,42 @@
   }
 
   .invoice-print-header {
-    padding-bottom: 8px !important;
-    margin-bottom: 8px !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 6px !important;
   }
 
   .invoice-print-grid-dossier {
-    gap: 8px !important;
-    margin-bottom: 8px !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
   }
 
   .invoice-print-dossier-box {
-    padding: 6px 10px !important;
+    padding: 5px 8px !important;
   }
 
   .invoice-print-table {
-    margin-bottom: 8px !important;
+    margin-bottom: 6px !important;
   }
 
   .invoice-print-table th {
-    padding: 5px 8px !important;
+    padding: 4px 7px !important;
   }
 
   .invoice-print-table td {
-    padding: 5px 8px !important;
+    padding: 4px 7px !important;
   }
 
   .invoice-print-ledger-grid {
-    gap: 8px !important;
-    margin-bottom: 8px !important;
+    gap: 6px !important;
+    margin-bottom: 6px !important;
   }
 
   .invoice-print-words-box,
   .invoice-print-totals-box {
-    padding: 6px 10px !important;
+    padding: 5px 8px !important;
   }
 
   .invoice-print-signature-section {
-    padding-top: 8px !important;
+    padding-top: 6px !important;
   }
 }

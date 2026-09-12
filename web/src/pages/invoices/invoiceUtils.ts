@@ -7,6 +7,15 @@ import { db } from '../../db/schema';
 /**
  * Format integer paisa to INR formatted string, e.g. 25000 -> "₹250.00"
  */
+/** Format a Date using the browser's local calendar date for HTML date inputs. */
+export function formatLocalDateInput(date: Date | string = new Date()): string {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function formatINR(paisa: number): string {
   const rupees = (paisa || 0) / 100;
   return new Intl.NumberFormat('en-IN', {
@@ -81,10 +90,19 @@ export function numberToWordsINR(paisa: number): string {
  */
 export async function getNextInvoiceNumber(): Promise<string> {
   const currentYear = new Date().getFullYear();
-  const count = await db.invoices.count();
-  const nextSeq = count + 1;
-  const padded = String(nextSeq).padStart(5, '0');
-  return `INV-${currentYear}-${padded}`;
+  const prefix = `INV-${currentYear}-`;
+  const existing = await db.invoices
+    .where('invoiceNumber')
+    .startsWith(prefix)
+    .toArray();
+
+  const maxSequence = existing.reduce((max, inv) => {
+    const match = inv.invoiceNumber.match(/^INV-\d{4}-(\d+)$/);
+    const sequence = match ? Number(match[1]) : 0;
+    return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+  }, 0);
+
+  return `${prefix}${String(maxSequence + 1).padStart(5, '0')}`;
 }
 
 /**
@@ -96,10 +114,12 @@ export async function ensureSampleInvoicesSeeded(): Promise<void> {
 
   const patients = await db.patients.toArray();
   const patient = patients[0];
-  const patientId = patient?.id || 1;
-  const ownerId = patient?.ownerId || 1;
   const prac = await db.practitioners.toCollection().first();
-  const practitionerId = prac?.id || 1;
+  if (!patient?.id || !patient.ownerId || !prac?.id) return;
+
+  const patientId = patient.id;
+  const ownerId = patient.ownerId;
+  const practitionerId = prac.id;
 
   const now = new Date();
 
@@ -137,7 +157,7 @@ export async function ensureSampleInvoicesSeeded(): Promise<void> {
       isGovPrescribed: true,
       govOrderNumber: 'G.O.(Rt) No.589/2023/AHD',
       govOrderDate: '13-12-2023',
-      govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023.',
+      govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023',
       rateControlled: true,
     },
     {
@@ -205,7 +225,7 @@ export async function ensureSampleInvoicesSeeded(): Promise<void> {
       isGovPrescribed: true,
       govOrderNumber: 'G.O.(Rt) No.589/2023/AHD',
       govOrderDate: '13-12-2023',
-      govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023.',
+      govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023',
       rateControlled: true,
     },
     {

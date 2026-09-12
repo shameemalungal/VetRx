@@ -68,6 +68,19 @@ export interface Patient {
   updatedAt: Date;
 }
 
+// ── Dosing Rules ──────────────────────────────────────────────
+
+export type DosingMethod = 'weight_based' | 'weight_range' | 'weight_band' | 'fixed' | 'none';
+
+export interface WeightBandRule {
+  id?: string;
+  minWeightKg?: number;
+  maxWeightKg?: number;
+  doseValue: number;
+  doseUnit: string;
+  label?: string; // e.g. "≤10 kg", "10–20 kg"
+}
+
 // ── Medicine ──────────────────────────────────────────────────
 
 export interface Medicine {
@@ -80,6 +93,29 @@ export interface Medicine {
   category?: string;       // e.g. Antibiotic, NSAID, Otic / Topical
   isActive?: boolean;      // defaults to true (undefined treated as active)
   notes?: string;
+
+  // Dosing rules (deterministic, veterinarian-configured)
+  dosingMethod?: DosingMethod;
+  targetSpecies?: Species[];
+  dosePerKg?: number;         // For 'weight_based' (e.g. 10 mg/kg)
+  minDosePerKg?: number;      // For 'weight_range' (e.g. 10 mg/kg)
+  maxDosePerKg?: number;      // For 'weight_range' (e.g. 20 mg/kg)
+  fixedDose?: number;         // For 'fixed' (e.g. 1 tablet)
+  doseUnit?: string;          // e.g. 'mg', 'ml', 'tablet', 'sachet', 'vial'
+  weightBands?: WeightBandRule[]; // For 'weight_band'
+
+  // Explicit formulation/concentration conversion
+  concentrationStrength?: number; // e.g. 500 (mg)
+  concentrationVolume?: number;   // e.g. 1 (tablet or ml)
+  concentrationStrengthUnit?: string; // e.g. 'mg'
+  concentrationVolumeUnit?: string;   // e.g. 'tablet', 'ml'
+
+  // Default prescribing values
+  defaultRoute?: string;
+  defaultFrequency?: string;
+  defaultDurationDays?: number;
+  defaultDirections?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -113,6 +149,7 @@ export interface PrescriptionItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
+  dose?: string;           // Final approved dose e.g. "240 mg", "1 tablet"
   quantity: number;
   unit: string;            // tablets, ml, vials …
   frequency: string;       // SID, BID, TID, q12h …
@@ -257,6 +294,7 @@ export interface MasterDataItem {
   isGovPrescribed?: boolean;  // government fixed rate item
   govOrderNumber?: string;    // e.g. "G.O.(Rt) No.589/2023/AHD"
   govOrderDate?: string;      // e.g. "13-12-2023"
+  govOrderNote?: string;      // statutory note
   rateControlled?: boolean;   // true if rate cannot be manually altered in invoice builder
   createdAt: Date;
   updatedAt: Date;

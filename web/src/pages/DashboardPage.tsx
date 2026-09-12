@@ -12,6 +12,7 @@ import { db } from '../db/schema';
 import { useSettingsStore } from '../store/settingsStore';
 import { Icon } from '../components/ui/Icon';
 import type { Patient, Owner, TreatmentPackageItem, Medicine, Invoice } from '../types';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../utils/patientFormat';
 import './DashboardPage.css';
 
 function greeting(): string {
@@ -157,7 +158,7 @@ export const DashboardPage: React.FC = () => {
     const invUrl = `${window.location.origin}/invoices/${inv.id}`;
     const shareData = {
       title: `Tax Invoice ${inv.invoiceNumber}`,
-      text: `VetRx Tax Invoice ${inv.invoiceNumber} for ${inv.patient?.name || 'Patient'} - Total: ${fmtRupees(inv.grandTotal)}`,
+      text: `VetRx Tax Invoice ${inv.invoiceNumber}${inv.patient?.name ? ` for ${inv.patient.name}` : ''} - Total: ${fmtRupees(inv.grandTotal)}`,
       url: invUrl,
     };
 
@@ -179,7 +180,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   const isClinicActive = Boolean(organisation && organisation.isActive !== false && organisation.name?.trim());
-  const doctorName = practitioner?.name || 'Dr. Sarah Jenkins';
+  const doctorName = practitioner?.name?.trim() || 'Veterinarian';
   const firstName = doctorName.split(' ').find((w) => !w.startsWith('Dr')) ?? 'Doctor';
   const clinicName = isClinicActive ? organisation!.name : 'Independent Clinical Practice';
 
@@ -218,7 +219,7 @@ export const DashboardPage: React.FC = () => {
           </div>
           <h1 className="dashboard-headline">Clinical Command Desk</h1>
           <p className="dashboard-subheadline">
-            {clinicName} • Clinical Station Alpha-4
+            {clinicName}
           </p>
         </div>
 
@@ -250,13 +251,13 @@ export const DashboardPage: React.FC = () => {
           <div className="hero-copy-group">
             <div className="hero-kicker-badge">
               <Icon name="bolt" size={14} />
-              <span>Electronic Rx Generation Engine</span>
+              <span>For your Govt Approved Private Practice</span>
             </div>
             <h2 className="hero-title-main">
-              New Clinical Prescription • Instant Weight-Band Dosing
+              Clinical Prescription • Invoices • Receipts
             </h2>
             <p className="hero-desc-main">
-              Generate calibrated electronic prescriptions with real-time pediatric/adult mg/kg auto-calc, allergen warnings, controlled-substance logging, and printable multi-language SIG instructions.
+              Generate electronic veterinary prescriptions with invoices and receipts for all your govt approved private practice needs based on private practice norms
             </p>
           </div>
 
@@ -296,42 +297,36 @@ export const DashboardPage: React.FC = () => {
             <span className="step-num">1</span>
             <div className="step-text">
               <span className="step-label">Patient</span>
-              <span className="step-sub">Signalment</span>
             </div>
           </div>
           <div className="protocol-step">
             <span className="step-num">2</span>
             <div className="step-text">
               <span className="step-label">Symptoms</span>
-              <span className="step-sub">Vitals Check</span>
             </div>
           </div>
           <div className="protocol-step">
             <span className="step-num">3</span>
             <div className="step-text">
               <span className="step-label">Diagnosis</span>
-              <span className="step-sub">SNOMED Vet</span>
             </div>
           </div>
           <div className="protocol-step">
             <span className="step-num">4</span>
             <div className="step-text">
               <span className="step-label">Formulary</span>
-              <span className="step-sub">Weight Calc</span>
             </div>
           </div>
           <div className="protocol-step">
             <span className="step-num">5</span>
             <div className="step-text">
               <span className="step-label">SIG Notes</span>
-              <span className="step-sub">One-Touch Pill</span>
             </div>
           </div>
           <div className="protocol-step">
             <span className="step-num">6</span>
             <div className="step-text">
               <span className="step-label">Save &amp; Issue</span>
-              <span className="step-sub">Print • Dispense</span>
             </div>
           </div>
         </div>
@@ -503,10 +498,8 @@ export const DashboardPage: React.FC = () => {
                 </div>
               )}
               {recentRx?.map((rx) => {
-                const patientName = rx.patient?.name || 'Unknown Patient';
-                const speciesBreed = [rx.patient?.species, rx.patient?.breed].filter(Boolean).join(' • ');
-                const weightText = rx.patient?.weightKg ? `${rx.patient.weightKg.toFixed(1)} kg` : null;
-                const ownerName = rx.owner?.name || 'Walk-in Client';
+                const ownerName = formatOwnerPrimary(rx.owner, 'Walk-in Client');
+                const animalSubtitle = formatAnimalSubtitle(rx.patient);
                 const isCat = rx.patient?.species === 'Feline';
 
                 return (
@@ -520,15 +513,12 @@ export const DashboardPage: React.FC = () => {
                       </div>
                       <div className="rx-item-info">
                         <div className="rx-patient-headline">
-                          <span className="patient-name">{patientName}</span>
-                          {speciesBreed && <span className="species-badge">{speciesBreed}</span>}
-                          {weightText && <span className="weight-tag data-mono">{weightText}</span>}
+                          <span className="owner-name-primary">{ownerName}</span>
+                          {rx.owner?.phone && <span className="owner-phone-sub">({rx.owner.phone})</span>}
                         </div>
                         <div className="rx-item-subline">
-                          <span>
-                            Owner: <strong className="owner-name-highlight">{ownerName}</strong>
-                          </span>
-                          <span className="meta-bullet">•</span>
+                          {animalSubtitle && <span className="animal-details-sub">{animalSubtitle}</span>}
+                          {animalSubtitle && <span className="meta-bullet">•</span>}
                           <span className="rx-number-tag data-mono">{rx.rxNumber}</span>
                           <span className="meta-bullet">•</span>
                           <span>{timeAgo(rx.createdAt)}</span>
@@ -594,8 +584,8 @@ export const DashboardPage: React.FC = () => {
                 </div>
               )}
               {recentInv?.map((inv) => {
-                const patientName = inv.patient?.name || 'Walk-in';
-                const ownerName = inv.owner?.name ? `Owner: ${inv.owner.name}` : 'Owner: Direct Client';
+                const ownerName = formatOwnerPrimary(inv.owner, 'Direct Client');
+                const animalSubtitle = formatAnimalSubtitle(inv.patient);
 
                 return (
                   <div key={inv.id} className="inv-card-box">
@@ -607,8 +597,8 @@ export const DashboardPage: React.FC = () => {
                         </span>
                       </div>
                       <div className="inv-patient-block">
-                        <span className="inv-patient-name truncate">{patientName}</span>
-                        <span className="inv-owner-text truncate">{ownerName}</span>
+                        <span className="inv-owner-primary truncate">{ownerName}</span>
+                        <span className="inv-animal-sub truncate">{animalSubtitle}</span>
                       </div>
                     </div>
 
@@ -617,27 +607,33 @@ export const DashboardPage: React.FC = () => {
                       <div className="inv-action-row">
                         <button
                           type="button"
-                          className="btn-inv-action"
+                          className="btn-inv-action btn-inv-view"
                           onClick={() => navigate(`/invoices/${inv.id}`)}
                           title="View Invoice"
+                          aria-label={`View invoice ${inv.invoiceNumber}`}
                         >
-                          View
+                          <Icon name="eye" size={12} />
+                          <span>View</span>
                         </button>
                         <button
                           type="button"
-                          className="btn-inv-action"
+                          className="btn-inv-action btn-inv-print"
                           onClick={() => navigate(`/invoices/${inv.id}?print=true`)}
                           title="Print Invoice"
+                          aria-label={`Print invoice ${inv.invoiceNumber}`}
                         >
-                          Print
+                          <Icon name="print" size={12} />
+                          <span>Print</span>
                         </button>
                         <button
                           type="button"
-                          className="btn-inv-action"
+                          className="btn-inv-action btn-inv-share"
                           onClick={() => handleShareInvoice(inv)}
                           title="Share Invoice Document"
+                          aria-label={`Share invoice ${inv.invoiceNumber}`}
                         >
-                          Share
+                          <Icon name="share" size={12} />
+                          <span>Share</span>
                         </button>
                       </div>
                     </div>
@@ -818,27 +814,6 @@ export const DashboardPage: React.FC = () => {
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* CLINICAL NOTICE & WSAVA GUIDELINE CARD */}
-          <div className="clinical-notice-gradient-card">
-            <div className="notice-header-row">
-              <Icon name="verified" size={18} className="text-primary" />
-              <span className="notice-title">Formulary Update 2026</span>
-            </div>
-            <p className="notice-content">
-              Cefovecin Sodium and Marbofloxacin weight-band dosage limits auto-updated based on the latest WSAVA Pharmacovigilance Standards.
-            </p>
-            <div className="notice-footer-row">
-              <span className="notice-ref-tag data-mono">Ref: WSAVA-PHARM-2026.4</span>
-              <button
-                type="button"
-                className="notice-link-btn"
-                onClick={() => navigate('/medicines')}
-              >
-                Review Audit
-              </button>
             </div>
           </div>
         </div>

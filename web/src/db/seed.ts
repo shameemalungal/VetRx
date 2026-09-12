@@ -99,12 +99,28 @@ export async function seed(): Promise<void> {
         updatedAt: now,
       });
 
-      // ── Medicines ─────────────────────────────────────────────
+      // ── Medicines (Configured with Deterministic VetRx Formulary Dosing Rules) ──
       const amoxId = await db.medicines.add({
         brandName: 'Amoxicillin 500mg',
         genericName: 'Amoxicillin',
         presentation: 'Tablet',
         strengthVolume: '500mg',
+        category: 'Antibiotic',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_based',
+        targetSpecies: ['Canine', 'Feline', 'Bovine'],
+        dosePerKg: 10,
+        minDosePerKg: 10,
+        maxDosePerKg: 20,
+        doseUnit: 'mg',
+        concentrationStrength: 500,
+        concentrationStrengthUnit: 'mg',
+        concentrationVolume: 1,
+        concentrationVolumeUnit: 'tablet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'BID',
+        defaultDurationDays: 5,
+        defaultDirections: 'Give after food.',
         createdAt: now,
         updatedAt: now,
       });
@@ -113,6 +129,16 @@ export async function seed(): Promise<void> {
         genericName: 'Orbifloxacin / Mometasone / Posaconazole',
         presentation: 'Ear Drops',
         strengthVolume: '15ml',
+        category: 'Otic / Topical',
+        defaultUnit: 'vial',
+        dosingMethod: 'fixed',
+        targetSpecies: ['Canine'],
+        fixedDose: 1,
+        doseUnit: 'vial',
+        defaultRoute: 'Otic',
+        defaultFrequency: 'SID',
+        defaultDurationDays: 7,
+        defaultDirections: 'Apply 4 drops per affected ear. Clean ear before application.',
         createdAt: now,
         updatedAt: now,
       });
@@ -121,6 +147,22 @@ export async function seed(): Promise<void> {
         genericName: 'Metronidazole',
         presentation: 'Tablet',
         strengthVolume: '250mg',
+        category: 'Antibiotic / Antiprotozoal',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_based',
+        targetSpecies: ['Canine', 'Feline'],
+        dosePerKg: 10,
+        minDosePerKg: 10,
+        maxDosePerKg: 25,
+        doseUnit: 'mg',
+        concentrationStrength: 250,
+        concentrationStrengthUnit: 'mg',
+        concentrationVolume: 1,
+        concentrationVolumeUnit: 'tablet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'BID',
+        defaultDurationDays: 7,
+        defaultDirections: 'Give with food.',
         createdAt: now,
         updatedAt: now,
       });
@@ -129,6 +171,22 @@ export async function seed(): Promise<void> {
         genericName: 'Ondansetron',
         presentation: 'Tablet',
         strengthVolume: '4mg',
+        category: 'Antiemetic',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_based',
+        targetSpecies: ['Canine', 'Feline'],
+        dosePerKg: 0.2,
+        minDosePerKg: 0.1,
+        maxDosePerKg: 0.5,
+        doseUnit: 'mg',
+        concentrationStrength: 4,
+        concentrationStrengthUnit: 'mg',
+        concentrationVolume: 1,
+        concentrationVolumeUnit: 'tablet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'TID',
+        defaultDurationDays: 2,
+        defaultDirections: 'Give 30 min before meals.',
         createdAt: now,
         updatedAt: now,
       });
@@ -137,6 +195,16 @@ export async function seed(): Promise<void> {
         genericName: 'Enterococcus faecium',
         presentation: 'Sachet',
         strengthVolume: '1g',
+        category: 'Gastrointestinal',
+        defaultUnit: 'sachets',
+        dosingMethod: 'fixed',
+        targetSpecies: ['Canine', 'Feline'],
+        fixedDose: 1,
+        doseUnit: 'sachet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'SID',
+        defaultDurationDays: 7,
+        defaultDirections: 'Mix 1 sachet daily with regular food.',
         createdAt: now,
         updatedAt: now,
       });
@@ -145,6 +213,22 @@ export async function seed(): Promise<void> {
         genericName: 'Cephalexin',
         presentation: 'Capsule',
         strengthVolume: '500mg',
+        category: 'Antibiotic',
+        defaultUnit: 'capsules',
+        dosingMethod: 'weight_range',
+        targetSpecies: ['Canine', 'Feline'],
+        minDosePerKg: 10,
+        maxDosePerKg: 20,
+        dosePerKg: 15,
+        doseUnit: 'mg',
+        concentrationStrength: 500,
+        concentrationStrengthUnit: 'mg',
+        concentrationVolume: 1,
+        concentrationVolumeUnit: 'capsule',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'BID',
+        defaultDurationDays: 7,
+        defaultDirections: 'Administer with meal.',
         createdAt: now,
         updatedAt: now,
       });
@@ -153,6 +237,22 @@ export async function seed(): Promise<void> {
         genericName: 'Oclacitinib',
         presentation: 'Tablet',
         strengthVolume: '16mg',
+        category: 'Dermatology / Antipruritic',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_based',
+        targetSpecies: ['Canine'],
+        dosePerKg: 0.4,
+        minDosePerKg: 0.4,
+        maxDosePerKg: 0.6,
+        doseUnit: 'mg',
+        concentrationStrength: 16,
+        concentrationStrengthUnit: 'mg',
+        concentrationVolume: 1,
+        concentrationVolumeUnit: 'tablet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'BID',
+        defaultDurationDays: 14,
+        defaultDirections: 'Administer BID for up to 14 days, then SID for maintenance.',
         createdAt: now,
         updatedAt: now,
       });
@@ -161,6 +261,14 @@ export async function seed(): Promise<void> {
         genericName: 'Chlorhexidine Gluconate 2%',
         presentation: 'Shampoo',
         strengthVolume: '250ml',
+        category: 'Otic / Topical',
+        defaultUnit: 'ml',
+        dosingMethod: 'none',
+        targetSpecies: ['Canine', 'Feline', 'Equine'],
+        defaultRoute: 'Topical',
+        defaultFrequency: 'Twice Weekly',
+        defaultDurationDays: 14,
+        defaultDirections: 'Wet coat, lather thoroughly, leave on for 10 minutes then rinse.',
         createdAt: now,
         updatedAt: now,
       });
@@ -169,6 +277,21 @@ export async function seed(): Promise<void> {
         genericName: 'Fluralaner',
         presentation: 'Chewable Tablet',
         strengthVolume: '1000mg',
+        category: 'Antiparasitic / Ectoparasiticide',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_band',
+        targetSpecies: ['Canine'],
+        doseUnit: 'tablet',
+        weightBands: [
+          { id: 'b1', minWeightKg: 0, maxWeightKg: 10, doseValue: 0.5, doseUnit: 'tablet', label: '≤10 kg (Half Tab)' },
+          { id: 'b2', minWeightKg: 10.01, maxWeightKg: 20, doseValue: 1, doseUnit: 'tablet', label: '>10–20 kg (1 Tab)' },
+          { id: 'b3', minWeightKg: 20.01, maxWeightKg: 40, doseValue: 1, doseUnit: 'tablet', label: '>20–40 kg (1 Tab)' },
+          { id: 'b4', minWeightKg: 40.01, maxWeightKg: 60, doseValue: 2, doseUnit: 'tablet', label: '>40–60 kg (2 Tabs)' },
+        ],
+        defaultRoute: 'Oral',
+        defaultFrequency: 'Single Dose',
+        defaultDurationDays: 1,
+        defaultDirections: 'Administer with food. Effective for 12 weeks.',
         createdAt: now,
         updatedAt: now,
       });
@@ -176,6 +299,16 @@ export async function seed(): Promise<void> {
         brandName: 'Drontal Plus',
         genericName: 'Praziquantel / Pyrantel / Febantel',
         presentation: 'Tablet',
+        category: 'Antiparasitic / Anthelmintic',
+        defaultUnit: 'tablets',
+        dosingMethod: 'weight_based',
+        targetSpecies: ['Canine'],
+        dosePerKg: 0.1, // 1 tablet per 10kg = 0.1 tablet/kg
+        doseUnit: 'tablet',
+        defaultRoute: 'PO (Oral)',
+        defaultFrequency: 'Single Dose',
+        defaultDurationDays: 1,
+        defaultDirections: 'Administer directly or concealed in meat.',
         createdAt: now,
         updatedAt: now,
       });
@@ -184,6 +317,21 @@ export async function seed(): Promise<void> {
         genericName: 'Fipronil 9.7%',
         presentation: 'Spot-On',
         strengthVolume: '2.68ml',
+        category: 'Antiparasitic',
+        defaultUnit: 'pipette',
+        dosingMethod: 'weight_band',
+        targetSpecies: ['Canine'],
+        doseUnit: 'pipette',
+        weightBands: [
+          { id: 's1', minWeightKg: 2, maxWeightKg: 10, doseValue: 1, doseUnit: 'pipette (0.67ml)', label: 'Small Dog (2–10 kg)' },
+          { id: 's2', minWeightKg: 10.01, maxWeightKg: 20, doseValue: 1, doseUnit: 'pipette (1.34ml)', label: 'Medium Dog (10–20 kg)' },
+          { id: 's3', minWeightKg: 20.01, maxWeightKg: 40, doseValue: 1, doseUnit: 'pipette (2.68ml)', label: 'Large Dog (20–40 kg)' },
+          { id: 's4', minWeightKg: 40.01, maxWeightKg: 60, doseValue: 1, doseUnit: 'pipette (4.02ml)', label: 'Giant Dog (40–60 kg)' },
+        ],
+        defaultRoute: 'Topical',
+        defaultFrequency: 'Single Dose',
+        defaultDurationDays: 1,
+        defaultDirections: 'Part hair between shoulder blades and apply directly to skin.',
         createdAt: now,
         updatedAt: now,
       });
@@ -387,4 +535,114 @@ export async function seed(): Promise<void> {
       ]);
     }
   );
+}
+
+/**
+ * Ensures standard formulary medicines have deterministic dosing rules configured
+ * even if the user's browser database was already initialized in an earlier session.
+ * Strictly non-destructive: only sets dosingMethod if missing on seeded medicines.
+ */
+export async function ensureMedicineDosingRulesSeeded(): Promise<void> {
+  const amox = await db.medicines.where('brandName').equals('Amoxicillin 500mg').first();
+  if (amox && !amox.dosingMethod) {
+    await db.medicines.update(amox.id!, {
+      category: 'Antibiotic',
+      defaultUnit: 'tablets',
+      dosingMethod: 'weight_based',
+      targetSpecies: ['Canine', 'Feline', 'Bovine'],
+      dosePerKg: 10,
+      minDosePerKg: 10,
+      maxDosePerKg: 20,
+      doseUnit: 'mg',
+      concentrationStrength: 500,
+      concentrationStrengthUnit: 'mg',
+      concentrationVolume: 1,
+      concentrationVolumeUnit: 'tablet',
+      defaultRoute: 'PO (Oral)',
+      defaultFrequency: 'BID',
+      defaultDurationDays: 5,
+      defaultDirections: 'Give after food.',
+    });
+  }
+
+  const ceph = await db.medicines.where('brandName').equals('Cephalexin 500mg').first();
+  if (ceph && !ceph.dosingMethod) {
+    await db.medicines.update(ceph.id!, {
+      category: 'Antibiotic',
+      defaultUnit: 'capsules',
+      dosingMethod: 'weight_range',
+      targetSpecies: ['Canine', 'Feline'],
+      minDosePerKg: 10,
+      maxDosePerKg: 20,
+      dosePerKg: 15,
+      doseUnit: 'mg',
+      concentrationStrength: 500,
+      concentrationStrengthUnit: 'mg',
+      concentrationVolume: 1,
+      concentrationVolumeUnit: 'capsule',
+      defaultRoute: 'PO (Oral)',
+      defaultFrequency: 'BID',
+      defaultDurationDays: 7,
+      defaultDirections: 'Administer with meal.',
+    });
+  }
+
+  const bravecto = await db.medicines.where('brandName').equals('Bravecto 1000mg').first();
+  if (bravecto && !bravecto.dosingMethod) {
+    await db.medicines.update(bravecto.id!, {
+      category: 'Antiparasitic / Ectoparasiticide',
+      defaultUnit: 'tablets',
+      dosingMethod: 'weight_band',
+      targetSpecies: ['Canine'],
+      doseUnit: 'tablet',
+      weightBands: [
+        { id: 'b1', minWeightKg: 0, maxWeightKg: 10, doseValue: 0.5, doseUnit: 'tablet', label: '≤10 kg (Half Tab)' },
+        { id: 'b2', minWeightKg: 10.01, maxWeightKg: 20, doseValue: 1, doseUnit: 'tablet', label: '>10–20 kg (1 Tab)' },
+        { id: 'b3', minWeightKg: 20.01, maxWeightKg: 40, doseValue: 1, doseUnit: 'tablet', label: '>20–40 kg (1 Tab)' },
+        { id: 'b4', minWeightKg: 40.01, maxWeightKg: 60, doseValue: 2, doseUnit: 'tablet', label: '>40–60 kg (2 Tabs)' },
+      ],
+      defaultRoute: 'Oral',
+      defaultFrequency: 'Single Dose',
+      defaultDurationDays: 1,
+      defaultDirections: 'Administer with food. Effective for 12 weeks.',
+    });
+  }
+
+  const probio = await db.medicines.where('brandName').equals('Fortiflora Probiotic').first();
+  if (probio && !probio.dosingMethod) {
+    await db.medicines.update(probio.id!, {
+      category: 'Gastrointestinal',
+      defaultUnit: 'sachets',
+      dosingMethod: 'fixed',
+      targetSpecies: ['Canine', 'Feline'],
+      fixedDose: 1,
+      doseUnit: 'sachet',
+      defaultRoute: 'PO (Oral)',
+      defaultFrequency: 'SID',
+      defaultDurationDays: 7,
+      defaultDirections: 'Mix 1 sachet daily with regular food.',
+    });
+  }
+
+  const metron = await db.medicines.where('brandName').equals('Metronidazole 250mg').first();
+  if (metron && !metron.dosingMethod) {
+    await db.medicines.update(metron.id!, {
+      category: 'Antibiotic / Antiprotozoal',
+      defaultUnit: 'tablets',
+      dosingMethod: 'weight_based',
+      targetSpecies: ['Canine', 'Feline'],
+      dosePerKg: 10,
+      minDosePerKg: 10,
+      maxDosePerKg: 25,
+      doseUnit: 'mg',
+      concentrationStrength: 250,
+      concentrationStrengthUnit: 'mg',
+      concentrationVolume: 1,
+      concentrationVolumeUnit: 'tablet',
+      defaultRoute: 'PO (Oral)',
+      defaultFrequency: 'BID',
+      defaultDurationDays: 7,
+      defaultDirections: 'Give with food.',
+    });
+  }
 }

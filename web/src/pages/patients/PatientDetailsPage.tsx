@@ -9,6 +9,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
+import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
 import type { Patient } from '../../types';
 import './Patients.css';
 
@@ -141,10 +142,16 @@ export const PatientDetailsPage: React.FC = () => {
             <span>Patients</span>
           </Link>
           <span className="text-outline-variant">/</span>
-          <span className="text-on-surface font-semibold">{patient.name}</span>
+          <span className="text-on-surface font-semibold">{formatOwnerPrimary(owner, 'Client')} — {!isArtificialOrBlankName(patient.name) ? patient.name : patient.species}</span>
         </nav>
 
-        <div className="flex items-center gap-space-sm">
+        <div className="flex items-center gap-space-sm flex-wrap">
+          <Link to={`/prescriptions/new?patientId=${patient.id}`} className="btn btn-primary" style={{ background: '#15803d', borderColor: '#15803d' }}>
+            <Icon name="plus" size={15} /> Add New Prescription
+          </Link>
+          <Link to={`/invoices/new?patientId=${patient.id}`} className="btn btn-primary" style={{ background: '#15803d', borderColor: '#15803d' }}>
+            <Icon name="plus" size={15} /> Add New Invoice/Receipt
+          </Link>
           <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary btn-sm" id="btn-edit-patient">
             <Icon name="edit" size={15} />
             <span>Edit Patient</span>
@@ -178,14 +185,17 @@ export const PatientDetailsPage: React.FC = () => {
                 </div>
                 <div className="profile-title-block">
                   <div className="flex items-center gap-space-sm flex-wrap">
-                    <h1 className="profile-animal-name">{patient.name}</h1>
+                    <h1 className="profile-animal-name">{formatOwnerPrimary(owner, 'Client')}</h1>
+                    {owner?.phone && (
+                      <span className="text-sm font-mono text-outline font-semibold">({owner.phone})</span>
+                    )}
                     {identification && (
                       <span className="patient-id-badge">{identification}</span>
                     )}
                     <span className="badge badge-issued">Active Record</span>
                   </div>
                   <div className="profile-animal-subtitle">
-                    {patient.species} {patient.breed ? `• ${patient.breed}` : ''}
+                    {formatAnimalSubtitle(patient)}
                   </div>
                 </div>
               </div>
@@ -257,7 +267,7 @@ export const PatientDetailsPage: React.FC = () => {
               {!prescriptions || prescriptions.length === 0 ? (
                 <div className="empty-state p-space-lg">
                   <Icon name="prescription" size={32} />
-                  <span className="text-sm">No prescriptions recorded yet for {patient.name}</span>
+                  <span className="text-sm">No prescriptions recorded yet for this animal ({formatAnimalSubtitle(patient) || 'Registered Animal'})</span>
                 </div>
               ) : (
                 prescriptions.map((rx) => (
@@ -318,7 +328,7 @@ export const PatientDetailsPage: React.FC = () => {
               {!invoices || invoices.length === 0 ? (
                 <div className="empty-state p-space-lg">
                   <Icon name="invoices" size={32} />
-                  <span className="text-sm">No invoices recorded yet for {patient.name}</span>
+                  <span className="text-sm">No invoices recorded yet for this animal ({formatAnimalSubtitle(patient) || 'Registered Animal'})</span>
                 </div>
               ) : (
                 invoices.map((inv) => (

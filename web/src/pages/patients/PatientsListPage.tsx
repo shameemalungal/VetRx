@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import type { Patient, Owner, Species } from '../../types';
 import './Patients.css';
 
@@ -298,15 +299,15 @@ export const PatientsListPage: React.FC = () => {
                       <div className="patient-main-info">
                         <div className="patient-headline">
                           <Link to={`/patients/${patient.id}`} className="patient-name-link truncate">
-                            {patient.name}
+                            {formatOwnerPrimary(patient.owner, 'Walk-in Client')}
                           </Link>
                           {identification && (
                             <span className="patient-id-badge truncate">{identification}</span>
                           )}
                         </div>
 
-                        <div className="patient-species-line truncate">
-                          {patient.species} {patient.breed ? `• ${patient.breed}` : ''}
+                        <div className="patient-species-line truncate font-medium">
+                          {formatAnimalSubtitle(patient)}
                         </div>
 
                         <div className="patient-meta-pills">
@@ -327,12 +328,12 @@ export const PatientsListPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Owner Box */}
+                    {/* Owner Contact Box */}
                     <div className="patient-card-owner-box">
                       <div className="owner-info-left truncate">
                         <Icon name="user" size={14} className="text-outline" />
                         <span className="truncate">
-                          Owner: <strong className="owner-name-txt">{patient.owner?.name || 'Walk-in Client'}</strong>
+                          Client Contact: <strong className="owner-name-txt">{patient.owner?.name || 'Client'}</strong>
                         </span>
                       </div>
                       {patient.owner?.phone && (

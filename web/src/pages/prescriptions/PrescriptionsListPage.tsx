@@ -10,6 +10,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Prescription, Patient, Owner } from '../../types';
 import { Icon } from '../../components/ui/Icon';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import './Prescriptions.css';
 
 type StatusFilter = 'all' | 'Issued' | 'Draft';
@@ -307,8 +308,8 @@ export const PrescriptionsListPage: React.FC = () => {
               <thead>
                 <tr>
                   <th>Prescription No</th>
-                  <th>Patient &amp; Species</th>
                   <th>Owner &amp; Contact</th>
+                  <th>Animal Signalment</th>
                   <th>Date Recorded</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
@@ -337,7 +338,22 @@ export const PrescriptionsListPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Patient & Species */}
+                      {/* Owner & Contact */}
+                      <td>
+                        <div className="rx-owner-cell">
+                          <span className="rx-owner-name" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                            {formatOwnerPrimary(owner, 'Walk-in Client')}
+                          </span>
+                          {owner?.phone && (
+                            <span className="rx-owner-phone">
+                              <Icon name="phone" size={12} />
+                              <span>{owner.phone}</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Animal Signalment */}
                       <td>
                         <div className="rx-patient-cell">
                           <div className="rx-patient-avatar">
@@ -347,28 +363,11 @@ export const PrescriptionsListPage: React.FC = () => {
                             <Link
                               to={`/patients/${rx.patientId}`}
                               className="rx-patient-name hover:underline"
+                              style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-on-surface-variant)' }}
                             >
-                              {patient ? patient.name : `Patient #${rx.patientId}`}
+                              {formatAnimalSubtitle(patient)}
                             </Link>
-                            <span className="rx-patient-species">
-                              {patient ? `${patient.species}${patient.breed ? ` · ${patient.breed}` : ''}` : 'Animal'}
-                            </span>
                           </div>
-                        </div>
-                      </td>
-
-                      {/* Owner & Contact */}
-                      <td>
-                        <div className="rx-owner-cell">
-                          <span className="rx-owner-name">
-                            {owner ? owner.name : 'Unknown Client'}
-                          </span>
-                          {owner?.phone && (
-                            <span className="rx-owner-phone">
-                              <Icon name="phone" size={12} />
-                              <span>{owner.phone}</span>
-                            </span>
-                          )}
                         </div>
                       </td>
 

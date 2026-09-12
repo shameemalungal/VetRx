@@ -10,6 +10,7 @@ import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
 import { formatINR, numberToWordsINR } from './invoiceUtils';
+import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
 import './Invoices.css';
 
 export const InvoiceDetailsPage: React.FC = () => {
@@ -105,6 +106,14 @@ export const InvoiceDetailsPage: React.FC = () => {
     ? activeOrganisation.registrationNumber.trim()
     : '';
 
+  const handleCancelInvoice = async () => {
+    if (!invoice?.id || invoice.status === 'Cancelled') return;
+    const reason = window.prompt('Enter cancellation reason:');
+    if (reason === null) return;
+    await db.invoices.update(invoice.id, { status: 'Cancelled', notes: `${invoice.notes || ''}${invoice.notes ? '\n' : ''}Cancelled: ${reason.trim() || 'No reason recorded'}`, updatedAt: new Date() });
+    navigate(`/invoices/${invoice.id}`);
+  };
+
   // Auto-print support if navigated with ?print=true
   useEffect(() => {
     if (shouldAutoPrint && invoice && items.length > 0) {
@@ -121,7 +130,7 @@ export const InvoiceDetailsPage: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '48px' }}>
           <p>Loading invoice details…</p>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/invoices')}>
-            Back to Invoices
+            Back to Invoices &amp; Receipts
           </button>
         </div>
       </div>
@@ -144,7 +153,7 @@ export const InvoiceDetailsPage: React.FC = () => {
             onClick={() => navigate('/invoices')}
           >
             <Icon name="chevron-left" size={16} />
-            <span>Invoices</span>
+            <span>Invoices &amp; Receipts</span>
           </button>
           <span style={{ fontSize: '13px', color: 'var(--color-outline)' }}>/</span>
           <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700 }}>
@@ -157,6 +166,13 @@ export const InvoiceDetailsPage: React.FC = () => {
 
         {/* Document Type Switcher */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="no-print" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/invoices')}>View Invoice History</button>
+            {invoice.status !== 'Cancelled' && (
+              <button type="button" className="btn btn-danger btn-sm" onClick={handleCancelInvoice}>Cancel Invoice</button>
+            )}
+          </div>
+
           <div className="invoices-status-tabs">
             <button
               type="button"
@@ -174,14 +190,16 @@ export const InvoiceDetailsPage: React.FC = () => {
             </button>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
-          >
-            <Icon name="edit" size={15} />
-            <span>Edit</span>
-          </button>
+          {invoice.status === 'Draft' && (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+            >
+              <Icon name="edit" size={15} />
+              <span>Edit</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -200,6 +218,7 @@ export const InvoiceDetailsPage: React.FC = () => {
         <div>
           {/* Top Decorative Clinic Ribbon & Micro Watermark Bar */}
           <div
+            className="invoice-official-ribbon"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -326,9 +345,6 @@ export const InvoiceDetailsPage: React.FC = () => {
 
                 {/* Professional Reg & GSTIN */}
                 <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
-                  {hasClinic && doctorName && (
-                    <span>Veterinarian: <strong>{doctorName}{doctorQual ? `, ${doctorQual}` : ''}</strong></span>
-                  )}
                   {hasClinic && doctorName && doctorReg && (
                     <span style={{ margin: '0 6px' }}>•</span>
                   )}
@@ -383,10 +399,10 @@ export const InvoiceDetailsPage: React.FC = () => {
             {/* Client Dossier */}
             <div className="invoice-print-dossier-box">
               <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                Billed Client (Pet Guardian)
+                Billed Client (Owner / Farmer)
               </span>
               <strong style={{ fontSize: '15px', color: 'var(--color-on-surface)' }}>
-                {owner?.name || 'Walk-in Client'}
+                {formatOwnerPrimary(owner, 'Walk-in Client')}
               </strong>
               {owner?.phone && (
                 <span style={{ fontSize: '12px', fontFamily: 'var(--font-data)', color: 'var(--color-on-surface-variant)' }}>
@@ -403,22 +419,30 @@ export const InvoiceDetailsPage: React.FC = () => {
             {/* Patient Dossier */}
             <div className="invoice-print-dossier-box">
               <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                Patient (Signalment Profile)
+                Animal Signalment Profile
               </span>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <strong style={{ fontSize: '15px', color: 'var(--color-on-surface)' }}>
-                  {patient?.name || 'Registered Animal'}
+                <strong style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                  {!isArtificialOrBlankName(patient?.name) ? patient?.name : formatAnimalSubtitle(patient)}
                 </strong>
-                <span style={{ fontSize: '11px', fontWeight: 600, background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
-                  {patient?.species || 'Species'} · {patient?.breed || 'Breed'}
-                </span>
+                {patient?.species && (
+                  <span style={{ fontSize: '11px', fontWeight: 600, background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                    {patient.species} {patient.breed ? `· ${patient.breed}` : ''}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
-                {patient?.sex && <span>Sex: <strong>{patient.sex}</strong></span>}
-                {patient?.sex && <span>•</span>}
+                {patient?.sex && patient.sex !== 'Unknown' && <span>Sex: <strong>{patient.sex}</strong></span>}
+                {patient?.sex && patient.sex !== 'Unknown' && <span>•</span>}
                 <span>
                   Weight: <strong>{patient?.weightKg ? `${patient.weightKg.toFixed(1)} kg` : 'Weight N/A'}</strong>
                 </span>
+                {patient?.identificationRef && (
+                  <>
+                    <span>•</span>
+                    <span>Ear Tag / Ref: <strong>{patient.identificationRef}</strong></span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -464,7 +488,7 @@ export const InvoiceDetailsPage: React.FC = () => {
                       {it.isGovPrescribed && (
                         <span className="invoice-print-go-subnote">
                           {it.govOrderNote ||
-                            `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}.`}
+                            `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}`}
                         </span>
                       )}
                     </td>
@@ -568,65 +592,15 @@ export const InvoiceDetailsPage: React.FC = () => {
         {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
         <div>
           <div className="invoice-print-signature-section">
-            {/* Concentric Veterinary Clinic Stamp */}
-            <div className="invoice-print-stamp-box">
-              <div
-                style={{
-                  width: '52px',
-                  height: '52px',
-                  borderRadius: '50%',
-                  border: '2px dashed var(--color-primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-primary)',
-                  fontSize: '8px',
-                  fontWeight: 800,
-                  textAlign: 'center',
-                  lineHeight: '1.2',
-                  letterSpacing: '0.04em',
-                  flexShrink: 0,
-                }}
-              >
-                {hasClinic && clinicName ? clinicName.slice(0, 8).toUpperCase() : 'PRACTICE'}
-                <br />
-                AUTHENTIC
-                <br />
-                VETRX
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', display: 'block' }}>
-                  Clinically Authenticated
-                </span>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
-                  VetRx Clinical Cryptographic Hash
-                </span>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', display: 'block' }}>
-                  SHA256: 8f49a022b...e9401b2a9
-                </span>
-              </div>
-            </div>
-
             {/* Signature Block */}
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div style={{ height: '32px', display: 'flex', alignItems: 'center' }}>
-                {activePractitioner?.signatureDataUrl ? (
+                {activePractitioner?.signatureDataUrl && (
                   <img
                     src={activePractitioner.signatureDataUrl}
                     alt="Veterinarian Signature"
                     style={{ maxHeight: '32px', maxWidth: '140px', objectFit: 'contain' }}
                   />
-                ) : (
-                  <svg width="140" height="30" viewBox="0 0 160 40" fill="none">
-                    <path
-                      d="M10 28C24 10 38 8 46 22C54 36 62 14 74 18C86 22 94 34 108 26C122 18 134 16 150 20"
-                      stroke="#131b2e"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <path d="M42 34C60 30 110 32 135 28" stroke="#131b2e" strokeWidth="1.2" strokeLinecap="round" />
-                  </svg>
                 )}
               </div>
               <strong style={{ fontSize: '13px', color: 'var(--color-on-surface)', display: 'block' }}>

@@ -14,6 +14,7 @@ import { Icon } from '../ui/Icon';
 import { VetRxLogo } from '../ui/VetRxLogo';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
+import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './AppShell.css';
 
 // ── Nav items — order and icons match Stitch screens ──────────
@@ -23,15 +24,15 @@ const NAV_ITEMS = [
   { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
   { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
   { label: 'Medicines',          path: '/medicines',       icon: 'pill'        },
-  { label: 'Invoices',           path: '/invoices',        icon: 'invoices'    },
+  { label: 'Invoices & Receipts',path: '/invoices',        icon: 'invoices'    },
 ] as const;
 
 // Bottom nav shows the 4 most-used items (matches Stitch mobile)
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home',    path: '/',              icon: 'home'        },
-  { label: 'Patients',path: '/patients',      icon: 'patients'    },
-  { label: 'Rx',      path: '/prescriptions', icon: 'prescription'},
-  { label: 'Invoices',path: '/invoices',      icon: 'invoices'    },
+  { label: 'Home',               path: '/',                icon: 'home'        },
+  { label: 'Patients',           path: '/patients',        icon: 'patients'    },
+  { label: 'Rx',                 path: '/prescriptions',   icon: 'prescription'},
+  { label: 'Invoices & Receipts',path: '/invoices',        icon: 'invoices'    },
 ] as const;
 
 function initials(name: string): string {
@@ -416,9 +417,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                             >
                               <Icon name="paw" size={15} className="text-secondary" />
                               <div className="search-item-info">
-                                <span className="search-item-name">{p.name}</span>
+                                <span className="search-item-name">
+                                  {p.owner ? p.owner.name : 'Client'}
+                                  {p.owner?.phone ? ` (${p.owner.phone})` : ''}
+                                </span>
                                 <span className="search-item-sub">
-                                  {p.species} {p.breed ? `• ${p.breed}` : ''} {p.owner ? `• Client: ${p.owner.name} (${p.owner.phone})` : ''}
+                                  {formatAnimalSubtitle(p)}
                                 </span>
                               </div>
                             </button>
@@ -472,7 +476,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
                       {searchResults.invoices.length > 0 && (
                         <div className="search-group">
-                          <span className="search-group-title">Invoices</span>
+                          <span className="search-group-title">Invoices &amp; Receipts</span>
                           {searchResults.invoices.map((inv: Invoice) => (
                             <button
                               key={inv.id}

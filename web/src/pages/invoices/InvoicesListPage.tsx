@@ -8,7 +8,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { InvoiceStatus } from '../../types';
 import { Icon } from '../../components/ui/Icon';
-import { formatINR, ensureSampleInvoicesSeeded } from './invoiceUtils';
+import { formatINR, ensureSampleInvoicesSeeded, formatLocalDateInput } from './invoiceUtils';
+import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './Invoices.css';
 
 export const InvoicesListPage: React.FC = () => {
@@ -46,12 +47,17 @@ export const InvoicesListPage: React.FC = () => {
       .filter((inv) => inv.status !== 'Cancelled')
       .reduce((sum, inv) => sum + (inv.grandTotal || 0), 0);
 
-    const issuedCount = invoices.filter((inv) => inv.status === 'Issued').length;
+    const now = new Date();
+    const issuedThisMonthCount = invoices.filter((inv) => {
+      if (inv.status !== 'Issued') return false;
+      const d = new Date(inv.invoiceDate);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    }).length;
     const draftCount = invoices.filter((inv) => inv.status === 'Draft').length;
 
     return {
       totalInvoicedPaisa: totalAllPaisa > 0 ? totalAllPaisa : totalIssuedPaisa,
-      issuedCount,
+      issuedThisMonthCount,
       draftCount,
       totalCount: invoices.length,
     };
@@ -65,7 +71,7 @@ export const InvoicesListPage: React.FC = () => {
           return false;
         }
         if (dateFilter) {
-          const invDateStr = new Date(inv.invoiceDate).toISOString().slice(0, 10);
+          const invDateStr = formatLocalDateInput(inv.invoiceDate);
           if (invDateStr !== dateFilter) {
             return false;
           }
@@ -107,7 +113,7 @@ export const InvoicesListPage: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `vetrx_invoices_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `vetrx_invoices_${formatLocalDateInput()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -123,9 +129,9 @@ export const InvoicesListPage: React.FC = () => {
             <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>•</span>
             <span style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>FY 2026-27</span>
           </div>
-          <h1 className="invoices-title">Invoices</h1>
+          <h1 className="invoices-title">Invoices &amp; Receipts</h1>
           <p className="invoices-subtitle">
-            View and manage treatment invoices, medication dispensations, and split balances.
+            View and manage treatment invoices, payment receipts, medication dispensations, and split balances.
           </p>
         </div>
 
@@ -168,7 +174,7 @@ export const InvoicesListPage: React.FC = () => {
             <div className="invoices-metric-value">{formatINR(metrics.totalInvoicedPaisa)}</div>
           </div>
           <div className="invoices-metric-footer">
-            <span>{metrics.totalCount} total issued &amp; draft</span>
+            <span>{metrics.totalCount} total active documents</span>
             <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>FY 2026-27</span>
           </div>
         </div>
@@ -186,7 +192,7 @@ export const InvoicesListPage: React.FC = () => {
           </div>
           <div>
             <span className="invoices-metric-label">Issued This Month</span>
-            <div className="invoices-metric-value">{metrics.issuedCount} Invoices</div>
+            <div className="invoices-metric-value">{metrics.issuedThisMonthCount} Invoices</div>
           </div>
           <div className="invoices-metric-footer">
             <span>Ready to share or print</span>
@@ -377,11 +383,8 @@ export const InvoicesListPage: React.FC = () => {
                             <Icon name="paw" size={14} />
                           </div>
                           <div>
-                            <strong style={{ display: 'block', color: 'var(--color-on-surface)' }}>
-                              {patient?.name || 'Unknown Patient'}
-                            </strong>
-                            <span style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
-                              {patient?.species || 'Species'} {patient?.breed ? `· ${patient.breed}` : ''}
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--color-on-surface)' }}>
+                              {formatAnimalSubtitle(patient)}
                             </span>
                           </div>
                         </div>

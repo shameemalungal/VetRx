@@ -10,6 +10,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
+import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
 import './Prescriptions.css';
 
 export const PrescriptionDetailsPage: React.FC = () => {
@@ -308,10 +309,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+            onClick={() => navigate(`/prescriptions/${prescription.id}/edit?clone=true`)}
           >
-            <Icon name="edit" size={16} />
-            <span>Edit Prescription</span>
+            <Icon name="copy" size={16} />
+            <span>Clone Prescription</span>
           </button>
           <Link to="/prescriptions/new" className="btn btn-primary">
             <Icon name="plus" size={16} />
@@ -326,6 +327,64 @@ export const PrescriptionDetailsPage: React.FC = () => {
         <div className="prescription-sheet-wrapper" id="printable-prescription-wrapper">
           <div id="prescription-sheet">
             <div>
+              {/* Shared Document Top Bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingBottom: '10px',
+                  borderBottom: '1px solid #e2e8f0',
+                  marginBottom: '14px',
+                  gap: '12px',
+                  flexWrap: 'nowrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexShrink: 0 }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-data)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase',
+                      color: 'var(--color-outline)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '11px',
+                    fontFamily: 'var(--font-data)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span style={{ color: 'var(--color-outline)', whiteSpace: 'nowrap' }}>
+                    Doc Ref: <strong>{prescription.rxNumber}</strong>
+                  </span>
+                  <span
+                    style={{
+                      background: 'var(--color-surface-container-high)',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontWeight: 600,
+                      color: 'var(--color-primary)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Original Prescription
+                  </span>
+                </div>
+              </div>
+
               {/* ── Polished Letterhead Header Band ──────────────────── */}
               {hasClinic ? (
                 /* State A: CLINIC ACTIVE */
@@ -468,9 +527,9 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <Icon name="owner" size={14} />
                     <span>Owner Details</span>
                   </div>
-                  <div className="stationery-primary-name">{owner?.name || 'Ahmed Kumar'}</div>
+                  <div className="stationery-primary-name">{formatOwnerPrimary(owner, 'Client')}</div>
                   <p className="stationery-sub-text">Ph: {owner?.phone || '+91 98765 43210'}</p>
-                  <p className="stationery-sub-text">{owner?.address || '#42 Green Valley Layout, Bengaluru'}</p>
+                  <p className="stationery-sub-text">{owner?.address || ''}</p>
                 </div>
 
                 {/* Patient Animal Block */}
@@ -485,14 +544,18 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                    <div className="stationery-primary-name">{patient?.name || 'Bruno'}</div>
+                    <div className="stationery-primary-name">
+                      {!isArtificialOrBlankName(patient?.name) ? patient?.name : (patient ? formatAnimalSubtitle(patient) : '')}
+                    </div>
                     <span className="stationery-weight-badge">{effectiveWeight}</span>
                   </div>
                   <p className="stationery-sub-text">
-                    {patient?.species || 'Dog'} • {patient?.breed || 'Labrador Retriever'}
+                    {patient?.species} {patient?.breed ? `• ${patient.breed}` : ''}
                   </p>
                   <p className="stationery-sub-text">
-                    {patient?.sex || 'Male (Intact)'} • {patient?.ageNote || '4 Years'}
+                    {patient?.sex && patient.sex !== 'Unknown' ? `${patient.sex}` : ''}
+                    {patient?.ageNote ? ` • ${patient.ageNote}` : ''}
+                    {patient?.identificationRef ? ` • Ear Tag: ${patient.identificationRef}` : ''}
                   </p>
                 </div>
               </div>
@@ -572,8 +635,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                              {item.strengthVolume || '1 tab'}
+                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-primary)' }}>
+                              {item.dose || item.strengthVolume || '1 tab'}
                             </td>
                             <td>
                               <span
@@ -649,18 +712,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       alt="Doctor Signature"
                       style={{ maxHeight: '44px', maxWidth: '150px', objectFit: 'contain' }}
                     />
-                  ) : (
-                    <svg
-                      style={{ width: '140px', height: '40px', color: 'var(--color-primary)', opacity: 0.85 }}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeWidth="2"
-                      viewBox="0 0 150 40"
-                    >
-                      <path d="M10 25 C 25 10, 30 35, 45 20 C 60 5, 55 35, 75 22 C 95 10, 110 30, 140 15" />
-                    </svg>
-                  )}
+                  ) : null}
                 </div>
                 <div className="stationery-sig-line"></div>
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
@@ -721,7 +773,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   style={{
                     fontFamily: 'var(--font-heading)',
                     fontSize: '14px',
-                    fontWeight: 600,
+                    fontWeight: 700,
                     color: 'var(--color-on-surface)',
                     display: 'block',
                     overflow: 'hidden',
@@ -729,10 +781,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {patient?.name || 'Patient'} ({patient?.species || 'Animal'})
+                  {formatOwnerPrimary(owner, 'Client')}
                 </span>
                 <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', display: 'block' }}>
-                  {items?.length || 0} Active Medicines • {effectiveWeight}
+                  {formatAnimalSubtitle(patient)} • {items?.length || 0} Active Medicines
                 </span>
               </div>
             </div>

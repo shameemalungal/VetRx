@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { Medicine } from '../../types';
+import type { Medicine, Species, DosingMethod, WeightBandRule } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 
 interface MedicineFormModalProps {
@@ -15,6 +15,8 @@ interface MedicineFormModalProps {
   onClose: () => void;
   onSaved: (medicineId: number) => void;
 }
+
+const ALL_SPECIES: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
 
 const COMMON_PRESENTATIONS = [
   'Tablet',
@@ -85,7 +87,7 @@ export function MedicineFormModal({
       ? masterUnits.map((u) => u.name)
       : FALLBACK_UNITS;
 
-  // Form State
+  // Form State - Basic Specs
   const [brandName, setBrandName] = useState('');
   const [genericName, setGenericName] = useState('');
   const [presentation, setPresentation] = useState('Tablet');
@@ -94,6 +96,28 @@ export function MedicineFormModal({
   const [category, setCategory] = useState('Antibiotic / Antimicrobial');
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
+
+  // Form State - Smart Dosing Rules
+  const [dosingMethod, setDosingMethod] = useState<DosingMethod>('none');
+  const [targetSpecies, setTargetSpecies] = useState<Species[]>(['Canine', 'Feline']);
+  const [dosePerKg, setDosePerKg] = useState<string>('');
+  const [minDosePerKg, setMinDosePerKg] = useState<string>('');
+  const [maxDosePerKg, setMaxDosePerKg] = useState<string>('');
+  const [fixedDose, setFixedDose] = useState<string>('1');
+  const [doseUnit, setDoseUnit] = useState<string>('mg');
+  const [weightBands, setWeightBands] = useState<WeightBandRule[]>([]);
+
+  // Formulation / Concentration Conversion
+  const [concentrationStrength, setConcentrationStrength] = useState<string>('');
+  const [concentrationStrengthUnit, setConcentrationStrengthUnit] = useState<string>('mg');
+  const [concentrationVolume, setConcentrationVolume] = useState<string>('1');
+  const [concentrationVolumeUnit, setConcentrationVolumeUnit] = useState<string>('tablet');
+
+  // Prescribing Defaults
+  const [defaultRoute, setDefaultRoute] = useState<string>('PO (Oral)');
+  const [defaultFrequency, setDefaultFrequency] = useState<string>('BID');
+  const [defaultDurationDays, setDefaultDurationDays] = useState<string>('5');
+  const [defaultDirections, setDefaultDirections] = useState<string>('');
 
   // Errors & loading
   const [errors, setErrors] = useState<{ brandName?: string; presentation?: string }>({});
@@ -112,6 +136,28 @@ export function MedicineFormModal({
       setCategory(medicine.category || 'Antibiotic / Antimicrobial');
       setNotes(medicine.notes || '');
       setIsActive(medicine.isActive !== false);
+
+      // Dosing rules
+      setDosingMethod(medicine.dosingMethod || 'none');
+      setTargetSpecies(medicine.targetSpecies && medicine.targetSpecies.length > 0 ? medicine.targetSpecies : ['Canine', 'Feline']);
+      setDosePerKg(medicine.dosePerKg !== undefined ? String(medicine.dosePerKg) : '');
+      setMinDosePerKg(medicine.minDosePerKg !== undefined ? String(medicine.minDosePerKg) : '');
+      setMaxDosePerKg(medicine.maxDosePerKg !== undefined ? String(medicine.maxDosePerKg) : '');
+      setFixedDose(medicine.fixedDose !== undefined ? String(medicine.fixedDose) : '1');
+      setDoseUnit(medicine.doseUnit || 'mg');
+      setWeightBands(medicine.weightBands ? JSON.parse(JSON.stringify(medicine.weightBands)) : []);
+
+      // Concentration conversion
+      setConcentrationStrength(medicine.concentrationStrength !== undefined ? String(medicine.concentrationStrength) : '');
+      setConcentrationStrengthUnit(medicine.concentrationStrengthUnit || 'mg');
+      setConcentrationVolume(medicine.concentrationVolume !== undefined ? String(medicine.concentrationVolume) : '1');
+      setConcentrationVolumeUnit(medicine.concentrationVolumeUnit || 'tablet');
+
+      // Prescribing defaults
+      setDefaultRoute(medicine.defaultRoute || 'PO (Oral)');
+      setDefaultFrequency(medicine.defaultFrequency || 'BID');
+      setDefaultDurationDays(medicine.defaultDurationDays !== undefined ? String(medicine.defaultDurationDays) : '5');
+      setDefaultDirections(medicine.defaultDirections || '');
     } else {
       setBrandName('');
       setGenericName('');
@@ -121,6 +167,24 @@ export function MedicineFormModal({
       setCategory('Antibiotic / Antimicrobial');
       setNotes('');
       setIsActive(true);
+
+      // Defaults for new medicine
+      setDosingMethod('none');
+      setTargetSpecies(['Canine', 'Feline']);
+      setDosePerKg('');
+      setMinDosePerKg('');
+      setMaxDosePerKg('');
+      setFixedDose('1');
+      setDoseUnit('mg');
+      setWeightBands([]);
+      setConcentrationStrength('');
+      setConcentrationStrengthUnit('mg');
+      setConcentrationVolume('1');
+      setConcentrationVolumeUnit('tablet');
+      setDefaultRoute('PO (Oral)');
+      setDefaultFrequency('BID');
+      setDefaultDurationDays('5');
+      setDefaultDirections('');
     }
     setErrors({});
   }, [medicine, isOpen]);
@@ -146,34 +210,53 @@ export function MedicineFormModal({
     setIsSubmitting(true);
     try {
       const now = new Date();
+      const parsedDosePerKg = dosePerKg ? parseFloat(dosePerKg) : undefined;
+      const parsedMinDosePerKg = minDosePerKg ? parseFloat(minDosePerKg) : undefined;
+      const parsedMaxDosePerKg = maxDosePerKg ? parseFloat(maxDosePerKg) : undefined;
+      const parsedFixedDose = fixedDose ? parseFloat(fixedDose) : undefined;
+      const parsedConcStrength = concentrationStrength ? parseFloat(concentrationStrength) : undefined;
+      const parsedConcVolume = concentrationVolume ? parseFloat(concentrationVolume) : undefined;
+      const parsedDuration = defaultDurationDays ? parseInt(defaultDurationDays, 10) : undefined;
+
+      const medicinePayload: Partial<Medicine> = {
+        brandName: brandName.trim(),
+        genericName: genericName.trim() || undefined,
+        presentation: presentation.trim(),
+        strengthVolume: strengthVolume.trim() || undefined,
+        defaultUnit: defaultUnit.trim() || undefined,
+        category: category.trim() || undefined,
+        notes: notes.trim() || undefined,
+        isActive,
+        // Deterministic Formulary Dosing Rules
+        dosingMethod,
+        targetSpecies: targetSpecies.length > 0 ? targetSpecies : undefined,
+        dosePerKg: parsedDosePerKg,
+        minDosePerKg: parsedMinDosePerKg,
+        maxDosePerKg: parsedMaxDosePerKg,
+        fixedDose: parsedFixedDose,
+        doseUnit: doseUnit.trim() || undefined,
+        weightBands: weightBands.length > 0 ? weightBands : undefined,
+        concentrationStrength: parsedConcStrength,
+        concentrationStrengthUnit: concentrationStrengthUnit.trim() || undefined,
+        concentrationVolume: parsedConcVolume,
+        concentrationVolumeUnit: concentrationVolumeUnit.trim() || undefined,
+        defaultRoute: defaultRoute.trim() || undefined,
+        defaultFrequency: defaultFrequency.trim() || undefined,
+        defaultDurationDays: parsedDuration,
+        defaultDirections: defaultDirections.trim() || undefined,
+        updatedAt: now,
+      };
+
       if (isEdit && medicine?.id) {
         // Edit existing medicine — preserves id & relationships
-        await db.medicines.update(medicine.id, {
-          brandName: brandName.trim(),
-          genericName: genericName.trim() || undefined,
-          presentation: presentation.trim(),
-          strengthVolume: strengthVolume.trim() || undefined,
-          defaultUnit: defaultUnit.trim() || undefined,
-          category: category.trim() || undefined,
-          notes: notes.trim() || undefined,
-          isActive,
-          updatedAt: now,
-        });
+        await db.medicines.update(medicine.id, medicinePayload);
         onSaved(medicine.id);
       } else {
         // Add new medicine
         const newId = await db.medicines.add({
-          brandName: brandName.trim(),
-          genericName: genericName.trim() || undefined,
-          presentation: presentation.trim(),
-          strengthVolume: strengthVolume.trim() || undefined,
-          defaultUnit: defaultUnit.trim() || undefined,
-          category: category.trim() || undefined,
-          notes: notes.trim() || undefined,
-          isActive,
+          ...medicinePayload,
           createdAt: now,
-          updatedAt: now,
-        });
+        } as Medicine);
         onSaved(newId as number);
       }
       onClose();
@@ -183,6 +266,38 @@ export function MedicineFormModal({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleAddWeightBand = () => {
+    const lastBand = weightBands[weightBands.length - 1];
+    const nextMin = lastBand && lastBand.maxWeightKg !== undefined ? lastBand.maxWeightKg + 0.01 : 0;
+    const newBand: WeightBandRule = {
+      id: 'wb_' + Date.now(),
+      minWeightKg: nextMin,
+      maxWeightKg: undefined,
+      doseValue: 1,
+      doseUnit: doseUnit || 'tablet',
+      label: '',
+    };
+    setWeightBands((prev) => [...prev, newBand]);
+  };
+
+  const handleUpdateWeightBand = (index: number, field: keyof WeightBandRule, val: any) => {
+    setWeightBands((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
+  };
+
+  const handleRemoveWeightBand = (index: number) => {
+    setWeightBands((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToggleSpecies = (sp: Species) => {
+    setTargetSpecies((prev) =>
+      prev.includes(sp) ? prev.filter((s) => s !== sp) : [...prev, sp]
+    );
   };
 
   return (
@@ -352,6 +467,415 @@ export function MedicineFormModal({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
+              </div>
+
+              {/* ── Smart Dosing Rules Configuration (Phase 7) ───────────────── */}
+              <div className="medicine-form-group full-width" style={{ marginTop: 'var(--space-xs)' }}>
+                <div className="medicine-dosing-config-card">
+                  <div className="medicine-dosing-config-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className="medicine-dosing-icon">
+                        <Icon name="calculator" size={16} />
+                      </div>
+                      <div>
+                        <h4 className="medicine-dosing-title">Formulary Smart Dosing Rules</h4>
+                        <p className="medicine-dosing-subtitle">
+                          Deterministic dose calculation rules configured explicitly for this medicine.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="medicine-dosing-config-body">
+                    {/* Dosing Method */}
+                    <div className="medicine-form-group full-width">
+                      <label className="medicine-form-label" htmlFor="med-dosing-method">
+                        Calculation Method <span className="required">*</span>
+                      </label>
+                      <select
+                        id="med-dosing-method"
+                        className="medicine-form-select"
+                        value={dosingMethod}
+                        onChange={(e) => setDosingMethod(e.target.value as DosingMethod)}
+                      >
+                        <option value="none">Manual Dosing (No Automated Calculation)</option>
+                        <option value="weight_based">Weight-Based (Patient Weight × Dose per kg)</option>
+                        <option value="weight_range">Weight-Based Range (min–max mg/kg)</option>
+                        <option value="weight_band">Weight-Band (Tier-Based by Weight Range)</option>
+                        <option value="fixed">Fixed Dose (1 tablet/sachet/vial per dose)</option>
+                      </select>
+                      <span className="medicine-form-hint">
+                        {dosingMethod === 'none' && 'Veterinarian will enter dose and quantity manually.'}
+                        {dosingMethod === 'weight_based' && 'Calculates: Patient weight (kg) × configured dose per kg.'}
+                        {dosingMethod === 'weight_range' && 'Calculates: Patient weight (kg) × min & max range; doctor selects final dose.'}
+                        {dosingMethod === 'weight_band' && 'Selects pre-configured dose band corresponding to patient weight.'}
+                        {dosingMethod === 'fixed' && 'Applies fixed dose directly without weight multiplication.'}
+                      </span>
+                    </div>
+
+                    {dosingMethod !== 'none' && (
+                      <>
+                        {/* Target Species Selector */}
+                        <div className="medicine-form-group full-width">
+                          <label className="medicine-form-label">
+                            Target Species Applicability
+                          </label>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                            {ALL_SPECIES.map((sp) => {
+                              const isSelected = targetSpecies.includes(sp);
+                              return (
+                                <button
+                                  key={sp}
+                                  type="button"
+                                  className={`species-pill-btn ${isSelected ? 'active' : ''}`}
+                                  onClick={() => handleToggleSpecies(sp)}
+                                >
+                                  {isSelected && <Icon name="check" size={12} />}
+                                  <span>{sp}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <span className="medicine-form-hint">
+                            If a prescription is created for an unselected species, VetRx will show a warning and prompt for manual entry.
+                          </span>
+                        </div>
+
+                        {/* WEIGHT-BASED FIELDS */}
+                        {dosingMethod === 'weight_based' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-dose-per-kg">
+                                Standard Dose per kg <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-dose-per-kg"
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 10"
+                                  value={dosePerKg}
+                                  onChange={(e) => setDosePerKg(e.target.value)}
+                                />
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ width: '90px' }}
+                                  placeholder="Unit"
+                                  value={doseUnit}
+                                  onChange={(e) => setDoseUnit(e.target.value)}
+                                />
+                              </div>
+                              <span className="medicine-form-hint">e.g. 10 mg/kg</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label">
+                                Dose Range Safety Limits (Optional)
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="Min /kg"
+                                  value={minDosePerKg}
+                                  onChange={(e) => setMinDosePerKg(e.target.value)}
+                                />
+                                <span style={{ color: 'var(--color-outline)', fontSize: '12px' }}>to</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="Max /kg"
+                                  value={maxDosePerKg}
+                                  onChange={(e) => setMaxDosePerKg(e.target.value)}
+                                />
+                              </div>
+                              <span className="medicine-form-hint">Warns if doctor inputs dose outside this range.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* WEIGHT-RANGE FIELDS */}
+                        {dosingMethod === 'weight_range' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label">
+                                Configured Range (per kg) <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="Min /kg"
+                                  value={minDosePerKg}
+                                  onChange={(e) => setMinDosePerKg(e.target.value)}
+                                />
+                                <span style={{ color: 'var(--color-outline)', fontSize: '12px' }}>–</span>
+                                <input
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="Max /kg"
+                                  value={maxDosePerKg}
+                                  onChange={(e) => setMaxDosePerKg(e.target.value)}
+                                />
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ width: '90px' }}
+                                  placeholder="Unit"
+                                  value={doseUnit}
+                                  onChange={(e) => setDoseUnit(e.target.value)}
+                                />
+                              </div>
+                              <span className="medicine-form-hint">e.g. 10–20 mg/kg</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-suggested-dose">
+                                Default Suggested Dose / kg
+                              </label>
+                              <input
+                                id="med-suggested-dose"
+                                type="number"
+                                step="any"
+                                className="medicine-form-input"
+                                placeholder="e.g. 15 (optional midpoint)"
+                                value={dosePerKg}
+                                onChange={(e) => setDosePerKg(e.target.value)}
+                              />
+                              <span className="medicine-form-hint">Pre-selected for the doctor in the prescription modal.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* WEIGHT-BAND FIELDS */}
+                        {dosingMethod === 'weight_band' && (
+                          <div className="medicine-form-group full-width" style={{ marginTop: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <label className="medicine-form-label" style={{ margin: 0 }}>
+                                Configured Weight Bands <span className="required">*</span>
+                              </label>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleAddWeightBand}
+                                style={{ padding: '3px 8px', fontSize: '11px' }}
+                              >
+                                <Icon name="plus" size={12} />
+                                <span>Add Band</span>
+                              </button>
+                            </div>
+
+                            {weightBands.length === 0 ? (
+                              <div style={{ padding: '12px', background: 'var(--color-surface-container-lowest)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--color-border)', textAlign: 'center' }}>
+                                <p style={{ fontSize: '12px', color: 'var(--color-outline)', margin: 0 }}>
+                                  No weight bands configured yet. Click "Add Band" to define weight ranges (e.g. ≤10 kg → 1 tab).
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="medicine-weight-bands-list">
+                                {weightBands.map((band, idx) => (
+                                  <div key={band.id || idx} className="medicine-weight-band-row">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        className="medicine-form-input"
+                                        placeholder="Min kg"
+                                        value={band.minWeightKg ?? ''}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'minWeightKg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                        style={{ width: '80px' }}
+                                      />
+                                      <span style={{ fontSize: '11px', color: 'var(--color-outline)' }}>–</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        className="medicine-form-input"
+                                        placeholder="Max kg (empty=∞)"
+                                        value={band.maxWeightKg ?? ''}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'maxWeightKg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                        style={{ width: '80px' }}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        className="medicine-form-input"
+                                        placeholder="Dose"
+                                        value={band.doseValue}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'doseValue', parseFloat(e.target.value) || 0)}
+                                        style={{ width: '70px' }}
+                                      />
+                                      <input
+                                        type="text"
+                                        className="medicine-form-input"
+                                        placeholder="Unit"
+                                        value={band.doseUnit}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'doseUnit', e.target.value)}
+                                        style={{ width: '80px' }}
+                                      />
+                                    </div>
+                                    <input
+                                      type="text"
+                                      className="medicine-form-input"
+                                      placeholder="Label (e.g. ≤10 kg)"
+                                      value={band.label || ''}
+                                      onChange={(e) => handleUpdateWeightBand(idx, 'label', e.target.value)}
+                                      style={{ flex: 1 }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm"
+                                      onClick={() => handleRemoveWeightBand(idx)}
+                                      title="Remove band"
+                                      style={{ color: 'var(--color-error)', padding: '6px' }}
+                                    >
+                                      <Icon name="close" size={14} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* FIXED DOSE FIELDS */}
+                        {dosingMethod === 'fixed' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-fixed-dose">
+                                Fixed Dose Amount <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-fixed-dose"
+                                  type="number"
+                                  step="any"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 1"
+                                  value={fixedDose}
+                                  onChange={(e) => setFixedDose(e.target.value)}
+                                />
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ width: '100px' }}
+                                  placeholder="Unit"
+                                  value={doseUnit}
+                                  onChange={(e) => setDoseUnit(e.target.value)}
+                                />
+                              </div>
+                              <span className="medicine-form-hint">e.g. 1 tablet, 1 sachet, 1 pipette per dose.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* EXPLICIT FORMULATION CONVERSION (Optional) */}
+                        <div className="medicine-form-group full-width" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
+                          <label className="medicine-form-label">
+                            Formulation Strength & Practical Quantity Conversion (Optional)
+                          </label>
+                          <div style={{ fontSize: '12px', color: 'var(--color-on-surface)', marginBottom: '8px', lineHeight: 1.5 }}>
+                            <strong>What these fields mean:</strong> enter the strength of the active ingredient and the base quantity against which it is expressed. Example: <strong>Meloxicam 5 mg/1 mL</strong> means Strength of active ingredient = 5, Unit of active ingredient = mg, Base Volume = 1, Volume Unit = mL. VetRx uses this only for optional dose-to-quantity conversion.
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'end' }}>
+                            <div>
+                              <label className="medicine-form-label">Strength of active ingredient <span className="required">*</span></label>
+                              <input
+                                type="number"
+                                step="any"
+                                className="medicine-form-input"
+                                placeholder="Example: 5"
+                                value={concentrationStrength}
+                                onChange={(e) => setConcentrationStrength(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className="medicine-form-label">Unit of active ingredient</label>
+                              <input type="text" className="medicine-form-input" placeholder="Example: mg" value={concentrationStrengthUnit} onChange={(e) => setConcentrationStrengthUnit(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="medicine-form-label">Base Volume</label>
+                              <input type="number" step="any" className="medicine-form-input" placeholder="Example: 1" value={concentrationVolume} onChange={(e) => setConcentrationVolume(e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="medicine-form-label">Volume Unit</label>
+                              <input type="text" className="medicine-form-input" placeholder="Example: mL" value={concentrationVolumeUnit} onChange={(e) => setConcentrationVolumeUnit(e.target.value)} />
+                            </div>
+                          </div>
+                          <span className="medicine-form-hint">
+                            Allows VetRx to calculate practical dispense quantities when configured (e.g. 240 mg ÷ 5 mg/mL = 48 mL).
+                          </span>
+                        </div>
+
+                        {/* PRESCRIBING DEFAULTS */}
+                        <div className="medicine-form-grid full-width" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
+                          <div className="medicine-form-group">
+                            <label className="medicine-form-label" htmlFor="med-default-route">
+                              Default Route
+                            </label>
+                            <input
+                              id="med-default-route"
+                              type="text"
+                              className="medicine-form-input"
+                              placeholder="e.g. PO (Oral), SC, IV, Otic, Topical"
+                              value={defaultRoute}
+                              onChange={(e) => setDefaultRoute(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="medicine-form-group">
+                            <label className="medicine-form-label" htmlFor="med-default-frequency">
+                              Default Frequency
+                            </label>
+                            <input
+                              id="med-default-frequency"
+                              type="text"
+                              className="medicine-form-input"
+                              placeholder="e.g. BID, SID, TID, QID"
+                              value={defaultFrequency}
+                              onChange={(e) => setDefaultFrequency(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="medicine-form-group">
+                            <label className="medicine-form-label" htmlFor="med-default-duration">
+                              Default Duration (Days)
+                            </label>
+                            <input
+                              id="med-default-duration"
+                              type="number"
+                              className="medicine-form-input"
+                              placeholder="e.g. 5"
+                              value={defaultDurationDays}
+                              onChange={(e) => setDefaultDurationDays(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="medicine-form-group">
+                            <label className="medicine-form-label" htmlFor="med-default-sig">
+                              Default Directions / SIG
+                            </label>
+                            <input
+                              id="med-default-sig"
+                              type="text"
+                              className="medicine-form-input"
+                              placeholder="e.g. Give after food."
+                              value={defaultDirections}
+                              onChange={(e) => setDefaultDirections(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Active / Inactive Status Switch */}

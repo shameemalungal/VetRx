@@ -17,6 +17,12 @@ import type {
 } from '../../types';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
+import {
+  calculateSmartDose,
+  validateDoseRange,
+} from '../../utils/doseCalculator';
+import type { DoseCalculationResult } from '../../utils/doseCalculator';
 import './Prescriptions.css';
 
 interface PrescriptionBuilderPageProps {
@@ -30,6 +36,7 @@ interface DraftItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
+  dose?: string; // Veterinarian-approved calculated or custom dose
   quantity: number;
   unit: string;
   frequency: string;
@@ -161,6 +168,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     directions: 'Give after food with drinking water. Complete full course.',
   });
 
+  // Smart Dose Calculation States (Phase 7)
+  const [calcResult, setCalcResult] = useState<DoseCalculationResult | null>(null);
+  const [inlineWeight, setInlineWeight] = useState<string>('');
+  const [rangeValidationWarning, setRangeValidationWarning] = useState<string | null>(null);
+  const [userModifiedDose, setUserModifiedDose] = useState<boolean>(false);
+  const [isSavingPatientWeight, setIsSavingPatientWeight] = useState<boolean>(false);
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     patient?: string;
@@ -290,6 +304,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           genericName: item.genericName,
           presentation: item.presentation,
           strengthVolume: item.strengthVolume,
+          dose: item.dose || item.strengthVolume,
           quantity: item.quantity,
           unit: item.unit,
           frequency: item.frequency,
@@ -321,6 +336,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           genericName: item.genericName,
           presentation: item.presentation,
           strengthVolume: item.strengthVolume,
+          dose: item.dose || item.strengthVolume,
           quantity: item.quantity,
           unit: item.unit,
           frequency: item.frequency,
@@ -345,21 +361,33 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       if (!q) return true;
 
       const owner = ownersMap.get(p.ownerId);
+      const speciesCode = `#${p.species.slice(0, 3).toLowerCase()}-${p.id}`;
+
       return (
         p.name.toLowerCase().includes(q) ||
         p.species.toLowerCase().includes(q) ||
-        p.breed?.toLowerCase().includes(q) ||
-        owner?.name.toLowerCase().includes(q) ||
-        owner?.phone.includes(q)
+        (p.breed && p.breed.toLowerCase().includes(q)) ||
+        (p.identificationRef && p.identificationRef.toLowerCase().includes(q)) ||
+        (p.microchipNumber && p.microchipNumber.toLowerCase().includes(q)) ||
+        (p.ageNote && p.ageNote.toLowerCase().includes(q)) ||
+        speciesCode.includes(q) ||
+        (p.id !== undefined && String(p.id) === q) ||
+        (owner && owner.name.toLowerCase().includes(q)) ||
+        (owner?.phone && owner.phone.toLowerCase().includes(q))
       );
     });
   }, [allPatients, ownersMap, animalSearch, speciesFilter]);
 
-  // ── Modal Handlers ────────────────────────────────────────────
+  // ── Modal Handlers (Integrated Smart Dose Calculator - Phase 7) ──
   const openAddMedModal = () => {
     setEditingItemIndex(null);
     setSelectedMedRef(null);
     setMedModalSearch('');
+    setCalcResult(null);
+    setUserModifiedDose(false);
+    setRangeValidationWarning(null);
+    const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
+    setInlineWeight(currWeight);
     setMedForm({
       brandName: '',
       genericName: '',
@@ -378,13 +406,29 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const openEditMedModal = (index: number) => {
     const itm = items[index];
     setEditingItemIndex(index);
-    setSelectedMedRef(null);
+    const matched = availableMedicines?.find(
+      (m) => (itm.medicineId && m.id === itm.medicineId) || m.brandName.toLowerCase() === itm.brandName.toLowerCase()
+    );
+    setSelectedMedRef(matched || null);
     setMedModalSearch(itm.brandName);
+    const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
+    setInlineWeight(currWeight);
+    setUserModifiedDose(true); // Preserve doctor's approved dose
+    setRangeValidationWarning(null);
+
+    if (matched) {
+      const weightNum = currWeight ? parseFloat(currWeight) : undefined;
+      const res = calculateSmartDose(matched, weightNum, selectedPatient?.species);
+      setCalcResult(res);
+    } else {
+      setCalcResult(null);
+    }
+
     setMedForm({
       brandName: itm.brandName,
       genericName: itm.genericName || '',
       presentation: itm.presentation || 'Tablet',
-      doseUnit: itm.strengthVolume || '1 tablet',
+      doseUnit: itm.dose || itm.strengthVolume || '1 tablet',
       route: itm.route || 'PO (Oral)',
       frequency: itm.frequency || 'BID (q12h)',
       durationDays: itm.durationDays || 5,
@@ -398,14 +442,96 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const handleSelectMedRef = (med: Medicine) => {
     setSelectedMedRef(med);
     setMedModalSearch(med.brandName);
+    setUserModifiedDose(false);
+    setRangeValidationWarning(null);
+
+    const weightNum = inlineWeight ? parseFloat(inlineWeight) : selectedPatient?.weightKg;
+    const res = calculateSmartDose(med, weightNum, selectedPatient?.species);
+    setCalcResult(res);
+
+    const calculatedDose = res.formattedDoseString || med.strengthVolume || '1 tablet';
+    const chosenRoute = res.suggestedRoute || med.defaultRoute || 'PO (Oral)';
+    const chosenFreq = res.suggestedFrequency || med.defaultFrequency || 'BID (q12h)';
+    const chosenDur = res.suggestedDurationDays || med.defaultDurationDays || 5;
+    const chosenQty = res.calculatedQuantity !== undefined ? res.calculatedQuantity : 10;
+    const chosenUnit = res.quantityUnit || med.defaultUnit || 'tabs';
+    const chosenDir = res.suggestedDirections || med.defaultDirections || 'Give after food with water. Complete full course.';
+
     setMedForm((prev) => ({
       ...prev,
       brandName: med.brandName,
       genericName: med.genericName || '',
       presentation: med.presentation,
-      doseUnit: med.strengthVolume || prev.doseUnit,
-      unit: med.defaultUnit || prev.unit,
+      doseUnit: calculatedDose,
+      route: chosenRoute,
+      frequency: chosenFreq,
+      durationDays: chosenDur,
+      quantity: chosenQty,
+      unit: chosenUnit,
+      directions: chosenDir,
     }));
+  };
+
+  const handleInlineWeightChange = (newWeightStr: string) => {
+    setInlineWeight(newWeightStr);
+    const weightNum = parseFloat(newWeightStr);
+    if (selectedMedRef) {
+      const res = calculateSmartDose(selectedMedRef, isNaN(weightNum) ? undefined : weightNum, selectedPatient?.species);
+      setCalcResult(res);
+
+      if (!userModifiedDose && res.formattedDoseString) {
+        setMedForm((prev) => ({
+          ...prev,
+          doseUnit: res.formattedDoseString,
+          quantity: res.calculatedQuantity !== undefined ? res.calculatedQuantity : prev.quantity,
+          unit: res.quantityUnit || prev.unit,
+        }));
+      }
+    }
+  };
+
+  const handleSavePatientWeight = async () => {
+    if (!selectedPatient?.id || !inlineWeight) return;
+    const num = parseFloat(inlineWeight);
+    if (isNaN(num) || num <= 0) return;
+    setIsSavingPatientWeight(true);
+    try {
+      await db.patients.update(selectedPatient.id, {
+        weightKg: num,
+        updatedAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Failed to update patient weight:', e);
+    } finally {
+      setIsSavingPatientWeight(false);
+    }
+  };
+
+  const handleDoseInputChange = (val: string) => {
+    setUserModifiedDose(true);
+    setMedForm((prev) => ({ ...prev, doseUnit: val }));
+
+    // Check min/max dose validation if configured
+    if (selectedMedRef && (selectedMedRef.minDosePerKg || selectedMedRef.maxDosePerKg)) {
+      const weightNum = inlineWeight ? parseFloat(inlineWeight) : selectedPatient?.weightKg;
+      const numericEntered = parseFloat(val);
+      if (!isNaN(numericEntered) && weightNum && weightNum > 0) {
+        const minVal = selectedMedRef.minDosePerKg ? selectedMedRef.minDosePerKg * weightNum : undefined;
+        const maxVal = selectedMedRef.maxDosePerKg ? selectedMedRef.maxDosePerKg * weightNum : undefined;
+        const check = validateDoseRange(numericEntered, minVal, maxVal);
+        if (check.isOutOfRange) {
+          setRangeValidationWarning(
+            'Entered dose is outside the configured dose range. Please review before continuing.'
+          );
+        } else {
+          setRangeValidationWarning(null);
+        }
+      } else {
+        setRangeValidationWarning(null);
+      }
+    } else {
+      setRangeValidationWarning(null);
+    }
   };
 
   const handleSaveMedModal = () => {
@@ -420,7 +546,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: brand,
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
-      strengthVolume: medForm.doseUnit,
+      dose: medForm.doseUnit,
+      strengthVolume: selectedMedRef?.strengthVolume || medForm.doseUnit,
       quantity: Number(medForm.quantity) || 1,
       unit: medForm.unit || 'units',
       frequency: medForm.frequency,
@@ -465,6 +592,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         brandName: p.brandName,
         genericName: p.genericName,
         presentation: p.presentation,
+        dose: p.strengthVolume,
         strengthVolume: p.strengthVolume,
         quantity: p.quantity,
         unit: p.unit,
@@ -507,6 +635,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   // ── Save Prescription (Draft or Issued) ───────────────────────
   const handleSave = async (targetStatus: 'Draft' | 'Issued') => {
+    if (mode === 'edit' && existingRx && existingRx.status !== 'Draft') {
+      alert('Issued or cancelled prescriptions are read-only. Clone the prescription to create a new clinical record.');
+      return;
+    }
+
     const newErrors: {
       patient?: string;
       symptoms?: string;
@@ -560,8 +693,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     try {
       const now = new Date();
-      const practitionerId = practitioner?.id || 1;
-      const ownerId = selectedPatient?.ownerId || 1;
+      const practitionerId = practitioner?.id;
+      const ownerId = selectedPatient?.ownerId;
+      if (!practitionerId) {
+        setErrorMsg('Please configure the veterinarian profile in Settings before creating a prescription.');
+        setIsSaving(false);
+        return;
+      }
+      if (!ownerId) {
+        setErrorMsg('The selected patient has no valid owner association. Please correct the patient record first.');
+        setIsSaving(false);
+        return;
+      }
 
       let rxId: number;
 
@@ -583,9 +726,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         // Replace prescription items
         await db.prescriptionItems.where('prescriptionId').equals(rxId).delete();
       } else {
-        // Generate new prescription number e.g. RX-2026-XXXX
-        const count = await db.prescriptions.count();
-        const rxNumber = `RX-2026-${String(893 + count).padStart(4, '0')}`;
+        // Generate the next year-scoped prescription number without relying on row count.
+        const year = now.getFullYear();
+        const prefix = `RX-${year}-`;
+        const existingNumbers = await db.prescriptions.where('rxNumber').startsWith(prefix).toArray();
+        const maxSequence = existingNumbers.reduce((max, rx) => {
+          const match = rx.rxNumber.match(new RegExp(`^RX-${year}-(\\d+)$`));
+          const sequence = match ? Number(match[1]) : 0;
+          return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
+        }, 0);
+        const rxNumber = `${prefix}${String(maxSequence + 1).padStart(4, '0')}`;
 
         rxId = (await db.prescriptions.add({
           rxNumber,
@@ -612,6 +762,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           genericName: itm.genericName,
           presentation: itm.presentation,
           strengthVolume: itm.strengthVolume,
+          dose: itm.dose || itm.strengthVolume,
           quantity: itm.quantity,
           unit: itm.unit,
           frequency: itm.frequency,
@@ -730,8 +881,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   Step 1: Patient Selection
                 </span>
                 <p className="rx-patient-guide-instruction">
-                  Select the patient from the list below or create a new patient to start the prescription.
+                  Select the patient from the list or create a new patient to start the prescription.
                 </p>
+                <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
+                  Please verify that the farmer is not present in the list below already.
+                </span>
               </div>
             </div>
 
@@ -787,11 +941,12 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               ) : (
                 filteredPatients.map((patient) => {
                   const owner = ownersMap.get(patient.ownerId);
+                  const avatarLetter = (owner?.name || patient.name || patient.species || 'C').charAt(0).toUpperCase();
                   return (
                     <div key={patient.id} className="rx-select-animal-card">
                       <div className="rx-select-card-left">
                         <div className="rx-select-card-avatar">
-                          {patient.name.charAt(0).toUpperCase()}
+                          {avatarLetter}
                           <span className="rx-select-card-badge">
                             <Icon name="paw" size={11} />
                           </span>
@@ -799,44 +954,17 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
                         <div className="rx-select-card-info">
                           <div className="rx-select-card-title-row">
-                            <span className="rx-select-card-name">{patient.name}</span>
+                            <span className="rx-select-card-name">{formatOwnerPrimary(owner, 'Client')}</span>
+                            {owner?.phone && (
+                              <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', fontFamily: 'var(--font-data)' }}>
+                                ({owner.phone})
+                              </span>
+                            )}
                             <span className="rx-select-card-id">#{patient.species.slice(0, 3).toUpperCase()}-{patient.id}</span>
                           </div>
 
                           <div className="rx-select-card-meta">
-                            <span>{patient.species}</span>
-                            {patient.breed && (
-                              <>
-                                <span>•</span>
-                                <span className="font-semibold text-on-surface">{patient.breed}</span>
-                              </>
-                            )}
-                            {patient.sex && (
-                              <>
-                                <span>•</span>
-                                <span>{patient.sex}</span>
-                              </>
-                            )}
-                            {patient.ageNote && (
-                              <>
-                                <span>•</span>
-                                <span>{patient.ageNote}</span>
-                              </>
-                            )}
-                            {patient.weightKg && (
-                              <>
-                                <span>•</span>
-                                <span className="rx-select-weight-mono">{patient.weightKg} kg</span>
-                              </>
-                            )}
-                          </div>
-
-                          <div className="rx-select-owner-line">
-                            <Icon name="user" size={13} />
-                            <span>
-                              Owner: <strong>{owner ? owner.name : 'Unknown'}</strong>
-                              {owner?.phone && ` (${owner.phone})`}
-                            </span>
+                            <span className="font-medium text-on-surface">{formatAnimalSubtitle(patient)}</span>
                           </div>
                         </div>
                       </div>
@@ -855,20 +983,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               )}
             </div>
           </div>
-
-          {/* Quick Register Footer */}
-          {filteredPatients.length > 0 && (
-            <div className="flex flex-col items-center justify-center pt-2 pb-8 gap-2 text-center">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setRegisterWarningModalOpen(true)}
-              >
-                <Icon name="user-plus" size={16} />
-                <span>Register New Patient / Client</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Duplicate Farmer/Client Prevention Warning Modal */}
@@ -1032,34 +1146,23 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               </div>
               <div className="flex flex-col">
                 <div className="rx-patient-title-group">
-                  <span className="rx-patient-name-bold">{selectedPatient?.name || 'Patient'}</span>
-                  <span className="rx-species-pill">{selectedPatient?.species || 'Animal'}</span>
+                  <span className="rx-patient-name-bold">{formatOwnerPrimary(selectedOwner, 'Client')}</span>
+                  {selectedOwner?.phone && (
+                    <span style={{ fontSize: '13px', fontFamily: 'var(--font-data)', color: 'var(--color-on-surface-variant)' }}>
+                      ({selectedOwner.phone})
+                    </span>
+                  )}
+                  {selectedPatient?.species && (
+                    <span className="rx-species-pill">{selectedPatient.species}</span>
+                  )}
                   {selectedPatient?.weightKg && (
                     <span className="rx-weight-pill">Weight: {selectedPatient.weightKg} kg</span>
                   )}
                 </div>
                 <div className="rx-signalment-subline">
-                  {selectedPatient?.breed && <span>{selectedPatient.breed}</span>}
-                  {selectedPatient?.sex && (
-                    <>
-                      <span>•</span>
-                      <span>{selectedPatient.sex}</span>
-                    </>
-                  )}
-                  {selectedPatient?.ageNote && (
-                    <>
-                      <span>•</span>
-                      <span>{selectedPatient.ageNote}</span>
-                    </>
-                  )}
-                  {selectedOwner && (
-                    <>
-                      <span>•</span>
-                      <span className="font-medium text-on-surface">
-                        Owner: {selectedOwner.name} ({selectedOwner.phone})
-                      </span>
-                    </>
-                  )}
+                  <span className="font-medium text-on-surface">
+                    {formatAnimalSubtitle(selectedPatient)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1161,7 +1264,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   <h2 className="rx-card-heading rx-medicines-heading">
                     <span>Prescribed Medicines</span>{' '}
                     <span className="rx-medicines-count-badge">
-                      {items.length} added
+                      • {items.length} added
                     </span>
                   </h2>
                   <p className="text-xs text-outline" style={{ margin: 0, marginTop: '2px', fontSize: '12px', color: 'var(--color-outline)' }}>
@@ -1272,6 +1375,12 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         </div>
 
                         <div className="rx-med-regimen-pills">
+                          {itm.dose && (
+                            <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                              Dose: {itm.dose}
+                            </span>
+                          )}
+                          {itm.dose && <span>•</span>}
                           <span>{itm.strengthVolume || itm.presentation}</span>
                           {itm.route && (
                             <>
@@ -1559,6 +1668,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         <span className="text-xs text-outline truncate">
                           {selectedMedRef.genericName ? `${selectedMedRef.genericName} • ` : ''}
                           {selectedMedRef.category || 'Medication'}
+                          {selectedMedRef.strengthVolume ? ` • ${selectedMedRef.strengthVolume}` : ''}
                         </span>
                       </div>
                     </div>
@@ -1567,11 +1677,131 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       className="btn btn-ghost btn-sm text-xs shrink-0"
                       onClick={() => {
                         setSelectedMedRef(null);
+                        setCalcResult(null);
                         setMedModalSearch('');
                       }}
                     >
                       Change
                     </button>
+                  </div>
+                )}
+
+                {/* ── Smart Dose Calculation Panel (Phase 7) ────────────────── */}
+                {selectedMedRef && (
+                  <div className="rx-dose-calc-panel">
+                    <div className="rx-dose-calc-header">
+                      <div className="flex items-center gap-2">
+                        <div className="rx-dose-calc-icon">
+                          <Icon name="calculator" size={15} />
+                        </div>
+                        <span className="rx-dose-calc-title">Formulary Dose Calculation <span style={{ fontWeight: 500, opacity: 0.75 }}>(Optional)</span></span>
+                      </div>
+                      <span className={`rx-dose-calc-method-badge ${selectedMedRef.dosingMethod || 'none'}`}>
+                        {selectedMedRef.dosingMethod === 'weight_based' && 'Weight-Based (mg/kg)'}
+                        {selectedMedRef.dosingMethod === 'weight_range' && 'Weight-Based Range'}
+                        {selectedMedRef.dosingMethod === 'weight_band' && 'Weight-Band Tier'}
+                        {selectedMedRef.dosingMethod === 'fixed' && 'Fixed Dose'}
+                        {(!selectedMedRef.dosingMethod || selectedMedRef.dosingMethod === 'none') && 'Manual Dosing'}
+                      </span>
+                    </div>
+
+                    <div className="rx-dose-calc-body">
+                      {/* Patient Weight row */}
+                      <div className="rx-dose-calc-patient-row">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-on-surface">Patient Weight:</span>
+                          <div className="rx-inline-weight-box">
+                            <input
+                              type="number"
+                              step="any"
+                              className="rx-inline-weight-input"
+                              placeholder="e.g. 24"
+                              value={inlineWeight}
+                              onChange={(e) => handleInlineWeightChange(e.target.value)}
+                            />
+                            <span className="rx-inline-weight-unit">kg</span>
+                          </div>
+                          {selectedPatient && !selectedPatient.weightKg && inlineWeight && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm text-xs text-primary"
+                              style={{ height: '26px', padding: '0 8px' }}
+                              onClick={handleSavePatientWeight}
+                              disabled={isSavingPatientWeight}
+                              title="Save weight to patient profile"
+                            >
+                              <Icon name="check" size={12} />
+                              <span>{isSavingPatientWeight ? 'Saving...' : 'Save to Patient'}</span>
+                            </button>
+                          )}
+                        </div>
+                        {selectedPatient?.species && (
+                          <span className="text-xs font-medium text-outline">
+                            Species: <strong className="text-on-surface">{selectedPatient.species}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Warnings & Alerts */}
+                      {calcResult?.warningMessage && (
+                        <div className={`rx-dose-calc-alert ${calcResult.status === 'missing_weight' ? 'warning' : calcResult.status === 'species_mismatch' ? 'caution' : 'info'}`}>
+                          <Icon name={calcResult.status === 'species_mismatch' ? 'warning' : 'info'} size={14} />
+                          <span>{calcResult.warningMessage}</span>
+                        </div>
+                      )}
+
+                      {rangeValidationWarning && (
+                        <div className="rx-dose-calc-alert warning">
+                          <Icon name="warning" size={14} />
+                          <span>{rangeValidationWarning}</span>
+                        </div>
+                      )}
+
+                      {/* Transparent Calculation Display */}
+                      {calcResult && (calcResult.status === 'calculated' || calcResult.status === 'range' || calcResult.status === 'band' || calcResult.status === 'fixed') && (
+                        <div className="rx-dose-calc-metrics-card">
+                          <div className="rx-dose-calc-metrics-grid">
+                            <div>
+                              <span className="rx-calc-metric-label">Configured Dose Rule</span>
+                              <span className="rx-calc-metric-val">
+                                {selectedMedRef.dosingMethod === 'weight_based' && `${selectedMedRef.dosePerKg} ${selectedMedRef.doseUnit || 'mg'}/kg`}
+                                {selectedMedRef.dosingMethod === 'weight_range' && `${selectedMedRef.minDosePerKg}–${selectedMedRef.maxDosePerKg} ${selectedMedRef.doseUnit || 'mg'}/kg`}
+                                {selectedMedRef.dosingMethod === 'weight_band' && (calcResult.matchedBand?.label || `${calcResult.calculatedDoseValue} ${calcResult.calculatedDoseUnit}/dose`)}
+                                {selectedMedRef.dosingMethod === 'fixed' && `${selectedMedRef.fixedDose || 1} ${selectedMedRef.doseUnit || 'tablet'}/dose`}
+                              </span>
+                            </div>
+
+                            <div>
+                              <span className="rx-calc-metric-label">Patient Weight</span>
+                              <span className="rx-calc-metric-val">
+                                {inlineWeight ? `${inlineWeight} kg` : (selectedPatient?.weightKg ? `${selectedPatient.weightKg} kg` : 'N/A')}
+                              </span>
+                            </div>
+
+                            <div>
+                              <span className="rx-calc-metric-label">Calculated Dose</span>
+                              <span className="rx-calc-metric-val highlight">
+                                {calcResult.formattedDoseString}
+                              </span>
+                            </div>
+                          </div>
+
+                          {calcResult.formulaDisplay && (
+                            <div className="rx-calc-formula-line">
+                              <Icon name="info" size={12} />
+                              <span>{calcResult.formulaDisplay}</span>
+                            </div>
+                          )}
+
+                          {calcResult.quantityFormulaDisplay && (
+                            <div className="rx-calc-formula-line" style={{ marginTop: '2px', color: 'var(--color-primary)' }}>
+                              <Icon name="check" size={12} />
+                              <span>Dispense Conversion: {calcResult.quantityFormulaDisplay}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -1603,14 +1833,34 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               {/* Dosing parameters */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-md)' }}>
                 <div className="form-group">
-                  <label className="form-label">Dose &amp; Unit</label>
+                  <label className="form-label">Approved Dose</label>
                   <input
                     type="text"
-                    className="form-input"
-                    placeholder="e.g. 1 tab, 4 drops"
+                    className="form-input font-bold"
+                    style={{ color: 'var(--color-primary)' }}
+                    placeholder="e.g. 240 mg, 1 tab"
                     value={medForm.doseUnit}
-                    onChange={(e) => setMedForm({ ...medForm, doseUnit: e.target.value })}
+                    onChange={(e) => handleDoseInputChange(e.target.value)}
                   />
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Single dose amount (editable)
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Unit</label>
+                  <select
+                    className="form-select"
+                    value={medForm.unit}
+                    onChange={(e) => setMedForm({ ...medForm, unit: e.target.value })}
+                  >
+                    {availableUnits.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Dosage unit
+                  </span>
                 </div>
 
                 <div className="form-group">
@@ -1624,6 +1874,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Administration route
+                  </span>
                 </div>
 
                 <div className="form-group">
@@ -1637,41 +1890,39 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <option key={f} value={f}>{f}</option>
                     ))}
                   </select>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Dosing interval
+                  </span>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Duration &amp; Qty</label>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <input
-                      type="number"
-                      className="form-input"
-                      style={{ width: 65, textAlign: 'center' }}
-                      placeholder="Days"
-                      value={medForm.durationDays}
-                      onChange={(e) => setMedForm({ ...medForm, durationDays: parseInt(e.target.value, 10) || 0 })}
-                    />
-                    <input
-                      type="number"
-                      className="form-input"
-                      style={{ width: 65, textAlign: 'center' }}
-                      placeholder="Qty"
-                      value={medForm.quantity}
-                      onChange={(e) => setMedForm({ ...medForm, quantity: parseInt(e.target.value, 10) || 1 })}
-                    />
-                  </div>
+                  <label className="form-label">Duration (Days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 5"
+                    value={medForm.durationDays}
+                    onChange={(e) => setMedForm({ ...medForm, durationDays: parseInt(e.target.value, 10) || 0 })}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Total days course
+                  </span>
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Dispense Unit</label>
-                  <select
-                    className="form-select"
-                    value={medForm.unit}
-                    onChange={(e) => setMedForm({ ...medForm, unit: e.target.value })}
-                  >
-                    {availableUnits.map((u) => (
-                      <option key={u} value={u}>{u}</option>
-                    ))}
-                  </select>
+                  <label className="form-label">Dispense Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="form-input"
+                    placeholder="e.g. 10"
+                    value={medForm.quantity}
+                    onChange={(e) => setMedForm({ ...medForm, quantity: parseInt(e.target.value, 10) || 1 })}
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Total units to dispense
+                  </span>
                 </div>
               </div>
 

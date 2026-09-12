@@ -17,6 +17,7 @@ export interface DefaultMasterItemDef {
   isGovPrescribed?: boolean;
   govOrderNumber?: string;
   govOrderDate?: string;
+  govOrderNote?: string;
   rateControlled?: boolean;
 }
 
@@ -27,7 +28,7 @@ export const DEFAULT_MASTER_DATA: DefaultMasterItemDef[] = [
   { category: 'species', code: 'avian', name: 'Avian', sortOrder: 3, isActive: true },
   { category: 'species', code: 'bovine', name: 'Bovine', sortOrder: 4, isActive: true },
   { category: 'species', code: 'equine', name: 'Equine', sortOrder: 5, isActive: true },
-  { category: 'species', code: 'others', name: 'Others', sortOrder: 6, isActive: true },
+  { category: 'species', code: 'other', name: 'Other', sortOrder: 6, isActive: true },
 
   // 2. Medicine Units
   { category: 'medicine_unit', code: 'tablets', name: 'tablets', sortOrder: 1, isActive: true },
@@ -88,6 +89,7 @@ export const DEFAULT_MASTER_DATA: DefaultMasterItemDef[] = [
     isGovPrescribed: true,
     govOrderNumber: 'G.O.(Rt) No.589/2023/AHD',
     govOrderDate: '13-12-2023',
+    govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023',
     rateControlled: true,
   },
   {
@@ -102,6 +104,7 @@ export const DEFAULT_MASTER_DATA: DefaultMasterItemDef[] = [
     isGovPrescribed: true,
     govOrderNumber: 'G.O.(Rt) No.589/2023/AHD',
     govOrderDate: '13-12-2023',
+    govOrderNote: 'As per the rate fixed by G.O.(Rt) No.589/2023/AHD dated 13-12-2023',
     rateControlled: true,
   },
   {
@@ -206,6 +209,20 @@ export async function ensureMasterDataSeeded(): Promise<void> {
       return;
     }
 
+    // Migrate legacy 'Others' to 'Other' if present in Dexie
+    const existingOthers = await db.masterDataItems
+      .where('category')
+      .equals('species')
+      .and((i) => i.name === 'Others')
+      .first();
+    if (existingOthers) {
+      await db.masterDataItems.update(existingOthers.id!, {
+        name: 'Other',
+        code: 'other',
+        updatedAt: now,
+      });
+    }
+
     // Ensure Government Prescribed items exist even in pre-existing databases
     for (const govItem of DEFAULT_MASTER_DATA.filter((i) => i.isGovPrescribed)) {
       const existing = await db.masterDataItems
@@ -220,12 +237,13 @@ export async function ensureMasterDataSeeded(): Promise<void> {
           createdAt: now,
           updatedAt: now,
         } as MasterDataItem);
-      } else if (!existing.isGovPrescribed || !existing.govOrderNumber) {
+      } else {
         await db.masterDataItems.update(existing.id!, {
           isGovPrescribed: true,
           rateControlled: true,
           govOrderNumber: govItem.govOrderNumber,
           govOrderDate: govItem.govOrderDate,
+          govOrderNote: govItem.govOrderNote,
           unit: existing.unit || govItem.unit,
           defaultPricePaisa: existing.defaultPricePaisa || govItem.defaultPricePaisa,
           updatedAt: now,

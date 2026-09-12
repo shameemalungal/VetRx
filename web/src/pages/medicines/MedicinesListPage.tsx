@@ -16,6 +16,44 @@ type ViewMode = 'grid' | 'table';
 
 const EMPTY_ARRAY: never[] = [];
 
+function getDosingBadge(medicine: Medicine) {
+  const method = medicine.dosingMethod || 'none';
+  if (method === 'weight_based') {
+    return (
+      <span className="medicine-dosing-badge weight_based" title={`Weight-based: ${medicine.dosePerKg || 0} ${medicine.doseUnit || 'mg'}/kg`}>
+        <Icon name="calculator" size={12} />
+        <span>{medicine.dosePerKg} {medicine.doseUnit || 'mg'}/kg</span>
+      </span>
+    );
+  }
+  if (method === 'weight_range') {
+    return (
+      <span className="medicine-dosing-badge weight_range" title={`Weight range: ${medicine.minDosePerKg}–${medicine.maxDosePerKg} ${medicine.doseUnit || 'mg'}/kg`}>
+        <Icon name="calculator" size={12} />
+        <span>{medicine.minDosePerKg}–{medicine.maxDosePerKg} {medicine.doseUnit || 'mg'}/kg</span>
+      </span>
+    );
+  }
+  if (method === 'weight_band') {
+    const bandCount = medicine.weightBands?.length || 0;
+    return (
+      <span className="medicine-dosing-badge weight_band" title={`${bandCount} weight bands configured`}>
+        <Icon name="calculator" size={12} />
+        <span>{bandCount} Weight Bands</span>
+      </span>
+    );
+  }
+  if (method === 'fixed') {
+    return (
+      <span className="medicine-dosing-badge fixed" title={`Fixed dose: ${medicine.fixedDose || 1} ${medicine.doseUnit || 'tablet'}/dose`}>
+        <Icon name="calculator" size={12} />
+        <span>{medicine.fixedDose || 1} {medicine.doseUnit || 'tab'}/dose</span>
+      </span>
+    );
+  }
+  return null;
+}
+
 export function MedicinesListPage() {
   const allMedicines = useLiveQuery(() => db.medicines.toArray(), []) ?? EMPTY_ARRAY;
   const prescriptionItems = useLiveQuery(() => db.prescriptionItems.toArray(), []) ?? EMPTY_ARRAY;
@@ -421,6 +459,7 @@ export function MedicinesListPage() {
                       {medicine.category && (
                         <span className="medicine-category-badge">{medicine.category}</span>
                       )}
+                      {getDosingBadge(medicine)}
                     </div>
 
                     {medicine.notes && (
@@ -483,6 +522,7 @@ export function MedicinesListPage() {
                   <th>Medicine Name &amp; Generic</th>
                   <th>Form &amp; Strength</th>
                   <th>Therapeutic Category</th>
+                  <th>Dosing Rule</th>
                   <th>Default Unit</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
@@ -527,6 +567,11 @@ export function MedicinesListPage() {
                           <span className="medicine-category-badge">{medicine.category}</span>
                         ) : (
                           <span style={{ color: 'var(--color-outline)', fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        {getDosingBadge(medicine) || (
+                          <span style={{ color: 'var(--color-outline)', fontSize: 12 }}>Manual</span>
                         )}
                       </td>
                       <td>

@@ -73,7 +73,14 @@ export const db = new VetRxDatabase();
 const SEED_KEY = 'vetrx_seeded_v1';
 
 export async function ensureSeeded(): Promise<void> {
-  if (!localStorage.getItem(SEED_KEY)) {
+  // The localStorage flag is only an optimization. IndexedDB is the source of truth.
+  // If site storage was partially cleared and the flag remains, reseed the missing base data.
+  // Demo records are opt-in only. Production/local clinical data must never be
+  // populated with fictional practitioners, owners, patients, or medicines.
+  const demoMode = new URLSearchParams(window.location.search).get('demo') === '1'
+    || localStorage.getItem('vetrx_demo_mode') === '1';
+  const seedFlag = localStorage.getItem(SEED_KEY);
+  if (demoMode && !seedFlag) {
     const { seed } = await import('./seed');
     await seed();
     localStorage.setItem(SEED_KEY, '1');
@@ -81,4 +88,8 @@ export async function ensureSeeded(): Promise<void> {
 
   // Ensure Master Data is initialized even for pre-existing databases
   await ensureMasterDataSeeded();
+
+  // Ensure deterministic formulary dosing rules exist on seeded medicines
+  const { ensureMedicineDosingRulesSeeded } = await import('./seed');
+  await ensureMedicineDosingRulesSeeded();
 }

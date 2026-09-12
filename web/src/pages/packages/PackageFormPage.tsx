@@ -431,7 +431,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                     <option value="equine">🐴 Equine</option>
                     <option value="avian">🦜 Avian</option>
                     <option value="universal">🌐 Universal (All Species)</option>
-                    <option value="other">✨ Others</option>
+                    <option value="other">✨ Other</option>
                   </select>
                   <span className="text-xs text-outline mt-1 block">
                     Restricts protocol filter logic.
@@ -814,10 +814,10 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
               <span>Template Audit Log</span>
             </div>
             <div className="pkg-audit-line">
-              Author: <strong>{practitioner?.name || 'Dr. Sarah Jenkins, DVM'}</strong>
+              Author: <strong>{practitioner?.name || 'Not configured'}</strong>
             </div>
             <div className="pkg-audit-line">
-              Clinic: {organisation?.name || 'Oakwood Animal Hospital Pharmacy'}
+              Clinic: {organisation?.name || 'Independent practice'}
             </div>
             <div className="pkg-audit-line">
               Status: Active • Used {existingPkg?.usageCount || 0} times

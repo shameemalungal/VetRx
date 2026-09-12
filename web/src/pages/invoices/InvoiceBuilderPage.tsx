@@ -15,7 +15,8 @@ import type {
 } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
-import { formatINR, getNextInvoiceNumber } from './invoiceUtils';
+import { formatINR, getNextInvoiceNumber, formatLocalDateInput } from './invoiceUtils';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -62,11 +63,12 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const [selectedPatientId, setSelectedPatientId] = useState<number | ''>('');
   const [prescriptionId, setPrescriptionId] = useState<number | undefined>(undefined);
   const [invoiceDate, setInvoiceDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
+    formatLocalDateInput()
   );
   const [doctorDiscountPaisa, setDoctorDiscountPaisa] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<InvoiceStatus>('Draft');
+  const [editRecordLoaded, setEditRecordLoaded] = useState(mode !== 'edit');
 
   // Items in invoice
   const [items, setItems] = useState<ItemDraft[]>([]);
@@ -97,7 +99,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           setInvoiceNumber(inv.invoiceNumber);
           setSelectedPatientId(inv.patientId);
           setPrescriptionId(inv.prescriptionId);
-          setInvoiceDate(new Date(inv.invoiceDate).toISOString().slice(0, 10));
+          setInvoiceDate(formatLocalDateInput(inv.invoiceDate));
           setDoctorDiscountPaisa(inv.discountTotal || 0);
           setNotes(inv.notes || '');
           setStatus(inv.status);
@@ -125,6 +127,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
             }))
           );
         }
+        setEditRecordLoaded(true);
       } else {
         // Mode 'new'
         const nextNum = await getNextInvoiceNumber();
@@ -347,9 +350,21 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       alert('Please add at least one billed item to the invoice.');
       return;
     }
+    if (mode === 'edit' && status !== 'Draft') {
+      alert('Issued or cancelled invoices are read-only. Create a new invoice or revise from a draft.');
+      return;
+    }
 
     const patient = allPatients.find((p) => p.id === selectedPatientId);
-    const ownerId = patient?.ownerId || 1;
+    const ownerId = patient?.ownerId;
+    if (!ownerId) {
+      alert('The selected patient has no valid owner association. Please correct the patient record before invoicing.');
+      return;
+    }
+    if (!practitioner?.id) {
+      alert('Please configure the veterinarian profile in Settings before creating an invoice.');
+      return;
+    }
 
     try {
       let savedInvoiceId: number;
@@ -378,7 +393,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           invoiceNumber,
           patientId: selectedPatientId as number,
           ownerId,
-          practitionerId: practitioner?.id || 1,
+          practitionerId: practitioner.id,
           prescriptionId,
           invoiceDate: new Date(invoiceDate),
           discountTotal: doctorDiscountPaisa,
@@ -426,6 +441,33 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       alert(`Failed to save invoice: ${err?.message || err}`);
     }
   };
+
+  if (mode === 'edit' && !editRecordLoaded) {
+    return (
+      <div className="invoices-page-container">
+        <div className="card" style={{ padding: '32px', textAlign: 'center' }}>
+          <div className="spinner" style={{ margin: '0 auto 12px' }} />
+          <div className="section-title">Loading invoice…</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'edit' && status !== 'Draft') {
+    return (
+      <div className="invoices-page-container">
+        <div className="card" style={{ padding: '32px', textAlign: 'center' }}>
+          <Icon name="lock" size={28} className="text-primary" />
+          <div className="section-title" style={{ marginTop: '10px' }}>Invoice is read-only</div>
+          <p className="section-sub">{status === 'Issued' ? 'Issued invoices cannot be silently overwritten.' : 'Cancelled invoices remain preserved in history.'}</p>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/invoices/${id}`)}>
+            <Icon name="chevron-left" size={15} />
+            <span>Back to Invoice</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="invoices-page-container">
@@ -509,15 +551,18 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                 {selectedPatient ? (
                   <>
                     <div className="invoice-patient-name-row">
-                      <span className="invoice-patient-name">{selectedPatient.name}</span>
-                      <span className="invoices-status-pill issued">{selectedPatient.species}</span>
-                      {selectedPatient.sex && (
-                        <span className="invoices-status-pill draft">{selectedPatient.sex}</span>
+                      <span className="invoice-patient-name">{formatOwnerPrimary(selectedOwner, 'Client')}</span>
+                      {selectedOwner?.phone && (
+                        <span style={{ fontSize: '12px', fontFamily: 'var(--font-data)', color: 'var(--color-on-surface-variant)' }}>
+                          ({selectedOwner.phone})
+                        </span>
+                      )}
+                      {selectedPatient.species && (
+                        <span className="invoices-status-pill issued">{selectedPatient.species}</span>
                       )}
                     </div>
-                    <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                      {selectedPatient.breed || 'Mixed breed'} ·{' '}
-                      {selectedPatient.weightKg ? `${selectedPatient.weightKg} kg` : 'Weight unrecorded'}
+                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-on-surface-variant)' }}>
+                      {formatAnimalSubtitle(selectedPatient)}
                     </span>
                     <button
                       type="button"
@@ -550,11 +595,15 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                       style={{ minWidth: '240px' }}
                     >
                       <option value="">-- Choose Registered Animal --</option>
-                      {allPatients.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.species} - {p.breed || 'Unknown'})
-                        </option>
-                      ))}
+                      {allPatients.map((p) => {
+                        const o = allOwners.find((x) => x.id === p.ownerId);
+                        const ownerPrefix = o?.name ? `${o.name} — ` : '';
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {ownerPrefix}{formatAnimalSubtitle(p)}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 )}
@@ -622,7 +671,25 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                   style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
                 >
                   <Icon name="lock" size={14} />
-                  <span>Govt Certificate</span>
+                  <span>Govt Certificate (₹250)</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    handleOpenAddItem('Other');
+                    // Find Necropsy Report from master data
+                    const necropsyItem = masterInvoiceItems.find((m) => m.code === 'necropsy_report');
+                    if (necropsyItem) {
+                      handleSelectMasterItem(necropsyItem);
+                    }
+                  }}
+                  title="Add Government-Prescribed Necropsy Report (₹1,000)"
+                  style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                >
+                  <Icon name="lock" size={14} />
+                  <span>Govt Necropsy (₹1,000)</span>
                 </button>
 
                 <button
@@ -630,14 +697,16 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleOpenAddItem('Medicine')}
                 >
-                  + Medicine
+                  <Icon name="plus" size={14} />
+                  <span>Medicine</span>
                 </button>
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={() => handleOpenAddItem('Consultation Fee')}
                 >
-                  + Consultation
+                  <Icon name="plus" size={14} />
+                  <span>Consultation</span>
                 </button>
               </div>
             </div>
@@ -748,7 +817,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                           <Icon name="info" size={14} />
                           <span>
                             {item.govOrderNote ||
-                              `As per the rate fixed by ${item.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${item.govOrderDate || '13-12-2023'}.`}
+                              `As per the rate fixed by ${item.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${item.govOrderDate || '13-12-2023'}`}
                           </span>
                         </div>
                       )}

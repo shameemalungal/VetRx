@@ -837,3 +837,136 @@
   }
 }
 
+/* ── Phase 7: Smart Dosing Rules Config Styles ───────────────── */
+.medicine-dosing-config-card {
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.medicine-dosing-config-header {
+  padding: 12px 16px;
+  background: rgba(0, 104, 95, 0.06);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.medicine-dosing-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.medicine-dosing-title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.medicine-dosing-subtitle {
+  font-size: 11px;
+  color: var(--color-outline);
+  margin: 2px 0 0 0;
+}
+
+.medicine-dosing-config-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.species-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.species-pill-btn:hover {
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+}
+
+.species-pill-btn.active {
+  background: rgba(0, 104, 95, 0.12);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.medicine-weight-bands-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.medicine-weight-band-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface-container-lowest);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+/* Dosing Badges for List and Cards */
+.medicine-dosing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-data);
+}
+
+.medicine-dosing-badge.weight_based {
+  background: rgba(0, 104, 95, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(0, 104, 95, 0.2);
+}
+
+.medicine-dosing-badge.weight_range {
+  background: rgba(0, 99, 152, 0.1);
+  color: var(--color-secondary);
+  border: 1px solid rgba(0, 99, 152, 0.2);
+}
+
+.medicine-dosing-badge.weight_band {
+  background: rgba(125, 82, 0, 0.1);
+  color: #b07000;
+  border: 1px solid rgba(176, 112, 0, 0.25);
+}
+
+.medicine-dosing-badge.fixed {
+  background: rgba(0, 133, 91, 0.1);
+  color: #00855b;
+  border: 1px solid rgba(0, 133, 91, 0.25);
+}
+
+.medicine-dosing-badge.none {
+  background: var(--color-surface-container-high);
+  color: var(--color-outline);
+  border: 1px solid var(--color-border);
+}

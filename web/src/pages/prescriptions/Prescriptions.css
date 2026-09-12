@@ -2392,3 +2392,198 @@
   gap: var(--space-sm);
 }
 
+/* ── Phase 7: Integrated Smart Dose Calculator Styles ────────── */
+.rx-dose-calc-panel {
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.rx-dose-calc-header {
+  padding: 10px 14px;
+  background: rgba(0, 104, 95, 0.07);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rx-dose-calc-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rx-dose-calc-title {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+}
+
+.rx-dose-calc-method-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.rx-dose-calc-method-badge.weight_based {
+  background: rgba(0, 104, 95, 0.12);
+  color: var(--color-primary);
+}
+
+.rx-dose-calc-method-badge.weight_range {
+  background: rgba(0, 99, 152, 0.12);
+  color: var(--color-secondary);
+}
+
+.rx-dose-calc-method-badge.weight_band {
+  background: rgba(176, 112, 0, 0.12);
+  color: #925c00;
+}
+
+.rx-dose-calc-method-badge.fixed {
+  background: rgba(0, 133, 91, 0.12);
+  color: #00855b;
+}
+
+.rx-dose-calc-method-badge.none {
+  background: var(--color-surface-container-high);
+  color: var(--color-outline);
+}
+
+.rx-dose-calc-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rx-dose-calc-patient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.rx-inline-weight-box {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 2px 8px;
+  gap: 4px;
+}
+
+.rx-inline-weight-input {
+  width: 65px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-data);
+  color: var(--color-on-surface);
+  text-align: right;
+  outline: none;
+}
+
+.rx-inline-weight-unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-outline);
+}
+
+.rx-dose-calc-alert {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.35;
+}
+
+.rx-dose-calc-alert.warning {
+  background: rgba(176, 112, 0, 0.1);
+  color: #925c00;
+  border: 1px solid rgba(176, 112, 0, 0.25);
+}
+
+.rx-dose-calc-alert.caution {
+  background: rgba(186, 26, 26, 0.1);
+  color: var(--color-error);
+  border: 1px solid rgba(186, 26, 26, 0.25);
+}
+
+.rx-dose-calc-alert.info {
+  background: rgba(0, 104, 95, 0.08);
+  color: var(--color-primary);
+  border: 1px solid rgba(0, 104, 95, 0.18);
+}
+
+.rx-dose-calc-metrics-card {
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rx-dose-calc-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.rx-calc-metric-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-outline);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.rx-calc-metric-val {
+  display: block;
+  font-size: 13px;
+  font-family: var(--font-data);
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+.rx-calc-metric-val.highlight {
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rx-calc-formula-line {
+  font-size: 11px;
+  font-family: var(--font-data);
+  color: var(--color-on-surface-variant);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-border);
+}

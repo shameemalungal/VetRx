@@ -58,16 +58,16 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   // Active master data species + current patient's species if it happens to be inactive
   const availableSpeciesOptions = useMemo(() => {
     if (!masterSpecies || masterSpecies.length === 0) {
-      return SPECIES_OPTIONS.map((sp) => ({ value: sp, label: sp === 'Other' ? 'Others' : sp }));
+      return SPECIES_OPTIONS.map((sp) => ({ value: sp, label: sp }));
     }
     const options = masterSpecies
       .filter((item) => item.isActive || item.name === species)
       .map((item) => ({
         value: item.name,
-        label: item.name === 'Other' ? 'Others' : item.name,
+        label: item.name,
       }));
     if (species && !options.some((o) => o.value === species)) {
-      options.push({ value: species, label: species === 'Other' ? 'Others' : species });
+      options.push({ value: species, label: species });
     }
     return options;
   }, [masterSpecies, species]);
@@ -174,7 +174,6 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
 
   const validate = (): boolean => {
     const err: Record<string, string> = {};
-    if (!name.trim()) err.name = 'Patient name is required.';
     if (!species) err.species = 'Species is required.';
 
     if (ownerMode === 'existing') {
@@ -640,17 +639,16 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
               <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label" htmlFor="patient-name">
-                    Animal Name <span className="text-error">*</span>
+                    Animal Name <span className="form-label-optional">(optional for unnamed livestock)</span>
                   </label>
                   <input
                     id="patient-name"
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Bruno"
+                    placeholder="e.g. Bruno (leave blank if unnamed livestock)"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
-                  {errors.name && <span className="form-error">{errors.name}</span>}
                 </div>
 
                 <div className="form-group">
@@ -751,13 +749,13 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
               <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label" htmlFor="patient-id-ref">
-                    Identification Reference / Chart # <span className="form-label-optional">(optional)</span>
+                    Ear Tag / Animal ID / Chart # <span className="form-label-optional">(optional)</span>
                   </label>
                   <input
                     id="patient-id-ref"
                     type="text"
                     className="form-input"
-                    placeholder="e.g. #CAN-8841"
+                    placeholder="e.g. KL-08-123 or #CAN-8841"
                     value={identificationRef}
                     onChange={(e) => setIdentificationRef(e.target.value)}
                   />

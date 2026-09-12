@@ -764,11 +764,24 @@
   flex-wrap: wrap;
 }
 
+.owner-name-primary,
 .patient-name {
   font-family: var(--font-heading);
   font-size: 15px;
   font-weight: 700;
   color: var(--color-on-surface);
+}
+
+.owner-phone-sub {
+  font-size: 12px;
+  font-family: var(--font-data);
+  color: var(--color-on-surface-variant);
+}
+
+.animal-details-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-on-surface-variant);
 }
 
 .species-badge {
@@ -940,6 +953,7 @@
   flex-direction: column;
 }
 
+.inv-owner-primary,
 .inv-patient-name {
   font-family: var(--font-heading);
   font-size: 15px;
@@ -947,8 +961,10 @@
   color: var(--color-on-surface);
 }
 
+.inv-animal-sub,
 .inv-owner-text {
   font-size: 12px;
+  font-weight: 500;
   color: var(--color-on-surface-variant);
 }
 
@@ -967,25 +983,75 @@
 .inv-action-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  margin-top: 2px;
 }
 
 .btn-inv-action {
   flex: 1;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-container-lowest);
-  border: 1px solid var(--color-border);
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-body);
+  font-size: 11px;
   font-weight: 600;
-  color: var(--color-on-surface-variant);
+  line-height: 1;
   cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: all 0.18s cubic-bezier(0.2, 0, 0, 1);
+  white-space: nowrap;
+  outline: none;
+  user-select: none;
 }
-.btn-inv-action:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+.btn-inv-action:active {
+  transform: scale(0.97);
+}
+
+/* View: Soft green/teal pastel */
+.btn-inv-action.btn-inv-view {
+  background: #ecfdf5;
+  border-color: rgba(110, 231, 183, 0.65);
+  color: #047857;
+}
+.btn-inv-action.btn-inv-view:hover {
+  background: #d1fae5;
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #064e3b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(16, 185, 129, 0.15);
+}
+
+/* Print: Soft blue pastel */
+.btn-inv-action.btn-inv-print {
+  background: #f0f9ff;
+  border-color: rgba(125, 211, 252, 0.65);
+  color: #0284c7;
+}
+.btn-inv-action.btn-inv-print:hover {
+  background: #e0f2fe;
+  border-color: rgba(14, 165, 233, 0.45);
+  color: #0369a1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(14, 165, 233, 0.15);
+}
+
+/* Share: Soft purple/lavender pastel */
+.btn-inv-action.btn-inv-share {
+  background: #f5f3ff;
+  border-color: rgba(196, 181, 253, 0.65);
+  color: #6d28d9;
+}
+.btn-inv-action.btn-inv-share:hover {
+  background: #ede9fe;
+  border-color: rgba(139, 92, 246, 0.45);
+  color: #4c1d95;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(139, 92, 246, 0.15);
 }
 
 /* =============================================================
