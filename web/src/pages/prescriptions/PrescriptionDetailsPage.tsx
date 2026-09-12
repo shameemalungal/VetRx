@@ -21,6 +21,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const { practitioner: storePractitioner, organisation: storeOrganisation } = useSettingsStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showConfirmIssueModal, setShowConfirmIssueModal] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -60,9 +61,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const allPractitioners = useLiveQuery(() => db.practitioners.toArray(), []);
 
   // ── Actions ───────────────────────────────────────────────────
-  const handleCompleteAndIssue = async () => {
+  const handleExecuteIssue = async () => {
     if (!prescription?.id) return;
     setIsUpdating(true);
+    setShowConfirmIssueModal(false);
     try {
       const now = new Date();
       await db.prescriptions.update(prescription.id, {
@@ -77,6 +79,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleCompleteAndIssue = () => {
+    setShowConfirmIssueModal(true);
   };
 
   const handlePrint = () => {
@@ -172,17 +178,17 @@ export const PrescriptionDetailsPage: React.FC = () => {
     storeOrganisation && storeOrganisation.isActive !== false ? storeOrganisation : null;
 
   // Doctor credentials
-  const doctorName = activePractitioner?.name?.trim() || 'Dr. Shameem Alungal';
-  const doctorQual = activePractitioner?.qualifications?.trim() || 'BVSc, PGDeG';
+  const doctorName = activePractitioner?.name?.trim() || 'Veterinarian';
+  const doctorQual = activePractitioner?.qualifications?.trim() || '';
   const doctorReg = activePractitioner?.registrationNumber?.trim()
     ? (activePractitioner.registrationNumber.trim().startsWith('Reg')
         ? activePractitioner.registrationNumber.trim()
         : `Reg: ${activePractitioner.registrationNumber.trim()}`)
-    : 'Reg: KVC-3134';
+    : '';
 
-  const doctorAddress = activePractitioner?.address?.trim() || 'Kerala';
-  const doctorPhone = activePractitioner?.phone?.trim() || '+91 9061989569';
-  const doctorEmail = activePractitioner?.email?.trim() || 'drshameemalungal@gmail.com';
+  const doctorAddress = activePractitioner?.address?.trim() || '';
+  const doctorPhone = activePractitioner?.phone?.trim() || '';
+  const doctorEmail = activePractitioner?.email?.trim() || '';
 
   // ── Practice / Clinic Identity State ───────────────────────────
   // CRITICAL REQUIREMENT:
@@ -309,7 +315,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => navigate(`/prescriptions/${prescription.id}/edit?clone=true`)}
+            onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
           >
             <Icon name="copy" size={16} />
             <span>Clone Prescription</span>
@@ -528,8 +534,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <span>Owner Details</span>
                   </div>
                   <div className="stationery-primary-name">{formatOwnerPrimary(owner, 'Client')}</div>
-                  <p className="stationery-sub-text">Ph: {owner?.phone || '+91 98765 43210'}</p>
-                  <p className="stationery-sub-text">{owner?.address || ''}</p>
+                  {owner?.phone && <p className="stationery-sub-text">Ph: {owner.phone}</p>}
+                  {owner?.address && <p className="stationery-sub-text">{owner.address}</p>}
                 </div>
 
                 {/* Patient Animal Block */}
@@ -540,7 +546,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       <span>Animal Details</span>
                     </div>
                     <span className="stationery-id-code">
-                      ID: {patient?.identificationRef || `PT-2026-${patient?.id?.toString().padStart(4, '0') || '0892'}`}
+                      ID: {patient?.identificationRef || (patient?.id ? `PT-2026-${patient.id.toString().padStart(4, '0')}` : 'PT-RECORD')}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -565,7 +571,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <div>
                   <span className="stationery-box-label">Clinical Presentation</span>
                   <p style={{ fontSize: '13px', color: 'var(--color-on-surface)', lineHeight: 1.4 }}>
-                    {prescription.symptoms || 'Scratching right ear, vigorous head shaking, thick brown wax discharge.'}
+                    {prescription.symptoms || 'None recorded'}
                   </p>
                 </div>
                 <div>
@@ -582,7 +588,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       }}
                     />
                     <p style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                      {prescription.diagnosis || 'Canine Acute Otitis Externa (Unilateral - Right)'}
+                      {prescription.diagnosis || 'Clinical Examination / Prescribed Treatment'}
                     </p>
                   </div>
                 </div>
@@ -835,16 +841,28 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Return / Edit Action Button */}
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ width: '100%', height: '38px', fontSize: '13px', color: 'var(--color-on-surface-variant)' }}
-              onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
-            >
-              <Icon name="arrow-left" size={16} />
-              <span>Back to Medication Editor</span>
-            </button>
+            {/* Return / Edit / Clone Action Button */}
+            {!isIssued ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ width: '100%', height: '38px', fontSize: '13px', color: 'var(--color-on-surface-variant)' }}
+                onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+              >
+                <Icon name="arrow-left" size={16} />
+                <span>Back to Medication Editor</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', height: '38px', fontSize: '13px' }}
+                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+              >
+                <Icon name="copy" size={16} />
+                <span>Clone Prescription</span>
+              </button>
+            )}
 
             {/* Start New Prescription */}
             <Link
@@ -968,6 +986,55 @@ export const PrescriptionDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal before Generating/Issuing */}
+      {showConfirmIssueModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '460px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#fef3c7',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="alert-triangle" size={22} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                Generate Prescription?
+              </h3>
+            </div>
+            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
+              No editing will be allowed after generating. If you want to edit, use Save Draft.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowConfirmIssueModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleExecuteIssue}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Generating…' : 'Generate & Issue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

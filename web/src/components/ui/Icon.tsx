@@ -21,6 +21,10 @@ const PATHS: Record<string, string | string[]> = {
     'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
     'M9 12h6M9 16h4',
   ],
+  calculator: [
+    'M4 4a2 2 0 012-2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z',
+    'M8 6h8v2H8V6zm0 5h2v2H8v-2zm4 0h2v2h-2v-2zm4 0h0v2h0v-2zm-8 4h2v2H8v-2zm4 0h2v2h-2v-2zm4 0h0v2h0v-2z',
+  ],
   packages: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4',
   medicines: 'M19.5 8.25l-7.5 7.5-7.5-7.5',
   pill: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18',

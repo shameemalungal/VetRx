@@ -514,7 +514,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                       id="new-owner-name"
                       type="text"
                       className="form-input"
-                      placeholder="e.g. Ahmed Kumar"
+                      placeholder="e.g. Owner / Farmer Name"
                       value={newOwnerName}
                       onChange={(e) => setNewOwnerName(e.target.value)}
                     />
@@ -601,7 +601,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                       id="new-owner-email"
                       type="email"
                       className="form-input"
-                      placeholder="e.g. ahmed@example.com"
+                      placeholder="e.g. client@example.com"
                       value={newOwnerEmail}
                       onChange={(e) => setNewOwnerEmail(e.target.value)}
                     />
@@ -615,7 +615,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                       id="new-owner-address"
                       type="text"
                       className="form-input"
-                      placeholder="e.g. 42 Park Street, Bengaluru"
+                      placeholder="e.g. Farm / Clinic address, City"
                       value={newOwnerAddress}
                       onChange={(e) => setNewOwnerAddress(e.target.value)}
                     />
@@ -645,7 +645,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                     id="patient-name"
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Bruno (leave blank if unnamed livestock)"
+                    placeholder="e.g. Animal Name (leave blank if unnamed livestock)"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />

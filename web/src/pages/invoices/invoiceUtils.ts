@@ -109,6 +109,14 @@ export async function getNextInvoiceNumber(): Promise<string> {
  * Ensure sample invoices exist if store is empty so the screen matches Stitch mockup
  */
 export async function ensureSampleInvoicesSeeded(): Promise<void> {
+  // Gate seeding strictly behind demo mode (?demo=1 or localStorage.getItem('vetrx_demo_mode') === '1')
+  const isDemo =
+    typeof window !== 'undefined' &&
+    (new URLSearchParams(window.location.search).get('demo') === '1' ||
+      localStorage.getItem('vetrx_demo_mode') === '1');
+
+  if (!isDemo) return;
+
   const count = await db.invoices.count();
   if (count > 0) return;
 

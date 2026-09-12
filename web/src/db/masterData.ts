@@ -31,18 +31,28 @@ export const DEFAULT_MASTER_DATA: DefaultMasterItemDef[] = [
   { category: 'species', code: 'other', name: 'Other', sortOrder: 6, isActive: true },
 
   // 2. Medicine Units
-  { category: 'medicine_unit', code: 'tablets', name: 'tablets', sortOrder: 1, isActive: true },
-  { category: 'medicine_unit', code: 'capsules', name: 'capsules', sortOrder: 2, isActive: true },
-  { category: 'medicine_unit', code: 'ml', name: 'ml', sortOrder: 3, isActive: true },
-  { category: 'medicine_unit', code: 'drops', name: 'drops', sortOrder: 4, isActive: true },
-  { category: 'medicine_unit', code: 'vial', name: 'vial', sortOrder: 5, isActive: true },
-  { category: 'medicine_unit', code: 'vials', name: 'vials', sortOrder: 6, isActive: true },
-  { category: 'medicine_unit', code: 'sachets', name: 'sachets', sortOrder: 7, isActive: true },
-  { category: 'medicine_unit', code: 'bottle', name: 'bottle', sortOrder: 8, isActive: true },
-  { category: 'medicine_unit', code: 'pipette', name: 'pipette', sortOrder: 9, isActive: true },
-  { category: 'medicine_unit', code: 'tube', name: 'tube', sortOrder: 10, isActive: true },
-  { category: 'medicine_unit', code: 'mg', name: 'mg', sortOrder: 11, isActive: true },
-  { category: 'medicine_unit', code: 'pack', name: 'pack', sortOrder: 12, isActive: true },
+  { category: 'medicine_unit', code: 'tablet', name: 'tablet', sortOrder: 1, isActive: true },
+  { category: 'medicine_unit', code: 'capsule', name: 'capsule', sortOrder: 2, isActive: true },
+  { category: 'medicine_unit', code: 'ml', name: 'mL', sortOrder: 3, isActive: true },
+  { category: 'medicine_unit', code: 'l', name: 'L', sortOrder: 4, isActive: true },
+  { category: 'medicine_unit', code: 'mg', name: 'mg', sortOrder: 5, isActive: true },
+  { category: 'medicine_unit', code: 'g', name: 'g', sortOrder: 6, isActive: true },
+  { category: 'medicine_unit', code: 'mcg', name: 'mcg', sortOrder: 7, isActive: true },
+  { category: 'medicine_unit', code: 'iu', name: 'IU', sortOrder: 8, isActive: true },
+  { category: 'medicine_unit', code: 'vial', name: 'vial', sortOrder: 9, isActive: true },
+  { category: 'medicine_unit', code: 'ampoule', name: 'ampoule', sortOrder: 10, isActive: true },
+  { category: 'medicine_unit', code: 'bottle', name: 'bottle', sortOrder: 11, isActive: true },
+  { category: 'medicine_unit', code: 'sachet', name: 'sachet', sortOrder: 12, isActive: true },
+  { category: 'medicine_unit', code: 'drop', name: 'drop', sortOrder: 13, isActive: true },
+  { category: 'medicine_unit', code: 'tube', name: 'tube', sortOrder: 14, isActive: true },
+  { category: 'medicine_unit', code: 'bolus_boli', name: 'bolus/boli', sortOrder: 15, isActive: true },
+  { category: 'medicine_unit', code: 'pipette', name: 'pipette', sortOrder: 16, isActive: true },
+  { category: 'medicine_unit', code: 'pack', name: 'pack', sortOrder: 17, isActive: true },
+  { category: 'medicine_unit', code: 'tablets', name: 'tablets', sortOrder: 18, isActive: true },
+  { category: 'medicine_unit', code: 'capsules', name: 'capsules', sortOrder: 19, isActive: true },
+  { category: 'medicine_unit', code: 'drops', name: 'drops', sortOrder: 20, isActive: true },
+  { category: 'medicine_unit', code: 'vials', name: 'vials', sortOrder: 21, isActive: true },
+  { category: 'medicine_unit', code: 'sachets', name: 'sachets', sortOrder: 22, isActive: true },
 
   // 3. Routes
   { category: 'route', code: 'po_oral', name: 'PO (Oral)', sortOrder: 1, isActive: true },
@@ -248,6 +258,23 @@ export async function ensureMasterDataSeeded(): Promise<void> {
           defaultPricePaisa: existing.defaultPricePaisa || govItem.defaultPricePaisa,
           updatedAt: now,
         });
+      }
+    }
+
+    // Ensure standard medicine units (including bolus/boli, tablet, etc.) exist in pre-existing databases
+    for (const unitItem of DEFAULT_MASTER_DATA.filter((i) => i.category === 'medicine_unit')) {
+      const existing = await db.masterDataItems
+        .where('category')
+        .equals('medicine_unit')
+        .and((i) => i.name.toLowerCase() === unitItem.name.toLowerCase())
+        .first();
+
+      if (!existing) {
+        await db.masterDataItems.add({
+          ...unitItem,
+          createdAt: now,
+          updatedAt: now,
+        } as MasterDataItem);
       }
     }
   } catch (err) {

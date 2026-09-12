@@ -402,14 +402,25 @@ export const PrescriptionsListPage: React.FC = () => {
                           >
                             View
                           </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => navigate(`/prescriptions/${rx.id}/edit`)}
-                            title="Edit Prescription"
-                          >
-                            Edit
-                          </button>
+                          {rx.status === 'Draft' ? (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => navigate(`/prescriptions/${rx.id}/edit`)}
+                              title="Edit Draft Prescription"
+                            >
+                              Edit
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => navigate(`/prescriptions/new?cloneFrom=${rx.id}`)}
+                              title="Clone Prescription to create a new clinical record"
+                            >
+                              Clone
+                            </button>
+                          )}
                           <Link
                             to={`/prescriptions/${rx.id}`}
                             className="btn btn-ghost btn-sm btn-icon"

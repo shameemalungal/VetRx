@@ -21,9 +21,24 @@ import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFor
 import {
   calculateSmartDose,
   validateDoseRange,
+  getDosesPerDay,
 } from '../../utils/doseCalculator';
-import type { DoseCalculationResult } from '../../utils/doseCalculator';
 import './Prescriptions.css';
+
+function extractNumericDose(val?: string | number): string {
+  if (val === undefined || val === null) return '1';
+  if (typeof val === 'number') return String(val);
+  const trimmed = String(val).trim();
+  const match = trimmed.match(/^([0-9]+(?:\.[0-9]+)?)/);
+  return match ? match[1] : (trimmed || '1');
+}
+
+function extractDoseUnit(val?: string): string | undefined {
+  if (!val) return undefined;
+  const trimmed = val.trim();
+  const match = trimmed.match(/^[0-9]+(?:\.[0-9]+)?\s*(.+)$/);
+  return match ? match[1].trim() : undefined;
+}
 
 interface PrescriptionBuilderPageProps {
   mode: 'new' | 'edit';
@@ -36,7 +51,7 @@ interface DraftItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
-  dose?: string; // Veterinarian-approved calculated or custom dose
+  dose?: string; // Veterinarian-approved numeric dose value (e.g. "1", "240")
   quantity: number;
   unit: string;
   frequency: string;
@@ -159,21 +174,32 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     brandName: '',
     genericName: '',
     presentation: 'Tablet',
-    doseUnit: '1 tablet',
+    dose: '1',
     route: 'PO (Oral)',
     frequency: 'BID (q12h)',
     durationDays: 5,
     quantity: 10,
-    unit: 'tabs',
+    unit: 'tablet',
     directions: 'Give after food with drinking water. Complete full course.',
   });
 
-  // Smart Dose Calculation States (Phase 7)
-  const [calcResult, setCalcResult] = useState<DoseCalculationResult | null>(null);
+  // Optional Dose Calculation Section States (UAT Issue 3 & 4)
+  const [isDoseCalcOpen, setIsDoseCalcOpen] = useState(false);
+  const [calcWeight, setCalcWeight] = useState<string>('');
+  const [calcDosePerKg, setCalcDosePerKg] = useState<string>('');
+  const [calcDoseUnit, setCalcDoseUnit] = useState<string>('mg');
+  const [calcStrength, setCalcStrength] = useState<string>('');
+  const [calcStrengthUnit, setCalcStrengthUnit] = useState<string>('mg');
+  const [calcBaseVolume, setCalcBaseVolume] = useState<string>('1');
+  const [calcVolumeUnit, setCalcVolumeUnit] = useState<string>('mL');
+  const [calcFrequency, setCalcFrequency] = useState<string>('BID (q12h)');
+  const [calcDurationDays, setCalcDurationDays] = useState<number>(5);
   const [inlineWeight, setInlineWeight] = useState<string>('');
   const [rangeValidationWarning, setRangeValidationWarning] = useState<string | null>(null);
   const [userModifiedDose, setUserModifiedDose] = useState<boolean>(false);
-  const [isSavingPatientWeight, setIsSavingPatientWeight] = useState<boolean>(false);
+
+  // Generation confirmation modal state (UAT Issue 7)
+  const [showIssueConfirmModal, setShowIssueConfirmModal] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
@@ -239,26 +265,35 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   }, [masterFrequencies, medForm.frequency]);
 
   const availableUnits = useMemo(() => {
-    const fallback = [
-      'tablets',
-      'capsules',
-      'ml',
-      'drops',
-      'vial',
-      'vials',
-      'sachets',
-      'bottle',
-      'pipette',
-      'tube',
+    const defaultUnits = [
+      'tablet',
+      'capsule',
+      'mL',
+      'L',
       'mg',
+      'g',
+      'mcg',
+      'IU',
+      'vial',
+      'ampoule',
+      'bottle',
+      'sachet',
+      'drop',
+      'tube',
+      'bolus/boli',
+      'pipette',
       'pack',
+      'tabs',
+      'caps',
+      'ml',
     ];
-    if (!masterUnits || masterUnits.length === 0) return fallback;
+    if (!masterUnits || masterUnits.length === 0) return defaultUnits;
     const active = masterUnits.filter((u) => u.isActive).map((u) => u.name);
-    if (medForm.unit && !active.includes(medForm.unit)) {
-      active.push(medForm.unit);
+    const merged = Array.from(new Set([...defaultUnits, ...active]));
+    if (medForm.unit && !merged.includes(medForm.unit)) {
+      merged.push(medForm.unit);
     }
-    return active.length > 0 ? active : fallback;
+    return merged.length > 0 ? merged : defaultUnits;
   }, [masterUnits, medForm.unit]);
 
   // Map lookups
@@ -378,27 +413,89 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     });
   }, [allPatients, ownersMap, animalSearch, speciesFilter]);
 
+  // ── Calculated metrics for Optional Dose Calculation Section (UAT 4) ──
+  const doseCalcMetrics = useMemo(() => {
+    const w = parseFloat(calcWeight) || 0;
+    const dpk = parseFloat(calcDosePerKg) || 0;
+    const calculatedDose = w > 0 && dpk > 0 ? w * dpk : 0;
+
+    const str = parseFloat(calcStrength) || 0;
+    const bVol = parseFloat(calcBaseVolume) || 1;
+    const calculatedVolume = str > 0 && calculatedDose > 0 ? (calculatedDose / str) * bVol : 0;
+
+    const dosesPerDay = getDosesPerDay(calcFrequency) || 1;
+    const totalDispenseQty =
+      calculatedVolume > 0 && calcDurationDays > 0
+        ? Math.ceil(calculatedVolume * dosesPerDay * calcDurationDays)
+        : calculatedDose > 0 && calcDurationDays > 0
+        ? Math.ceil(dosesPerDay * calcDurationDays)
+        : 0;
+
+    return {
+      calculatedDose,
+      calculatedVolume,
+      dosesPerDay,
+      totalDispenseQty,
+    };
+  }, [calcWeight, calcDosePerKg, calcStrength, calcBaseVolume, calcFrequency, calcDurationDays]);
+
+  const handleApplyDoseCalculation = () => {
+    const { calculatedDose, calculatedVolume, totalDispenseQty } = doseCalcMetrics;
+    if (calculatedVolume > 0) {
+      const roundedDose = Math.round(calculatedVolume * 100) / 100;
+      setMedForm((prev) => ({
+        ...prev,
+        dose: String(roundedDose),
+        unit: calcVolumeUnit || prev.unit,
+        quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+        frequency: calcFrequency,
+        durationDays: calcDurationDays,
+      }));
+    } else if (calculatedDose > 0) {
+      const roundedDose = Math.round(calculatedDose * 100) / 100;
+      setMedForm((prev) => ({
+        ...prev,
+        dose: String(roundedDose),
+        unit: calcDoseUnit || prev.unit,
+        quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+        frequency: calcFrequency,
+        durationDays: calcDurationDays,
+      }));
+    }
+    setUserModifiedDose(true);
+  };
+
   // ── Modal Handlers (Integrated Smart Dose Calculator - Phase 7) ──
   const openAddMedModal = () => {
     setEditingItemIndex(null);
     setSelectedMedRef(null);
     setMedModalSearch('');
-    setCalcResult(null);
     setUserModifiedDose(false);
     setRangeValidationWarning(null);
     const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
     setInlineWeight(currWeight);
+    setCalcWeight(currWeight);
+    setCalcDosePerKg('');
+    setCalcDoseUnit('mg');
+    setCalcStrength('');
+    setCalcStrengthUnit('mg');
+    setCalcBaseVolume('1');
+    setCalcVolumeUnit('mL');
+    setCalcFrequency('BID (q12h)');
+    setCalcDurationDays(5);
+    setIsDoseCalcOpen(false);
+
     setMedForm({
       brandName: '',
       genericName: '',
       presentation: 'Tablet',
-      doseUnit: '1 tablet',
+      dose: '1',
       route: 'PO (Oral)',
       frequency: 'BID (q12h)',
       durationDays: 5,
       quantity: 10,
-      unit: 'tabs',
-      directions: 'Give after food with water. Complete full course.',
+      unit: 'tablet',
+      directions: 'Give after food with drinking water. Complete full course.',
     });
     setModalOpen(true);
   };
@@ -413,27 +510,47 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     setMedModalSearch(itm.brandName);
     const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
     setInlineWeight(currWeight);
+    setCalcWeight(currWeight);
     setUserModifiedDose(true); // Preserve doctor's approved dose
     setRangeValidationWarning(null);
 
+    const numericDose = extractNumericDose(itm.dose);
+    const doseUnit = extractDoseUnit(itm.dose) || itm.unit || 'tablet';
+
     if (matched) {
-      const weightNum = currWeight ? parseFloat(currWeight) : undefined;
-      const res = calculateSmartDose(matched, weightNum, selectedPatient?.species);
-      setCalcResult(res);
+      setCalcDosePerKg(matched.dosePerKg ? String(matched.dosePerKg) : '');
+      setCalcDoseUnit(matched.doseUnit || 'mg');
+      setCalcStrength(matched.concentrationStrength ? String(matched.concentrationStrength) : '');
+      setCalcStrengthUnit(matched.concentrationStrengthUnit || 'mg');
+      setCalcBaseVolume(matched.concentrationVolume ? String(matched.concentrationVolume) : '1');
+      setCalcVolumeUnit(matched.concentrationVolumeUnit || 'mL');
+      setCalcFrequency(itm.frequency || matched.defaultFrequency || 'BID (q12h)');
+      setCalcDurationDays(itm.durationDays || matched.defaultDurationDays || 5);
+      if (matched.dosingMethod && matched.dosingMethod !== 'none') {
+        setIsDoseCalcOpen(true);
+      }
     } else {
-      setCalcResult(null);
+      setCalcDosePerKg('');
+      setCalcDoseUnit('mg');
+      setCalcStrength('');
+      setCalcStrengthUnit('mg');
+      setCalcBaseVolume('1');
+      setCalcVolumeUnit('mL');
+      setCalcFrequency(itm.frequency || 'BID (q12h)');
+      setCalcDurationDays(itm.durationDays || 5);
+      setIsDoseCalcOpen(false);
     }
 
     setMedForm({
       brandName: itm.brandName,
       genericName: itm.genericName || '',
       presentation: itm.presentation || 'Tablet',
-      doseUnit: itm.dose || itm.strengthVolume || '1 tablet',
+      dose: numericDose,
       route: itm.route || 'PO (Oral)',
       frequency: itm.frequency || 'BID (q12h)',
       durationDays: itm.durationDays || 5,
       quantity: itm.quantity,
-      unit: itm.unit,
+      unit: doseUnit,
       directions: itm.directions || '',
     });
     setModalOpen(true);
@@ -447,14 +564,29 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     const weightNum = inlineWeight ? parseFloat(inlineWeight) : selectedPatient?.weightKg;
     const res = calculateSmartDose(med, weightNum, selectedPatient?.species);
-    setCalcResult(res);
 
-    const calculatedDose = res.formattedDoseString || med.strengthVolume || '1 tablet';
+    // Populate dose calculator fields from medicine formulary data
+    setCalcWeight(inlineWeight || (selectedPatient?.weightKg ? String(selectedPatient.weightKg) : ''));
+    setCalcDosePerKg(med.dosePerKg ? String(med.dosePerKg) : '');
+    setCalcDoseUnit(med.doseUnit || 'mg');
+    setCalcStrength(med.concentrationStrength ? String(med.concentrationStrength) : '');
+    setCalcStrengthUnit(med.concentrationStrengthUnit || 'mg');
+    setCalcBaseVolume(med.concentrationVolume ? String(med.concentrationVolume) : '1');
+    setCalcVolumeUnit(med.concentrationVolumeUnit || 'mL');
+    setCalcFrequency(med.defaultFrequency || 'BID (q12h)');
+    setCalcDurationDays(med.defaultDurationDays || 5);
+    if (med.dosingMethod && med.dosingMethod !== 'none') {
+      setIsDoseCalcOpen(true);
+    }
+
+    const calculatedDoseStr = res.formattedDoseString || med.strengthVolume || '1 tablet';
+    const numericDose = extractNumericDose(calculatedDoseStr);
+    const doseUnit = extractDoseUnit(calculatedDoseStr) || res.quantityUnit || med.defaultUnit || 'tablet';
+
     const chosenRoute = res.suggestedRoute || med.defaultRoute || 'PO (Oral)';
     const chosenFreq = res.suggestedFrequency || med.defaultFrequency || 'BID (q12h)';
     const chosenDur = res.suggestedDurationDays || med.defaultDurationDays || 5;
     const chosenQty = res.calculatedQuantity !== undefined ? res.calculatedQuantity : 10;
-    const chosenUnit = res.quantityUnit || med.defaultUnit || 'tabs';
     const chosenDir = res.suggestedDirections || med.defaultDirections || 'Give after food with water. Complete full course.';
 
     setMedForm((prev) => ({
@@ -462,59 +594,48 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: med.brandName,
       genericName: med.genericName || '',
       presentation: med.presentation,
-      doseUnit: calculatedDose,
+      dose: numericDose,
       route: chosenRoute,
       frequency: chosenFreq,
       durationDays: chosenDur,
       quantity: chosenQty,
-      unit: chosenUnit,
+      unit: doseUnit,
       directions: chosenDir,
     }));
   };
 
   const handleInlineWeightChange = (newWeightStr: string) => {
     setInlineWeight(newWeightStr);
+    setCalcWeight(newWeightStr);
     const weightNum = parseFloat(newWeightStr);
     if (selectedMedRef) {
       const res = calculateSmartDose(selectedMedRef, isNaN(weightNum) ? undefined : weightNum, selectedPatient?.species);
-      setCalcResult(res);
 
       if (!userModifiedDose && res.formattedDoseString) {
+        const numericDose = extractNumericDose(res.formattedDoseString);
+        const doseUnit = extractDoseUnit(res.formattedDoseString) || res.quantityUnit || prevUnit(selectedMedRef);
         setMedForm((prev) => ({
           ...prev,
-          doseUnit: res.formattedDoseString,
+          dose: numericDose,
           quantity: res.calculatedQuantity !== undefined ? res.calculatedQuantity : prev.quantity,
-          unit: res.quantityUnit || prev.unit,
+          unit: doseUnit || prev.unit,
         }));
       }
     }
   };
 
-  const handleSavePatientWeight = async () => {
-    if (!selectedPatient?.id || !inlineWeight) return;
-    const num = parseFloat(inlineWeight);
-    if (isNaN(num) || num <= 0) return;
-    setIsSavingPatientWeight(true);
-    try {
-      await db.patients.update(selectedPatient.id, {
-        weightKg: num,
-        updatedAt: new Date(),
-      });
-    } catch (e) {
-      console.error('Failed to update patient weight:', e);
-    } finally {
-      setIsSavingPatientWeight(false);
-    }
-  };
+  const prevUnit = (med?: Medicine | null) => med?.defaultUnit || 'tablet';
 
   const handleDoseInputChange = (val: string) => {
     setUserModifiedDose(true);
-    setMedForm((prev) => ({ ...prev, doseUnit: val }));
+    // Allow only numeric and decimal point characters (UAT Issue 3)
+    const cleanNum = val.replace(/[^0-9.]/g, '');
+    setMedForm((prev) => ({ ...prev, dose: cleanNum }));
 
     // Check min/max dose validation if configured
     if (selectedMedRef && (selectedMedRef.minDosePerKg || selectedMedRef.maxDosePerKg)) {
       const weightNum = inlineWeight ? parseFloat(inlineWeight) : selectedPatient?.weightKg;
-      const numericEntered = parseFloat(val);
+      const numericEntered = parseFloat(cleanNum);
       if (!isNaN(numericEntered) && weightNum && weightNum > 0) {
         const minVal = selectedMedRef.minDosePerKg ? selectedMedRef.minDosePerKg * weightNum : undefined;
         const maxVal = selectedMedRef.maxDosePerKg ? selectedMedRef.maxDosePerKg * weightNum : undefined;
@@ -541,15 +662,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       return;
     }
 
+    const numericApprovedDose = medForm.dose.trim() || '1';
+    const formattedStrengthVolume = selectedMedRef?.strengthVolume || `${numericApprovedDose} ${medForm.unit}`;
+
     const newItem: DraftItem = {
       medicineId: selectedMedRef?.id,
       brandName: brand,
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
-      dose: medForm.doseUnit,
-      strengthVolume: selectedMedRef?.strengthVolume || medForm.doseUnit,
+      dose: numericApprovedDose,
+      strengthVolume: formattedStrengthVolume,
       quantity: Number(medForm.quantity) || 1,
-      unit: medForm.unit || 'units',
+      unit: medForm.unit || 'tablet',
       frequency: medForm.frequency,
       durationDays: Number(medForm.durationDays) || 5,
       route: medForm.route,
@@ -689,6 +813,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       return;
     }
 
+    // UAT Issue 7: Show confirmation warning before issuing
+    if (targetStatus === 'Issued') {
+      setShowIssueConfirmModal(true);
+      return;
+    }
+
+    await executeSave('Draft');
+  };
+
+  const executeSave = async (targetStatus: 'Draft' | 'Issued') => {
     setIsSaving(true);
 
     try {
@@ -706,12 +840,19 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         return;
       }
 
+      if (!selectedPatientId) {
+        setErrorMsg('Please select a patient animal before proceeding.');
+        setIsSaving(false);
+        return;
+      }
+      const safePatientId: number = selectedPatientId;
+
       let rxId: number;
 
       if (mode === 'edit' && id) {
         rxId = parseInt(id, 10);
         await db.prescriptions.update(rxId, {
-          patientId: selectedPatientId,
+          patientId: safePatientId,
           ownerId,
           practitionerId,
           symptoms: symptoms.trim() || undefined,
@@ -739,7 +880,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
         rxId = (await db.prescriptions.add({
           rxNumber,
-          patientId: selectedPatientId,
+          patientId: safePatientId,
           ownerId,
           practitionerId,
           symptoms: symptoms.trim() || undefined,
@@ -1677,7 +1818,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       className="btn btn-ghost btn-sm text-xs shrink-0"
                       onClick={() => {
                         setSelectedMedRef(null);
-                        setCalcResult(null);
                         setMedModalSearch('');
                       }}
                     >
@@ -1686,124 +1826,204 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   </div>
                 )}
 
-                {/* ── Smart Dose Calculation Panel (Phase 7) ────────────────── */}
-                {selectedMedRef && (
-                  <div className="rx-dose-calc-panel">
-                    <div className="rx-dose-calc-header">
-                      <div className="flex items-center gap-2">
-                        <div className="rx-dose-calc-icon">
-                          <Icon name="calculator" size={15} />
-                        </div>
-                        <span className="rx-dose-calc-title">Formulary Dose Calculation <span style={{ fontWeight: 500, opacity: 0.75 }}>(Optional)</span></span>
+                {/* ── Optional Dose Calculation Section (UAT Issue 3 & 4) ── */}
+                <div className="rx-dose-calc-accordion">
+                  <button
+                    type="button"
+                    className="rx-dose-calc-accordion-toggle"
+                    onClick={() => setIsDoseCalcOpen(!isDoseCalcOpen)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="rx-dose-calc-icon">
+                        <Icon name="calculator" size={15} />
                       </div>
-                      <span className={`rx-dose-calc-method-badge ${selectedMedRef.dosingMethod || 'none'}`}>
-                        {selectedMedRef.dosingMethod === 'weight_based' && 'Weight-Based (mg/kg)'}
-                        {selectedMedRef.dosingMethod === 'weight_range' && 'Weight-Based Range'}
-                        {selectedMedRef.dosingMethod === 'weight_band' && 'Weight-Band Tier'}
-                        {selectedMedRef.dosingMethod === 'fixed' && 'Fixed Dose'}
-                        {(!selectedMedRef.dosingMethod || selectedMedRef.dosingMethod === 'none') && 'Manual Dosing'}
-                      </span>
+                      <div className="text-left">
+                        <span className="rx-dose-calc-title">Optional dose calculation</span>
+                        <span className="rx-dose-calc-subtitle">Weight-based dose, concentration &amp; quantity calculator</span>
+                      </div>
                     </div>
+                    <div className="flex items-center gap-1 text-xs text-outline font-medium">
+                      <span>{isDoseCalcOpen ? 'Hide calculator' : 'Show calculator'}</span>
+                      <Icon name={isDoseCalcOpen ? 'chevron-up' : 'chevron-down'} size={14} />
+                    </div>
+                  </button>
 
-                    <div className="rx-dose-calc-body">
-                      {/* Patient Weight row */}
-                      <div className="rx-dose-calc-patient-row">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-on-surface">Patient Weight:</span>
+                  {isDoseCalcOpen && (
+                    <div className="rx-dose-calc-accordion-body">
+                      {/* Row 1: Weight, Dose per kg, Dose Unit, Calculated Dose */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>1. Patient Weight (kg)</label>
                           <div className="rx-inline-weight-box">
                             <input
                               type="number"
                               step="any"
-                              className="rx-inline-weight-input"
+                              className="form-input"
                               placeholder="e.g. 24"
-                              value={inlineWeight}
-                              onChange={(e) => handleInlineWeightChange(e.target.value)}
+                              value={calcWeight}
+                              onChange={(e) => {
+                                setCalcWeight(e.target.value);
+                                handleInlineWeightChange(e.target.value);
+                              }}
                             />
                             <span className="rx-inline-weight-unit">kg</span>
                           </div>
-                          {selectedPatient && !selectedPatient.weightKg && inlineWeight && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm text-xs text-primary"
-                              style={{ height: '26px', padding: '0 8px' }}
-                              onClick={handleSavePatientWeight}
-                              disabled={isSavingPatientWeight}
-                              title="Save weight to patient profile"
-                            >
-                              <Icon name="check" size={12} />
-                              <span>{isSavingPatientWeight ? 'Saving...' : 'Save to Patient'}</span>
-                            </button>
-                          )}
                         </div>
-                        {selectedPatient?.species && (
-                          <span className="text-xs font-medium text-outline">
-                            Species: <strong className="text-on-surface">{selectedPatient.species}</strong>
-                          </span>
-                        )}
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>2. Dose per kg</label>
+                          <input
+                            type="number"
+                            step="any"
+                            className="form-input"
+                            placeholder="e.g. 10"
+                            value={calcDosePerKg}
+                            onChange={(e) => setCalcDosePerKg(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>3. Dose Unit</label>
+                          <select
+                            className="form-select"
+                            value={calcDoseUnit}
+                            onChange={(e) => setCalcDoseUnit(e.target.value)}
+                          >
+                            <option value="mg">mg</option>
+                            <option value="mcg">mcg</option>
+                            <option value="g">g</option>
+                            <option value="IU">IU</option>
+                            <option value="mL">mL</option>
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Dose</label>
+                          <div className="rx-calc-badge-display">
+                            {doseCalcMetrics.calculatedDose > 0
+                              ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}`
+                              : '—'}
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Warnings & Alerts */}
-                      {calcResult?.warningMessage && (
-                        <div className={`rx-dose-calc-alert ${calcResult.status === 'missing_weight' ? 'warning' : calcResult.status === 'species_mismatch' ? 'caution' : 'info'}`}>
-                          <Icon name={calcResult.status === 'species_mismatch' ? 'warning' : 'info'} size={14} />
-                          <span>{calcResult.warningMessage}</span>
+                      {/* Row 2: Concentration / Strength Formulation & Calculated Volume */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>5. Strength of Active Ingredient</label>
+                          <input
+                            type="number"
+                            step="any"
+                            className="form-input"
+                            placeholder="e.g. 5 or 250"
+                            value={calcStrength}
+                            onChange={(e) => setCalcStrength(e.target.value)}
+                          />
                         </div>
-                      )}
 
-                      {rangeValidationWarning && (
-                        <div className="rx-dose-calc-alert warning">
-                          <Icon name="warning" size={14} />
-                          <span>{rangeValidationWarning}</span>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>Unit of Active Ingredient</label>
+                          <select
+                            className="form-select"
+                            value={calcStrengthUnit}
+                            onChange={(e) => setCalcStrengthUnit(e.target.value)}
+                          >
+                            <option value="mg">mg</option>
+                            <option value="mcg">mcg</option>
+                            <option value="g">g</option>
+                            <option value="IU">IU</option>
+                          </select>
                         </div>
-                      )}
 
-                      {/* Transparent Calculation Display */}
-                      {calcResult && (calcResult.status === 'calculated' || calcResult.status === 'range' || calcResult.status === 'band' || calcResult.status === 'fixed') && (
-                        <div className="rx-dose-calc-metrics-card">
-                          <div className="rx-dose-calc-metrics-grid">
-                            <div>
-                              <span className="rx-calc-metric-label">Configured Dose Rule</span>
-                              <span className="rx-calc-metric-val">
-                                {selectedMedRef.dosingMethod === 'weight_based' && `${selectedMedRef.dosePerKg} ${selectedMedRef.doseUnit || 'mg'}/kg`}
-                                {selectedMedRef.dosingMethod === 'weight_range' && `${selectedMedRef.minDosePerKg}–${selectedMedRef.maxDosePerKg} ${selectedMedRef.doseUnit || 'mg'}/kg`}
-                                {selectedMedRef.dosingMethod === 'weight_band' && (calcResult.matchedBand?.label || `${calcResult.calculatedDoseValue} ${calcResult.calculatedDoseUnit}/dose`)}
-                                {selectedMedRef.dosingMethod === 'fixed' && `${selectedMedRef.fixedDose || 1} ${selectedMedRef.doseUnit || 'tablet'}/dose`}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="rx-calc-metric-label">Patient Weight</span>
-                              <span className="rx-calc-metric-val">
-                                {inlineWeight ? `${inlineWeight} kg` : (selectedPatient?.weightKg ? `${selectedPatient.weightKg} kg` : 'N/A')}
-                              </span>
-                            </div>
-
-                            <div>
-                              <span className="rx-calc-metric-label">Calculated Dose</span>
-                              <span className="rx-calc-metric-val highlight">
-                                {calcResult.formattedDoseString}
-                              </span>
-                            </div>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>Base Volume / Unit</label>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <input
+                              type="number"
+                              step="any"
+                              className="form-input"
+                              style={{ width: '60px', flexShrink: 0 }}
+                              placeholder="1"
+                              value={calcBaseVolume}
+                              onChange={(e) => setCalcBaseVolume(e.target.value)}
+                            />
+                            <select
+                              className="form-select"
+                              value={calcVolumeUnit}
+                              onChange={(e) => setCalcVolumeUnit(e.target.value)}
+                            >
+                              <option value="mL">mL</option>
+                              <option value="tablet">tablet</option>
+                              <option value="capsule">capsule</option>
+                              <option value="bolus/boli">bolus/boli</option>
+                              <option value="drop">drop</option>
+                              <option value="sachet">sachet</option>
+                            </select>
                           </div>
-
-                          {calcResult.formulaDisplay && (
-                            <div className="rx-calc-formula-line">
-                              <Icon name="info" size={12} />
-                              <span>{calcResult.formulaDisplay}</span>
-                            </div>
-                          )}
-
-                          {calcResult.quantityFormulaDisplay && (
-                            <div className="rx-calc-formula-line" style={{ marginTop: '2px', color: 'var(--color-primary)' }}>
-                              <Icon name="check" size={12} />
-                              <span>Dispense Conversion: {calcResult.quantityFormulaDisplay}</span>
-                            </div>
-                          )}
                         </div>
-                      )}
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>6. Calc. Volume / Qty per Dose</label>
+                          <div className="rx-calc-badge-display highlight">
+                            {doseCalcMetrics.calculatedVolume > 0
+                              ? `${Math.round(doseCalcMetrics.calculatedVolume * 100) / 100} ${calcVolumeUnit}`
+                              : (doseCalcMetrics.calculatedDose > 0 ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}` : '—')}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Row 3: Frequency, Duration, Total Quantity */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>7. Frequency</label>
+                          <select
+                            className="form-select"
+                            value={calcFrequency}
+                            onChange={(e) => setCalcFrequency(e.target.value)}
+                          >
+                            {availableFrequencies.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>8. Duration (Days)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            className="form-input"
+                            placeholder="e.g. 5"
+                            value={calcDurationDays}
+                            onChange={(e) => setCalcDurationDays(parseInt(e.target.value, 10) || 0)}
+                          />
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>9. Total Dispense Qty</label>
+                          <div className="rx-calc-badge-display grand">
+                            {doseCalcMetrics.totalDispenseQty > 0
+                              ? `${doseCalcMetrics.totalDispenseQty} ${calcVolumeUnit || medForm.unit}`
+                              : '—'}
+                          </div>
+                        </div>
+
+                        <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{ height: '38px', width: '100%', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                            onClick={handleApplyDoseCalculation}
+                            title="Apply calculated dose, unit, frequency, duration and quantity into prescription medicine fields"
+                          >
+                            <Icon name="check" size={14} />
+                            <span>Apply to Medicine</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {/* Quick suggestions from formulary when search field is empty */}
                 {(!medModalSearch.trim() || !selectedMedRef) && availableMedicines && availableMedicines.length > 0 && !selectedMedRef && (
@@ -1836,15 +2056,21 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   <label className="form-label">Approved Dose</label>
                   <input
                     type="text"
+                    inputMode="decimal"
                     className="form-input font-bold"
                     style={{ color: 'var(--color-primary)' }}
-                    placeholder="e.g. 240 mg, 1 tab"
-                    value={medForm.doseUnit}
+                    placeholder="e.g. 1, 2.5, 240"
+                    value={medForm.dose}
                     onChange={(e) => handleDoseInputChange(e.target.value)}
                   />
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                    Single dose amount (editable)
+                    Numeric dose value only
                   </span>
+                  {rangeValidationWarning && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '2px', display: 'block' }}>
+                      {rangeValidationWarning}
+                    </span>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -1859,7 +2085,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                    Dosage unit
+                    Dose &amp; dispense unit
                   </span>
                 </div>
 
@@ -1954,6 +2180,69 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               >
                 <Icon name="plus" size={16} />
                 <span>{editingItemIndex !== null ? 'Update Medicine' : 'Add to Prescription'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CONFIRM PRESCRIPTION GENERATION (UAT Issue 7) ──── */}
+      {showIssueConfirmModal && (
+        <div className="rx-modal-backdrop" onClick={() => setShowIssueConfirmModal(false)}>
+          <div className="rx-modal-dialog" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="rx-modal-header">
+              <div className="flex items-center gap-2">
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'rgba(180, 83, 9, 0.12)', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="warning" size={18} />
+                </div>
+                <div>
+                  <h3 className="font-heading font-bold text-base text-on-surface">
+                    Confirm Prescription Generation
+                  </h3>
+                  <span className="text-xs text-outline">Final medical document sign-off</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon btn-sm"
+                onClick={() => setShowIssueConfirmModal(false)}
+              >
+                <Icon name="x-mark" size={18} />
+              </button>
+            </div>
+
+            <div className="rx-modal-body" style={{ padding: '20px 24px' }}>
+              <div style={{ background: 'rgba(180, 83, 9, 0.08)', border: '1px solid rgba(180, 83, 9, 0.3)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <Icon name="warning" size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface)', fontWeight: 500 }}>
+                  No editing will be allowed after generating. If you want to edit, use Save Draft.
+                </div>
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--color-outline)', marginTop: '12px', lineHeight: 1.4 }}>
+                Generating will assign an official permanent Rx number, lock clinical findings, and make the prescription printable for client dispensing.
+              </p>
+            </div>
+
+            <div className="rx-modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowIssueConfirmModal(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowIssueConfirmModal(false);
+                  void executeSave('Issued');
+                }}
+                disabled={isSaving}
+              >
+                <Icon name="check-circle" size={16} />
+                <span>{isSaving ? 'Generating...' : 'Generate Prescription'}</span>
               </button>
             </div>
           </div>

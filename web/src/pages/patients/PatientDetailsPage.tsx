@@ -145,28 +145,48 @@ export const PatientDetailsPage: React.FC = () => {
           <span className="text-on-surface font-semibold">{formatOwnerPrimary(owner, 'Client')} — {!isArtificialOrBlankName(patient.name) ? patient.name : patient.species}</span>
         </nav>
 
-        <div className="flex items-center gap-space-sm flex-wrap">
-          <Link to={`/prescriptions/new?patientId=${patient.id}`} className="btn btn-primary" style={{ background: '#15803d', borderColor: '#15803d' }}>
-            <Icon name="plus" size={15} /> Add New Prescription
-          </Link>
-          <Link to={`/invoices/new?patientId=${patient.id}`} className="btn btn-primary" style={{ background: '#15803d', borderColor: '#15803d' }}>
-            <Icon name="plus" size={15} /> Add New Invoice/Receipt
-          </Link>
-          <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary btn-sm" id="btn-edit-patient">
-            <Icon name="edit" size={15} />
-            <span>Edit Patient</span>
-          </Link>
-          {owner?.id && (
+        <div className="flex items-center gap-space-md flex-wrap">
+          {/* Group 1: Clinical / Billing Actions */}
+          <div className="flex items-center gap-space-xs flex-wrap">
             <Link
-              to={`/patients/new?ownerId=${owner.id}`}
-              className="btn btn-primary btn-sm"
-              id="btn-add-sibling-animal"
-              title={`Add another animal for ${owner.name}`}
+              to={`/prescriptions/new?patientId=${patient.id}`}
+              className="btn btn-primary"
+              id="btn-add-new-rx"
+              style={{ background: '#15803d', borderColor: '#15803d', color: '#ffffff', fontWeight: 600 }}
             >
-              <Icon name="plus" size={15} />
-              <span>Add Another Animal</span>
+              <Icon name="plus" size={15} /> Add New Rx
             </Link>
-          )}
+            <Link
+              to={`/invoices/new?patientId=${patient.id}`}
+              className="btn btn-primary"
+              id="btn-add-new-invoice"
+              style={{ background: '#15803d', borderColor: '#15803d', color: '#ffffff', fontWeight: 600 }}
+            >
+              <Icon name="plus" size={15} /> Add New Invoice/Receipt
+            </Link>
+          </div>
+
+          {/* Visual Divider */}
+          <div style={{ width: '1px', height: '28px', background: 'var(--color-outline-variant)', margin: '0 4px' }} className="hidden sm:block" />
+
+          {/* Group 2: Patient Record Management */}
+          <div className="flex items-center gap-space-xs flex-wrap">
+            <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary" id="btn-edit-patient">
+              <Icon name="edit" size={15} />
+              <span>Edit Patient</span>
+            </Link>
+            {owner?.id && (
+              <Link
+                to={`/patients/new?ownerId=${owner.id}`}
+                className="btn btn-secondary"
+                id="btn-add-sibling-animal"
+                title={`Add another animal for ${owner.name}`}
+              >
+                <Icon name="plus" size={15} />
+                <span>Add Another Animal</span>
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 

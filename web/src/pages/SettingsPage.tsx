@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
+import { db } from '../db/schema';
 import { Icon } from '../components/ui/Icon';
 import './SettingsPage.css';
 
@@ -151,7 +152,7 @@ function PractitionerSection() {
               type="text"
               value={form.name}
               onChange={update('name')}
-              placeholder="Dr. Sarah Jenkins"
+              placeholder="Dr. Full Name"
               required
               autoComplete="name"
             />
@@ -785,6 +786,93 @@ function OrganisationSection() {
 
 import { MasterDataSection } from './MasterDataSection';
 
+// ── Developer Data Reset Section ─────────────────────────────
+function DeveloperDataResetSection() {
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
+  const handleReset = async () => {
+    const confirmed = window.confirm(
+      'This will clear local patient, prescription, and invoice consultation records. Formulary medicines and master settings will remain intact. This action cannot be undone. Do you want to proceed?'
+    );
+    if (!confirmed) return;
+
+    setIsResetting(true);
+    try {
+      await db.transaction('rw', [db.patients, db.owners, db.prescriptions, db.prescriptionItems, db.invoices, db.invoiceItems], async () => {
+        await db.prescriptionItems.clear();
+        await db.prescriptions.clear();
+        await db.invoiceItems.clear();
+        await db.invoices.clear();
+        await db.patients.clear();
+        await db.owners.clear();
+      });
+      localStorage.removeItem('vetrx_demo_mode');
+      setResetMessage('Clinical patient and consultation records cleared successfully.');
+      setTimeout(() => setResetMessage(null), 4000);
+    } catch (err) {
+      console.error('Failed to reset records:', err);
+      alert('Failed to reset records.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  return (
+    <section className="settings-section card" style={{ marginTop: '24px', borderColor: 'rgba(186, 26, 26, 0.2)' }}>
+      <div className="card-header" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <div className="section-title-wrap">
+          <div className="section-title flex items-center gap-2" style={{ color: 'var(--color-error)' }}>
+            <Icon name="trash" size={18} />
+            <span>Developer Reset / Clean Database</span>
+          </div>
+          <div className="section-sub">
+            Clear locally saved test patients, prescriptions, and invoices to test fresh, clean clinical workflows without fictional data.
+          </div>
+        </div>
+      </div>
+      <div className="card-body">
+        <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginBottom: '16px', lineHeight: 1.5 }}>
+          This will wipe all local test patients, owners, prescriptions, and invoices while keeping your practitioner settings, clinic details, and master medicine formulary intact.
+        </p>
+
+        {resetMessage && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(0, 104, 95, 0.1)',
+              color: 'var(--color-primary)',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '16px',
+            }}
+          >
+            {resetMessage}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={handleReset}
+          disabled={isResetting}
+          style={{
+            borderColor: 'rgba(186, 26, 26, 0.4)',
+            color: 'var(--color-error)',
+            fontWeight: 600,
+          }}
+        >
+          <Icon name="trash" size={16} />
+          <span>{isResetting ? 'Resetting Records…' : 'Reset to Clean State'}</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ── Main SettingsPage Component ────────────────────────────────
+
 export const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'master-data'>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -846,6 +934,7 @@ export const SettingsPage: React.FC = () => {
         <div className="settings-sections">
           <PractitionerSection />
           <OrganisationSection />
+          <DeveloperDataResetSection />
         </div>
       ) : (
         <MasterDataSection />

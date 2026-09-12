@@ -3,7 +3,7 @@
 // Seamlessly integrates with Settings → Master Data (Medicine Units)
 // =============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Medicine, Species, DosingMethod, WeightBandRule } from '../../types';
@@ -65,6 +65,60 @@ const FALLBACK_UNITS = [
   'pack',
 ];
 
+const DEFAULT_ACTIVE_INGREDIENT_UNITS = [
+  'mg',
+  'g',
+  'mcg',
+  'IU',
+  'mL',
+  'tablets',
+  'capsules',
+  'sachets',
+  'drops',
+  'Other',
+];
+
+const DEFAULT_VOLUME_UNITS = [
+  'mL',
+  'L',
+  'tablet',
+  'capsule',
+  'drop',
+  'vial',
+  'ampoule',
+  'bottle',
+  'sachet',
+  'tube',
+  'bolus/boli',
+  'Other',
+];
+
+const FALLBACK_ROUTES = [
+  'PO (Oral)',
+  'Topical',
+  'Otic',
+  'Ophthalmic',
+  'SC (Subcutaneous)',
+  'IM (Intramuscular)',
+  'IV (Intravenous)',
+  'Inhalation',
+  'Intranasal',
+  'Rectal',
+  'Other',
+];
+
+const FALLBACK_FREQUENCIES = [
+  'SID (q24h / Once daily)',
+  'BID (q12h / Twice daily)',
+  'TID (q8h / 3x daily)',
+  'QID (q6h / 4x daily)',
+  'PRN (As needed)',
+  'Once',
+  'Single Dose',
+  'EOD (Every other day)',
+  'Other',
+];
+
 export function MedicineFormModal({
   isOpen,
   medicine,
@@ -77,6 +131,26 @@ export function MedicineFormModal({
       db.masterDataItems
         .where('category')
         .equals('medicine_unit')
+        .and((item) => item.isActive)
+        .sortBy('sortOrder'),
+    []
+  );
+
+  const masterRoutes = useLiveQuery(
+    () =>
+      db.masterDataItems
+        .where('category')
+        .equals('route')
+        .and((item) => item.isActive)
+        .sortBy('sortOrder'),
+    []
+  );
+
+  const masterFrequencies = useLiveQuery(
+    () =>
+      db.masterDataItems
+        .where('category')
+        .equals('frequency')
         .and((item) => item.isActive)
         .sortBy('sortOrder'),
     []
@@ -118,6 +192,51 @@ export function MedicineFormModal({
   const [defaultFrequency, setDefaultFrequency] = useState<string>('BID');
   const [defaultDurationDays, setDefaultDurationDays] = useState<string>('5');
   const [defaultDirections, setDefaultDirections] = useState<string>('');
+
+  // Other dropdown selection states
+  const [isOtherRoute, setIsOtherRoute] = useState(false);
+  const [isOtherFrequency, setIsOtherFrequency] = useState(false);
+  const [isOtherStrengthUnit, setIsOtherStrengthUnit] = useState(false);
+  const [isOtherVolumeUnit, setIsOtherVolumeUnit] = useState(false);
+
+  // Predefined veterinary options with preserved saved values
+  const routeOptions = useMemo(() => {
+    const list = masterRoutes && masterRoutes.length > 0
+      ? masterRoutes.map((r) => r.name)
+      : FALLBACK_ROUTES.filter((r) => r !== 'Other');
+    const set = new Set(list);
+    if (defaultRoute && defaultRoute !== 'Other' && !set.has(defaultRoute)) {
+      set.add(defaultRoute);
+    }
+    return [...Array.from(set), 'Other'];
+  }, [masterRoutes, defaultRoute]);
+
+  const frequencyOptions = useMemo(() => {
+    const list = masterFrequencies && masterFrequencies.length > 0
+      ? masterFrequencies.map((f) => f.name)
+      : FALLBACK_FREQUENCIES.filter((f) => f !== 'Other');
+    const set = new Set(list);
+    if (defaultFrequency && defaultFrequency !== 'Other' && !set.has(defaultFrequency)) {
+      set.add(defaultFrequency);
+    }
+    return [...Array.from(set), 'Other'];
+  }, [masterFrequencies, defaultFrequency]);
+
+  const activeIngredientUnitOptions = useMemo(() => {
+    const set = new Set(DEFAULT_ACTIVE_INGREDIENT_UNITS.filter((u) => u !== 'Other'));
+    if (concentrationStrengthUnit && concentrationStrengthUnit !== 'Other' && !set.has(concentrationStrengthUnit)) {
+      set.add(concentrationStrengthUnit);
+    }
+    return [...Array.from(set), 'Other'];
+  }, [concentrationStrengthUnit]);
+
+  const volumeUnitOptions = useMemo(() => {
+    const set = new Set(DEFAULT_VOLUME_UNITS.filter((u) => u !== 'Other'));
+    if (concentrationVolumeUnit && concentrationVolumeUnit !== 'Other' && !set.has(concentrationVolumeUnit)) {
+      set.add(concentrationVolumeUnit);
+    }
+    return [...Array.from(set), 'Other'];
+  }, [concentrationVolumeUnit]);
 
   // Errors & loading
   const [errors, setErrors] = useState<{ brandName?: string; presentation?: string }>({});
@@ -775,14 +894,21 @@ export function MedicineFormModal({
                             </div>
                           </div>
                         )}
+                      </>
+                    )}
 
-                        {/* EXPLICIT FORMULATION CONVERSION (Optional) */}
-                        <div className="medicine-form-group full-width" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
+                    {/* EXPLICIT FORMULATION CONVERSION (Always visible for any medicine) */}
+                    <div className="medicine-form-group full-width" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
                           <label className="medicine-form-label">
                             Formulation Strength & Practical Quantity Conversion (Optional)
                           </label>
-                          <div style={{ fontSize: '12px', color: 'var(--color-on-surface)', marginBottom: '8px', lineHeight: 1.5 }}>
-                            <strong>What these fields mean:</strong> enter the strength of the active ingredient and the base quantity against which it is expressed. Example: <strong>Meloxicam 5 mg/1 mL</strong> means Strength of active ingredient = 5, Unit of active ingredient = mg, Base Volume = 1, Volume Unit = mL. VetRx uses this only for optional dose-to-quantity conversion.
+                          <div style={{ fontSize: '12px', color: 'var(--color-on-surface)', marginBottom: '8px', lineHeight: 1.5, background: 'var(--color-surface-container-low)', padding: '8px 12px', borderRadius: 'var(--radius-md)' }}>
+                            <strong>Visible example:</strong><br />
+                            Meloxicam 5 mg/1 mL<br />
+                            Strength of active ingredient: 5<br />
+                            Unit of active ingredient: mg<br />
+                            Base Volume: 1<br />
+                            Volume Unit: mL
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'end' }}>
                             <div>
@@ -798,15 +924,74 @@ export function MedicineFormModal({
                             </div>
                             <div>
                               <label className="medicine-form-label">Unit of active ingredient</label>
-                              <input type="text" className="medicine-form-input" placeholder="Example: mg" value={concentrationStrengthUnit} onChange={(e) => setConcentrationStrengthUnit(e.target.value)} />
+                              <select
+                                className="medicine-form-select"
+                                value={isOtherStrengthUnit ? 'Other' : concentrationStrengthUnit}
+                                onChange={(e) => {
+                                  if (e.target.value === 'Other') {
+                                    setIsOtherStrengthUnit(true);
+                                  } else {
+                                    setIsOtherStrengthUnit(false);
+                                    setConcentrationStrengthUnit(e.target.value);
+                                  }
+                                }}
+                              >
+                                {activeIngredientUnitOptions.map((u) => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                              {isOtherStrengthUnit && (
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ marginTop: '4px' }}
+                                  placeholder="Enter custom unit (e.g. mg)"
+                                  value={concentrationStrengthUnit === 'Other' ? '' : concentrationStrengthUnit}
+                                  onChange={(e) => setConcentrationStrengthUnit(e.target.value)}
+                                  autoFocus
+                                />
+                              )}
                             </div>
                             <div>
                               <label className="medicine-form-label">Base Volume</label>
-                              <input type="number" step="any" className="medicine-form-input" placeholder="Example: 1" value={concentrationVolume} onChange={(e) => setConcentrationVolume(e.target.value)} />
+                              <input
+                                type="number"
+                                step="any"
+                                className="medicine-form-input"
+                                placeholder="Example: 1"
+                                value={concentrationVolume}
+                                onChange={(e) => setConcentrationVolume(e.target.value)}
+                              />
                             </div>
                             <div>
                               <label className="medicine-form-label">Volume Unit</label>
-                              <input type="text" className="medicine-form-input" placeholder="Example: mL" value={concentrationVolumeUnit} onChange={(e) => setConcentrationVolumeUnit(e.target.value)} />
+                              <select
+                                className="medicine-form-select"
+                                value={isOtherVolumeUnit ? 'Other' : concentrationVolumeUnit}
+                                onChange={(e) => {
+                                  if (e.target.value === 'Other') {
+                                    setIsOtherVolumeUnit(true);
+                                  } else {
+                                    setIsOtherVolumeUnit(false);
+                                    setConcentrationVolumeUnit(e.target.value);
+                                  }
+                                }}
+                              >
+                                {volumeUnitOptions.map((u) => (
+                                  <option key={u} value={u}>{u}</option>
+                                ))}
+                              </select>
+                              {isOtherVolumeUnit && (
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ marginTop: '4px' }}
+                                  placeholder="Enter custom volume unit (e.g. mL)"
+                                  value={concentrationVolumeUnit === 'Other' ? '' : concentrationVolumeUnit}
+                                  onChange={(e) => setConcentrationVolumeUnit(e.target.value)}
+                                  autoFocus
+                                />
+                              )}
                             </div>
                           </div>
                           <span className="medicine-form-hint">
@@ -820,28 +1005,68 @@ export function MedicineFormModal({
                             <label className="medicine-form-label" htmlFor="med-default-route">
                               Default Route
                             </label>
-                            <input
+                            <select
                               id="med-default-route"
-                              type="text"
-                              className="medicine-form-input"
-                              placeholder="e.g. PO (Oral), SC, IV, Otic, Topical"
-                              value={defaultRoute}
-                              onChange={(e) => setDefaultRoute(e.target.value)}
-                            />
+                              className="medicine-form-select"
+                              value={isOtherRoute ? 'Other' : defaultRoute}
+                              onChange={(e) => {
+                                if (e.target.value === 'Other') {
+                                  setIsOtherRoute(true);
+                                } else {
+                                  setIsOtherRoute(false);
+                                  setDefaultRoute(e.target.value);
+                                }
+                              }}
+                            >
+                              {routeOptions.map((r) => (
+                                <option key={r} value={r}>{r}</option>
+                              ))}
+                            </select>
+                            {isOtherRoute && (
+                              <input
+                                type="text"
+                                className="medicine-form-input"
+                                style={{ marginTop: '4px' }}
+                                placeholder="Enter custom route"
+                                value={defaultRoute === 'Other' ? '' : defaultRoute}
+                                onChange={(e) => setDefaultRoute(e.target.value)}
+                                autoFocus
+                              />
+                            )}
                           </div>
 
                           <div className="medicine-form-group">
                             <label className="medicine-form-label" htmlFor="med-default-frequency">
                               Default Frequency
                             </label>
-                            <input
+                            <select
                               id="med-default-frequency"
-                              type="text"
-                              className="medicine-form-input"
-                              placeholder="e.g. BID, SID, TID, QID"
-                              value={defaultFrequency}
-                              onChange={(e) => setDefaultFrequency(e.target.value)}
-                            />
+                              className="medicine-form-select"
+                              value={isOtherFrequency ? 'Other' : defaultFrequency}
+                              onChange={(e) => {
+                                if (e.target.value === 'Other') {
+                                  setIsOtherFrequency(true);
+                                } else {
+                                  setIsOtherFrequency(false);
+                                  setDefaultFrequency(e.target.value);
+                                }
+                              }}
+                            >
+                              {frequencyOptions.map((f) => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </select>
+                            {isOtherFrequency && (
+                              <input
+                                type="text"
+                                className="medicine-form-input"
+                                style={{ marginTop: '4px' }}
+                                placeholder="Enter custom frequency"
+                                value={defaultFrequency === 'Other' ? '' : defaultFrequency}
+                                onChange={(e) => setDefaultFrequency(e.target.value)}
+                                autoFocus
+                              />
+                            )}
                           </div>
 
                           <div className="medicine-form-group">
@@ -872,8 +1097,6 @@ export function MedicineFormModal({
                             />
                           </div>
                         </div>
-                      </>
-                    )}
                   </div>
                 </div>
               </div>
