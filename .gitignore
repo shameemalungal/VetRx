@@ -1,10 +1,12 @@
 # Dependencies
 node_modules/
 web/node_modules/
+server/node_modules/
 
-# Production builds
+# Production builds & artifacts
 dist/
 web/dist/
+server/dist/
 dist-ssr/
 web/dist-ssr/
 
@@ -19,7 +21,14 @@ pnpm-debug.log*
 # Test & Temp files
 .chrome-test/
 web/.chrome-test/
+coverage/
 *.local
+*.tsbuildinfo
+
+# Database & Docker local data
+postgres_data/
+postgres_dev_data/
+docker-compose.override.yml
 
 # Environment variables
 .env

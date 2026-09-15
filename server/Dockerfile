@@ -13,7 +13,7 @@ WORKDIR /app
 RUN apk add --no-cache openssl libc6-compat
 
 # Copy package manifests and Prisma schema
-COPY server/package.json server/package-lock.json* ./
+COPY server/package.json server/package-lock.json ./
 COPY prisma/schema.prisma ./prisma/
 
 # Install all dependencies (including devDependencies for build)
