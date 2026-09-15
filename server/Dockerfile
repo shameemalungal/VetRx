@@ -12,9 +12,9 @@ WORKDIR /app
 # Install build essentials for native dependencies if needed
 RUN apk add --no-cache openssl libc6-compat
 
-# Copy package manifests and Prisma schema
+# Copy package manifests and Prisma schema + migrations
 COPY server/package.json server/package-lock.json ./
-COPY prisma/schema.prisma ./prisma/
+COPY prisma ./prisma/
 
 # Install all dependencies (including devDependencies for build)
 RUN npm ci
