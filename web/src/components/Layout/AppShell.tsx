@@ -336,7 +336,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               />
               <span className="desktop-header-clinic truncate">
                 {isClinicActive
-                  ? organisation!.name
+                  ? (activePracticeName || 'Clinical Practice')
                   : practitioner?.qualifications
                     ? `${practitioner.qualifications} • Independent Practitioner`
                     : 'Independent Clinical Practice'}

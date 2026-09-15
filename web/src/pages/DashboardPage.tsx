@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { useSettingsStore } from '../store/settingsStore';
+import { useAuth } from '../context/AuthContext';
 import { Icon } from '../components/ui/Icon';
 import { ShareModal } from '../components/ui/ShareModal';
 import type { Patient, Owner, TreatmentPackageItem, Medicine, Invoice } from '../types';
@@ -40,6 +41,7 @@ function timeAgo(d?: Date): string {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, practice } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
 
   // ── Instant Formulary & MRN Search State ─────────────────────
@@ -179,10 +181,11 @@ export const DashboardPage: React.FC = () => {
     setShareInvoice(inv);
   };
 
-  const isClinicActive = Boolean(organisation && organisation.isActive !== false && organisation.name?.trim());
-  const doctorName = practitioner?.name?.trim() || 'Veterinarian';
+  const activePracticeName = practice?.name || organisation?.name;
+  const isClinicActive = Boolean((activePracticeName && activePracticeName.trim()) || (organisation && organisation.isActive !== false && organisation.name?.trim()));
+  const doctorName = user?.name || practitioner?.name?.trim() || 'Veterinarian';
   const firstName = doctorName.split(' ').find((w) => !w.startsWith('Dr')) ?? 'Doctor';
-  const clinicName = isClinicActive ? organisation!.name : 'Independent Clinical Practice';
+  const clinicName = isClinicActive ? (activePracticeName || 'Independent Clinical Practice') : 'Independent Clinical Practice';
 
   return (
     <div className="dashboard-page">

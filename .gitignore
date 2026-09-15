@@ -53,3 +53,5 @@ web_old_before_chatgpt_production_ready-codebase/
 .venv*/
 askpass*
 deploy_*.py
+edge_*
+uat_*
