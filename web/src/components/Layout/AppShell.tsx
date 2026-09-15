@@ -13,6 +13,7 @@ import { db } from '../../db/schema';
 import { Icon } from '../ui/Icon';
 import { VetRxLogo } from '../ui/VetRxLogo';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useAuth } from '../../context/AuthContext';
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './AppShell.css';
@@ -56,6 +57,7 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
+  const { user, practice, logout } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -72,20 +74,19 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ── Identity & Persistence Logic ─────────────────────────────
-  const displayName = practitioner?.name ?? 'Practitioner';
+  const displayName = user?.name || practitioner?.name || 'Practitioner';
   const firstWord = displayName.split(' ').find((w) => !w.startsWith('Dr')) ?? displayName.split(' ')[0];
   const avatarLetters = initials(displayName);
 
-  // CLINIC ACTIVE RULE:
-  // If Clinic is active and has a logo, show clinic logo and name in top-right
-  // If clinic is off, do not display inactive clinic; use practitioner identity
-  const isClinicActive = Boolean(organisation && organisation.isActive !== false && organisation.name?.trim());
+  // CLINIC / PRACTICE ACTIVE RULE:
+  const activePracticeName = practice?.name || organisation?.name;
+  const isClinicActive = Boolean((activePracticeName && activePracticeName.trim()) || (organisation && organisation.isActive !== false && organisation.name?.trim()));
   const clinicPhoto = isClinicActive && organisation?.logoDataUrl ? organisation.logoDataUrl : null;
-  const doctorPhoto = practitioner?.photoDataUrl || null;
+  const doctorPhoto = user?.avatarUrl || practitioner?.photoDataUrl || null;
 
   const activeAvatarPhoto = clinicPhoto || doctorPhoto;
-  const activeIdentityName = isClinicActive ? (organisation?.name || displayName) : displayName;
-  const headerInitials = isClinicActive ? initials(organisation?.name || 'CP') : avatarLetters;
+  const activeIdentityName = isClinicActive ? (activePracticeName || displayName) : displayName;
+  const headerInitials = isClinicActive ? initials(activePracticeName || 'CP') : avatarLetters;
 
   // ── Global Keyboard Shortcuts (Alt+N, Alt+F, ⌘K) ────────────
   useEffect(() => {
@@ -242,12 +243,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     setSearchQuery('');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsProfileMenuOpen(false);
-    // Clear any local temporary session state without faking a remote backend
     sessionStorage.clear();
-    // Redirect to home or refresh workspace
-    navigate('/');
+    await logout();
   };
 
   return (
