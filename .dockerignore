@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+*.log
+.env
+.env.*
+!.env.example
+.vscode
+.idea
+*.zip
+coverage
+web_old_before_chatgpt_production_ready-codebase

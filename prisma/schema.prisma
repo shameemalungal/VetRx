@@ -1,0 +1,377 @@
+// ==============================================================================
+// VetRx Multi-Tenant Schema (Prisma)
+// Stage 0 + Stage 1: Authentication, Sessions, Practice Ownership & Isolation
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// Enums
+// ------------------------------------------------------------------------------
+
+enum Role {
+  PRACTICE_OWNER
+  PRACTICE_ADMIN
+  PRACTICE_STAFF
+}
+
+enum IdentityProviderType {
+  GOOGLE
+  PASSWORD
+  FUTURE_MYKGVOA
+}
+
+// ------------------------------------------------------------------------------
+// User & Authentication Models
+// ------------------------------------------------------------------------------
+
+model User {
+  id              String           @id @default(uuid())
+  email           String           @unique
+  normalizedEmail String           @unique
+  name            String
+  avatarUrl       String?
+  emailVerified   Boolean          @default(false)
+  passwordHash    String?          // Nullable for OAuth-only users
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  lastLoginAt     DateTime?
+
+  // Relations
+  authIdentities  AuthIdentity[]
+  memberships     PracticeMember[]
+  ownedPractices  Practice[]       @relation("PracticeOwner")
+  sessions        Session[]
+  auditLogs       AuditLog[]
+
+  @@index([normalizedEmail])
+}
+
+model AuthIdentity {
+  id             String               @id @default(uuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String               // 'google', 'password', 'future_mykgvoa'
+  providerUserId String               // Stable subject ID from provider
+  providerEmail  String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionTokenHash String    @unique // SHA-256 hash of raw session token
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  ipAddress        String?
+  userAgent        String?
+  revokedAt        DateTime?
+
+  @@index([userId])
+  @@index([sessionTokenHash])
+  @@index([expiresAt])
+}
+
+// ------------------------------------------------------------------------------
+// Tenant Boundary: Practice & Practice Membership
+// ------------------------------------------------------------------------------
+
+model Practice {
+  id          String           @id @default(uuid())
+  name        String
+  slug        String?          @unique
+  ownerUserId String
+  owner       User             @relation("PracticeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  members     PracticeMember[]
+  settings    PracticeSettings?
+
+  // Clinical Data Tenant Scoping (Future Stages)
+  owners            Owner[]
+  patients          Patient[]
+  medicines         Medicine[]
+  treatmentPackages TreatmentPackage[]
+  prescriptions     Prescription[]
+  invoices          Invoice[]
+  receipts          Receipt[]
+  documentSequences DocumentSequence[]
+  auditLogs         AuditLog[]
+
+  @@index([ownerUserId])
+}
+
+model PracticeMember {
+  id         String    @id @default(uuid())
+  practiceId String
+  practice   Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role      @default(PRACTICE_OWNER)
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([practiceId, userId])
+  @@index([practiceId])
+  @@index([userId])
+}
+
+model PracticeSettings {
+  id                             String   @id @default(uuid())
+  practiceId                     String   @unique
+  practice                       Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  clinicName                     String?
+  address                        String?
+  phone                          String?
+  email                          String?
+  registrationNumber             String?
+  doctorName                     String?
+  doctorRegistrationNumber       String?
+  doctorPhotoUrl                 String?
+  doctorSignatureUrl             String?
+  clinicLogoUrl                  String?
+  ownerSpecialInstructionEnabled Boolean  @default(false)
+  
+  // Future-compatible membership field for MyKGVOA integration
+  mykgvoaMemberId                String?
+
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+}
+
+// ------------------------------------------------------------------------------
+// Future Clinical Models (Tenant-Scoped Placeholders for Stage 2+)
+// Each model is strictly scoped by practiceId to guarantee tenant isolation.
+// ------------------------------------------------------------------------------
+
+model Owner {
+  id         String    @id @default(uuid())
+  practiceId String
+  practice   Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name       String
+  phone      String
+  email      String?
+  address    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  patients   Patient[]
+
+  @@index([practiceId])
+  @@index([practiceId, phone])
+}
+
+model Patient {
+  id             String         @id @default(uuid())
+  practiceId     String
+  practice       Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          Owner          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name           String
+  species        String
+  breed          String?
+  sex            String?
+  ageYears       Int?
+  ageMonths      Int?
+  weightKg       Float?
+  identification String?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  prescriptions  Prescription[]
+  invoices       Invoice[]
+
+  @@index([practiceId])
+  @@index([ownerId])
+}
+
+model Medicine {
+  id                           String    @id @default(uuid())
+  practiceId                   String
+  practice                     Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name                         String
+  genericName                  String?
+  category                     String?
+  form                         String?
+  strength                     String?
+  unitPrice                    Float     @default(0)
+  defaultDosageInstructions    String?
+  reconstitutionDiluentVolume  Float?
+  reconstitutionDiluentUnit    String?
+  isActive                     Boolean   @default(true)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  prescriptionItems            PrescriptionItem[]
+
+  @@index([practiceId])
+  @@index([practiceId, name])
+}
+
+model TreatmentPackage {
+  id          String   @id @default(uuid())
+  practiceId  String
+  practice    Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  totalPrice  Float    @default(0)
+  itemsJson   Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([practiceId])
+}
+
+model Prescription {
+  id              String             @id @default(uuid())
+  practiceId      String
+  practice        Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  rxNumber        String
+  diagnosis       String?
+  notes           String?
+  status          String             @default("Final") // "Draft", "Final", "Cancelled"
+  prescribedAt    DateTime           @default(now())
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  items           PrescriptionItem[]
+  invoiceItems    InvoiceItem[]
+
+  @@unique([practiceId, rxNumber])
+  @@index([practiceId])
+  @@index([patientId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicineId     String?
+  medicine       Medicine?    @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+  medicineName   String
+  dosage         String
+  frequency      String
+  durationDays   Int          @default(1)
+  totalQuantity  Float        @default(1)
+  quantityUnit   String?
+  instructions   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([prescriptionId])
+  @@index([medicineId])
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  practiceId    String
+  practice      Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patientId     String?
+  patient       Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  invoiceNumber String
+  subtotal      Float         @default(0)
+  taxAmount     Float         @default(0)
+  discountAmount Float        @default(0)
+  totalAmount   Float         @default(0)
+  status        String        @default("Issued") // "Draft", "Issued", "Paid", "Cancelled"
+  issuedAt      DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items         InvoiceItem[]
+  receipts      Receipt[]
+
+  @@unique([practiceId, invoiceNumber])
+  @@index([practiceId])
+}
+
+model InvoiceItem {
+  id             String        @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  prescriptionId String?
+  prescription   Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  description    String
+  category       String        @default("Medicine")
+  unitPrice      Float         @default(0)
+  quantity       Float         @default(1)
+  totalPrice     Float         @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([invoiceId])
+  @@index([prescriptionId])
+}
+
+model Receipt {
+  id            String   @id @default(uuid())
+  practiceId    String
+  practice      Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  receiptNumber String
+  amountPaid    Float
+  paymentMode   String   @default("CASH") // "CASH", "UPI", "CARD"
+  paidAt        DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([practiceId, receiptNumber])
+  @@index([practiceId])
+  @@index([invoiceId])
+}
+
+model DocumentSequence {
+  id         String   @id @default(uuid())
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  docType    String   // "PRESCRIPTION", "INVOICE", "RECEIPT"
+  year       Int
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([practiceId, docType, year])
+  @@index([practiceId])
+}
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  practiceId String?
+  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String    // "LOGIN", "REGISTER", "LOGOUT", "PRACTICE_UPDATE"
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

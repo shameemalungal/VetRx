@@ -1,0 +1,65 @@
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database Service (Development)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: vetrx-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vetrx}
+      POSTGRES_USER: ${POSTGRES_USER:-vetrx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vetrx_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vetrx} -d ${POSTGRES_DB:-vetrx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vetrx_dev_network
+
+  # ----------------------------------------------------------------------------
+  # REST Backend Service (Development)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile.dev
+    container_name: vetrx-backend-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      HOST: 0.0.0.0
+      APP_URL: http://localhost:5173
+      API_URL: http://localhost:4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vetrx}:${POSTGRES_PASSWORD:-vetrx_dev_password}@postgres:5432/${POSTGRES_DB:-vetrx}?schema=public
+      SESSION_SECRET: ${SESSION_SECRET:-development_secret_do_not_use_in_production_12345}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      COOKIE_NAME: ${COOKIE_NAME:-vetrx_session}
+      CORS_ORIGIN: http://localhost:5173
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:4000/api/auth/google/callback}
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server/src:/app/src
+      - ./prisma:/app/prisma
+    networks:
+      - vetrx_dev_network
+
+volumes:
+  postgres_dev_data:
+    driver: local
+
+networks:
+  vetrx_dev_network:
+    driver: bridge
