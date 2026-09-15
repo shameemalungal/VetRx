@@ -70,7 +70,15 @@ export interface Patient {
 
 // ── Dosing Rules ──────────────────────────────────────────────
 
-export type DosingMethod = 'weight_based' | 'weight_range' | 'weight_band' | 'fixed' | 'none';
+export type DosingMethod =
+  | 'weight_based'
+  | 'weight_range'
+  | 'weight_band'
+  | 'fixed'
+  | 'volume_per_weight'
+  | 'reconstituted_liquid'
+  | 'reconstituted_drops'
+  | 'none';
 
 export interface WeightBandRule {
   id?: string;
@@ -80,6 +88,55 @@ export interface WeightBandRule {
   doseUnit: string;
   label?: string; // e.g. "≤10 kg", "10–20 kg"
 }
+
+export interface DosingMethodOption {
+  value: DosingMethod;
+  label: string;
+  description: string;
+}
+
+export const DOSING_METHOD_OPTIONS: DosingMethodOption[] = [
+  {
+    value: 'none',
+    label: 'Manual Dosing (No Automated Calculation)',
+    description: 'Veterinarian will enter dose and quantity manually.',
+  },
+  {
+    value: 'weight_based',
+    label: 'Weight-Based (Patient Weight × Dose per kg)',
+    description: 'Calculates: Patient weight (kg) × configured dose per kg.',
+  },
+  {
+    value: 'weight_range',
+    label: 'Weight-Based Range (min–max mg/kg)',
+    description: 'Calculates: Patient weight (kg) × min & max range; doctor selects final dose.',
+  },
+  {
+    value: 'weight_band',
+    label: 'Weight-Band (Tier-Based by Weight Range)',
+    description: 'Selects pre-configured dose band corresponding to patient weight.',
+  },
+  {
+    value: 'volume_per_weight',
+    label: 'Volume per Body Weight (e.g. 1 mL per 20 kg)',
+    description: 'Calculates: Patient Weight × (Dose Volume ÷ Weight Basis). e.g. 1 mL per 20 kg.',
+  },
+  {
+    value: 'reconstituted_liquid',
+    label: 'Reconstituted Tablet/Unit → Liquid Volume',
+    description: 'Calculates administered liquid volume and source unit equivalent.',
+  },
+  {
+    value: 'reconstituted_drops',
+    label: 'Reconstituted Tablet/Unit → Drops',
+    description: 'Calculates administered drops into volume and source equivalent using calibrated drops/mL.',
+  },
+  {
+    value: 'fixed',
+    label: 'Fixed Dose (1 tablet/sachet/vial per dose)',
+    description: 'Applies fixed dose directly without weight multiplication.',
+  },
+];
 
 // ── Medicine ──────────────────────────────────────────────────
 
@@ -93,6 +150,7 @@ export interface Medicine {
   category?: string;       // e.g. Antibiotic, NSAID, Otic / Topical
   isActive?: boolean;      // defaults to true (undefined treated as active)
   notes?: string;
+  source?: 'prescription' | 'manual' | 'seed';
 
   // Dosing rules (deterministic, veterinarian-configured)
   dosingMethod?: DosingMethod;
@@ -103,6 +161,24 @@ export interface Medicine {
   fixedDose?: number;         // For 'fixed' (e.g. 1 tablet)
   doseUnit?: string;          // e.g. 'mg', 'ml', 'tablet', 'sachet', 'vial'
   weightBands?: WeightBandRule[]; // For 'weight_band'
+
+  // Method A: Volume per Body Weight (e.g. 1 mL per 20 kg)
+  doseVolumeAmount?: number;     // e.g. 1
+  doseVolumeUnit?: string;       // e.g. 'mL'
+  weightBasis?: number;          // e.g. 20
+  weightBasisUnit?: string;      // e.g. 'kg'
+
+  // Method B & C: Reconstituted Tablet/Unit
+  reconstitutionSourceQty?: number;      // e.g. 1
+  reconstitutionSourceUnit?: string;     // e.g. 'tablet'
+  reconstitutionDiluentVolume?: number;  // e.g. 20
+  reconstitutionDiluentUnit?: string;    // e.g. 'mL'
+  reconstitutionAdminVolume?: number;    // e.g. 1 (for liquid method)
+  reconstitutionAdminUnit?: string;      // e.g. 'mL'
+
+  // Method C: Drops specific
+  dropsPerMl?: number;           // e.g. 20 (calibrated drops/mL, must not be assumed)
+  doseDrops?: number;            // e.g. 20 drops
 
   // Explicit formulation/concentration conversion
   concentrationStrength?: number; // e.g. 500 (mg)
@@ -137,6 +213,8 @@ export interface Prescription {
   followUpDays?: number;
   status: PrescriptionStatus;
   issuedAt?: Date;
+  cancelledAt?: Date;
+  cancellationReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -167,6 +245,8 @@ export interface TreatmentPackage {
   description?: string;
   category?: string;
   species?: string;
+  targetSpecies?: string[];
+  sourcePrescriptionId?: number;
   defaultInstructions?: string;
   protocolCode?: string;
   usageCount: number;
@@ -183,6 +263,7 @@ export interface TreatmentPackageItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
+  dose?: string;
   quantity: number;
   unit: string;
   frequency: string;
@@ -198,8 +279,11 @@ export type InvoiceStatus = 'Draft' | 'Issued' | 'Cancelled';
 
 export type InvoiceItemCategory =
   | 'Medicine'
+  | 'Prescription Medicine'
   | 'Consultation Fee'
   | 'Procedure Fee'
+  | 'Certificate'
+  | 'Necropsy Report'
   | 'Lab Fee'
   | 'Travel Fee'
   | 'Other';
@@ -211,6 +295,7 @@ export interface Invoice {
   ownerId: number;
   practitionerId: number;
   prescriptionId?: number;
+  prescriptionIds?: number[];
   invoiceDate: Date;
   notes?: string;
   discountTotal: number;   // integer paisa
@@ -243,6 +328,17 @@ export interface InvoiceItem {
   govOrderNumber?: string;  // e.g. "G.O.(Rt) No.589/2023/AHD"
   govOrderDate?: string;    // e.g. "13-12-2023"
   rateControlled?: boolean; // locks rate from alteration during invoice creation
+
+  // Multi-prescription source metadata snapshot:
+  prescriptionId?: number;
+  prescriptionNumber?: string;
+  prescriptionDate?: Date | string;
+  patientId?: number;
+  patientName?: string;
+  patientSubtitle?: string;
+  ownerId?: number;
+  ownerName?: string;
+  medicineId?: number;
 }
 
 // ── Audit ─────────────────────────────────────────────────────
@@ -279,7 +375,8 @@ export type MasterDataCategory =
   | 'frequency'
   | 'duration_unit'
   | 'sex'
-  | 'invoice_item';
+  | 'invoice_item'
+  | 'invoice_unit';
 
 export interface MasterDataItem {
   id?: number;

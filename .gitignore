@@ -37,3 +37,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Backups & Archives
+web_old_before_chatgpt_production_ready-codebase/
+*.zip

@@ -64,6 +64,15 @@ export class VetRxDatabase extends Dexie {
     this.version(4).stores({
       medicines:             '++id, brandName, genericName, presentation, category, isActive',
     });
+
+    this.version(5).stores({
+      treatmentPackages:     '++id, name, category, lastUsedAt, *targetSpecies, sourcePrescriptionId',
+    });
+
+    this.version(6).stores({
+      invoices:              '++id, invoiceNumber, patientId, ownerId, practitionerId, prescriptionId, *prescriptionIds, status, invoiceDate',
+      invoiceItems:          '++id, invoiceId, category, sortOrder, prescriptionId, patientId',
+    });
   }
 }
 

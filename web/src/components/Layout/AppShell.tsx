@@ -29,10 +29,10 @@ const NAV_ITEMS = [
 
 // Bottom nav shows the 4 most-used items (matches Stitch mobile)
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home',               path: '/',                icon: 'home'        },
-  { label: 'Patients',           path: '/patients',        icon: 'patients'    },
-  { label: 'Rx',                 path: '/prescriptions',   icon: 'prescription'},
-  { label: 'Invoices & Receipts',path: '/invoices',        icon: 'invoices'    },
+  { label: 'Home',     path: '/',              icon: 'home',         ariaLabel: 'Home' },
+  { label: 'Patients', path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
+  { label: 'Rx',       path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
+  { label: 'Invoices', path: '/invoices',      icon: 'invoices',     ariaLabel: 'Invoices & Receipts' },
 ] as const;
 
 function initials(name: string): string {
@@ -711,7 +711,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* ── Mobile Bottom Navigation ───────────────────────────── */}
       <nav className="bottom-nav" aria-label="Bottom navigation">
         <div className="bottom-nav-inner">
-          {BOTTOM_NAV_ITEMS.map(({ label, path, icon }) => (
+          {BOTTOM_NAV_ITEMS.map(({ label, path, icon, ariaLabel }) => (
             <NavLink
               key={path}
               to={path}
@@ -719,10 +719,13 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               className={({ isActive }) =>
                 `bottom-nav-item${isActive ? ' active' : ''}`
               }
-              aria-label={label}
+              aria-label={ariaLabel || label}
             >
-              <Icon name={icon} size={22} />
-              <span>{label}</span>
+              <div className="bottom-nav-icon-wrapper">
+                <Icon name={icon} size={20} aria-hidden />
+              </div>
+              <span className="bottom-nav-label">{label}</span>
+              <span className="bottom-nav-indicator" aria-hidden="true" />
             </NavLink>
           ))}
         </div>

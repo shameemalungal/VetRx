@@ -12,7 +12,34 @@ import type { TreatmentPackage, TreatmentPackageItem } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 import './Packages.css';
 
-type SpeciesFilter = 'All' | 'Canine' | 'Feline' | 'Equine' | 'Avian' | 'Universal' | 'Other';
+type SpeciesFilter =
+  | 'All'
+  | 'General'
+  | 'Canine'
+  | 'Feline'
+  | 'Bovine'
+  | 'Caprine'
+  | 'Ovine'
+  | 'Equine'
+  | 'Swine'
+  | 'Avian'
+  | 'Rabbit'
+  | 'Other';
+
+const SPECIES_FILTER_OPTIONS: { id: SpeciesFilter; label: string; icon?: string }[] = [
+  { id: 'All', label: 'All Protocols' },
+  { id: 'General', label: 'General', icon: '🌐' },
+  { id: 'Canine', label: 'Canine', icon: '🐶' },
+  { id: 'Feline', label: 'Feline', icon: '🐱' },
+  { id: 'Bovine', label: 'Bovine', icon: '🐮' },
+  { id: 'Caprine', label: 'Caprine', icon: '🐐' },
+  { id: 'Ovine', label: 'Ovine', icon: '🐑' },
+  { id: 'Equine', label: 'Equine', icon: '🐴' },
+  { id: 'Swine', label: 'Swine', icon: '🐷' },
+  { id: 'Avian', label: 'Avian', icon: '🦜' },
+  { id: 'Rabbit', label: 'Rabbit', icon: '🐇' },
+  { id: 'Other', label: 'Other', icon: '✨' },
+];
 
 export const PackagesListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,29 +73,38 @@ export const PackagesListPage: React.FC = () => {
     return map;
   }, [allItems]);
 
-  // Determine species for package (helper)
-  const getPackageSpecies = (pkg: TreatmentPackage): string => {
-    if (pkg.species) return pkg.species.toLowerCase();
+  // Determine species list for package (helper)
+  const getPackageSpeciesList = (pkg: TreatmentPackage): string[] => {
+    if (pkg.targetSpecies && pkg.targetSpecies.length > 0) {
+      return pkg.targetSpecies;
+    }
+    if (pkg.species) {
+      const raw = pkg.species.toLowerCase();
+      if (raw === 'universal' || raw === 'general' || raw === 'all') {
+        return ['General'];
+      }
+      if (raw.includes(',')) {
+        return raw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+      }
+      return [raw.charAt(0).toUpperCase() + raw.slice(1)];
+    }
     const nameLower = pkg.name.toLowerCase();
-    const catLower = (pkg.category || '').toLowerCase();
     const descLower = (pkg.description || '').toLowerCase();
-
-    if (nameLower.includes('canine') || catLower.includes('canine') || descLower.includes('canine') || descLower.includes('dog')) {
-      return 'canine';
-    }
-    if (nameLower.includes('feline') || catLower.includes('feline') || descLower.includes('feline') || descLower.includes('cat')) {
-      return 'feline';
-    }
-    if (nameLower.includes('equine') || catLower.includes('equine') || descLower.includes('horse')) {
-      return 'equine';
-    }
-    if (nameLower.includes('avian') || catLower.includes('avian') || descLower.includes('bird')) {
-      return 'avian';
-    }
-    if (nameLower.includes('universal') || descLower.includes('universal')) {
-      return 'universal';
-    }
-    return 'universal';
+    if (nameLower.includes('canine') || descLower.includes('canine') || descLower.includes('dog'))
+      return ['Canine'];
+    if (nameLower.includes('feline') || descLower.includes('feline') || descLower.includes('cat'))
+      return ['Feline'];
+    if (nameLower.includes('bovine') || descLower.includes('bovine') || descLower.includes('cow'))
+      return ['Bovine'];
+    if (nameLower.includes('equine') || descLower.includes('equine') || descLower.includes('horse'))
+      return ['Equine'];
+    if (nameLower.includes('avian') || descLower.includes('avian') || descLower.includes('bird'))
+      return ['Avian'];
+    return ['General'];
   };
 
   // ── Filtered Packages ─────────────────────────────────────────
@@ -76,15 +112,41 @@ export const PackagesListPage: React.FC = () => {
     if (!allPackages) return [];
 
     return allPackages.filter((pkg) => {
-      const sp = getPackageSpecies(pkg);
+      const speciesList = getPackageSpeciesList(pkg);
+      const isGeneral = speciesList.some(
+        (s) => s.toLowerCase() === 'general' || s.toLowerCase() === 'universal'
+      );
 
       // Species Filter
       if (selectedSpecies !== 'All') {
-        const target = selectedSpecies.toLowerCase();
-        if (target === 'other') {
-          if (['canine', 'feline', 'equine', 'avian', 'universal'].includes(sp)) return false;
-        } else if (sp !== target) {
-          return false;
+        if (selectedSpecies === 'General') {
+          if (!isGeneral) return false;
+        } else if (selectedSpecies === 'Other') {
+          const standardSpecies = [
+            'general',
+            'universal',
+            'canine',
+            'feline',
+            'bovine',
+            'caprine',
+            'ovine',
+            'equine',
+            'swine',
+            'avian',
+            'rabbit',
+          ];
+          const hasOther = speciesList.some(
+            (s) => s.toLowerCase() === 'other' || !standardSpecies.includes(s.toLowerCase())
+          );
+          if (!hasOther && !isGeneral) return false;
+        } else {
+          // Specific species: Matches if package targets this species OR targets General
+          const matchesTarget = speciesList.some(
+            (s) => s.toLowerCase() === selectedSpecies.toLowerCase()
+          );
+          if (!matchesTarget && !isGeneral) {
+            return false;
+          }
         }
       }
 
@@ -139,11 +201,13 @@ export const PackagesListPage: React.FC = () => {
     if (!pkg.id) return;
     try {
       const now = new Date();
+      const speciesList = getPackageSpeciesList(pkg);
       const newPkgId = await db.treatmentPackages.add({
         name: `${pkg.name} (Copy)`,
         category: pkg.category,
         description: pkg.description,
-        species: pkg.species || getPackageSpecies(pkg),
+        species: pkg.species || speciesList.join(', '),
+        targetSpecies: pkg.targetSpecies || speciesList,
         defaultInstructions: pkg.defaultInstructions,
         protocolCode: `COPY-${Date.now().toString().slice(-4)}`,
         usageCount: 0,
@@ -308,28 +372,21 @@ export const PackagesListPage: React.FC = () => {
 
         {/* Species Filter Chips */}
         <div className="packages-species-chips">
-          {(['All', 'Canine', 'Feline', 'Equine', 'Avian', 'Universal', 'Other'] as SpeciesFilter[]).map(
-            (sp) => {
-              const isActive = selectedSpecies === sp;
-              return (
-                <button
-                  key={sp}
-                  type="button"
-                  className={`packages-species-chip ${isActive ? 'active' : ''}`}
-                  onClick={() => setSelectedSpecies(sp)}
-                >
-                  {sp === 'Canine' && <span>🐶</span>}
-                  {sp === 'Feline' && <span>🐱</span>}
-                  {sp === 'Equine' && <span>🐴</span>}
-                  {sp === 'Avian' && <span>🦜</span>}
-                  {sp === 'Universal' && <span>🌐</span>}
-                  {sp === 'Other' && <span>✨</span>}
-                  {sp === 'All' && isActive && <Icon name="check" size={14} />}
-                  <span>{sp}</span>
-                </button>
-              );
-            }
-          )}
+          {SPECIES_FILTER_OPTIONS.map((opt) => {
+            const isActive = selectedSpecies === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                className={`packages-species-chip ${isActive ? 'active' : ''}`}
+                onClick={() => setSelectedSpecies(opt.id)}
+              >
+                {opt.icon && <span>{opt.icon}</span>}
+                {opt.id === 'All' && isActive && <Icon name="check" size={14} />}
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -367,7 +424,7 @@ export const PackagesListPage: React.FC = () => {
       ) : viewMode === 'grid' ? (
         <div className="packages-grid">
           {filteredPackages.map((pkg) => {
-            const species = getPackageSpecies(pkg);
+            const speciesList = getPackageSpeciesList(pkg);
             const items = pkg.id ? itemsByPackage.get(pkg.id) || [] : [];
             const isMenuOpen = activeMenuId === pkg.id;
 
@@ -378,13 +435,22 @@ export const PackagesListPage: React.FC = () => {
                   <div className="package-card-header">
                     <div className="package-card-meta">
                       <div className="package-badges-row">
-                        <span className={`package-species-pill ${species}`}>
-                          {species === 'canine' && '🐶 '}
-                          {species === 'feline' && '🐱 '}
-                          {species === 'equine' && '🐴 '}
-                          {species === 'avian' && '🦜 '}
-                          {species}
-                        </span>
+                        {speciesList.map((sp) => (
+                          <span key={sp} className={`package-species-pill ${sp.toLowerCase()}`}>
+                            {sp === 'Canine' && '🐶 '}
+                            {sp === 'Feline' && '🐱 '}
+                            {sp === 'Bovine' && '🐮 '}
+                            {sp === 'Caprine' && '🐐 '}
+                            {sp === 'Ovine' && '🐑 '}
+                            {sp === 'Equine' && '🐴 '}
+                            {sp === 'Swine' && '🐷 '}
+                            {sp === 'Avian' && '🦜 '}
+                            {sp === 'Rabbit' && '🐇 '}
+                            {sp === 'General' && '🌐 '}
+                            {sp === 'Other' && '✨ '}
+                            {sp}
+                          </span>
+                        ))}
                         <span className="package-count-pill">
                           {items.length} {items.length === 1 ? 'medicine' : 'medicines'}
                         </span>
@@ -588,7 +654,7 @@ export const PackagesListPage: React.FC = () => {
             </thead>
             <tbody>
               {filteredPackages.map((pkg) => {
-                const species = getPackageSpecies(pkg);
+                const speciesList = getPackageSpeciesList(pkg);
                 const items = pkg.id ? itemsByPackage.get(pkg.id) || [] : [];
                 return (
                   <tr
@@ -603,7 +669,11 @@ export const PackagesListPage: React.FC = () => {
                       <div className="text-xs text-outline">{pkg.category || 'Clinical Protocol'}</div>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
-                      <span className={`package-species-pill ${species}`}>{species}</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {speciesList.map((sp) => (
+                          <span key={sp} className={`package-species-pill ${sp.toLowerCase()}`}>{sp}</span>
+                        ))}
+                      </div>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span className="font-medium text-on-surface">{items.length} items</span>
@@ -676,8 +746,8 @@ export const PackagesListPage: React.FC = () => {
             <div className="packages-summary-preview">
               <div className="packages-preview-top">
                 <span className="packages-preview-name">{packageToDelete.name}</span>
-                <span className={`package-species-pill ${getPackageSpecies(packageToDelete)}`}>
-                  {getPackageSpecies(packageToDelete)}
+                <span className="package-species-pill">
+                  {getPackageSpeciesList(packageToDelete).join(', ')}
                 </span>
               </div>
               <div className="packages-preview-meta">

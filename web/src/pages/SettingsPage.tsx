@@ -4,10 +4,18 @@
 // Clinic section omitted entirely if left blank.
 // =============================================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useSettingsStore } from '../store/settingsStore';
 import { db } from '../db/schema';
 import { Icon } from '../components/ui/Icon';
+import { MasterDataSection } from './MasterDataSection';
+import {
+  exportDatabaseBackup,
+  validateBackupFile,
+  restoreDatabaseBackup,
+  requestPersistentStorage,
+  type BackupValidationResult,
+} from '../utils/backupRestore';
 import './SettingsPage.css';
 
 function FormGroup({
@@ -782,9 +790,531 @@ function OrganisationSection() {
   );
 }
 
-// ── Main export ────────────────────────────────────────────────
+// ── Invoice & Receipt Settings Section ───────────────────────
+function InvoiceSettingsSection() {
+  const {
+    showHsnColumn,
+    showSacColumn,
+    showSpecialInstructionsForOwner,
+    setShowHsnColumn,
+    setShowSacColumn,
+    setShowSpecialInstructionsForOwner,
+  } = useSettingsStore();
 
-import { MasterDataSection } from './MasterDataSection';
+  return (
+    <section className="settings-section card">
+      <div className="card-header">
+        <div className="section-title-wrap">
+          <div className="section-title flex items-center gap-2">
+            <Icon name="invoices" size={18} />
+            <span>Invoice &amp; Receipt Configuration</span>
+          </div>
+          <div className="section-sub">
+            Customize print and display columns for invoices and payment receipts.
+          </div>
+        </div>
+      </div>
+      <div className="card-body">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showHsnColumn}
+              onChange={(e) => setShowHsnColumn(e.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+            />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block', color: 'var(--color-on-surface)' }}>
+                Display HSN Code Column on Invoices
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                Show Harmonized System of Nomenclature (HSN) codes for medicinal and drug items.
+              </span>
+            </div>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showSacColumn}
+              onChange={(e) => setShowSacColumn(e.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+            />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block', color: 'var(--color-on-surface)' }}>
+                Display SAC Code Column on Invoices
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                Show Services Accounting Code (SAC) for clinical procedures and consultation fees.
+              </span>
+            </div>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={showSpecialInstructionsForOwner}
+              onChange={(e) => setShowSpecialInstructionsForOwner(e.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary)' }}
+            />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block', color: 'var(--color-on-surface)' }}>
+                Include Special Instructions for Owner on Invoices
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                Print client notes and post-consultation special remarks in the ledger section.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Backup & Restore Section ──────────────────────────────────
+function BackupRestoreSection() {
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Restore states
+  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<BackupValidationResult | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreConfirmed, setRestoreConfirmed] = useState(false);
+  const [storagePersisted, setStoragePersisted] = useState<boolean | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const lastBackupAt = localStorage.getItem('vetrx_last_backup_at');
+  const lastRestoredAt = localStorage.getItem('vetrx_last_restored_at');
+
+  useEffect(() => {
+    // Check persistent storage support
+    void requestPersistentStorage().then((res) => {
+      if (res.supported) {
+        setStoragePersisted(res.persisted);
+      }
+    });
+  }, []);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportSuccess(null);
+    setExportError(null);
+    try {
+      const { filename, recordCount } = await exportDatabaseBackup();
+      setExportSuccess(`Backup downloaded successfully: ${filename} (${recordCount} total records across all 13 tables).`);
+      setTimeout(() => setExportSuccess(null), 5000);
+    } catch (err) {
+      console.error('Failed to export backup:', err);
+      setExportError(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    setRestoreModalOpen(true);
+    setIsValidating(true);
+    setValidationResult(null);
+    setRestoreError(null);
+    setRestoreConfirmed(false);
+
+    try {
+      const text = await file.text();
+      const result = validateBackupFile(text);
+      setValidationResult(result);
+    } catch (readErr) {
+      setValidationResult({
+        valid: false,
+        errors: [`Could not read the selected file: ${readErr instanceof Error ? readErr.message : String(readErr)}`],
+        warnings: [],
+        summary: {},
+      });
+    } finally {
+      setIsValidating(false);
+      // Reset input value so the same file can be re-selected if needed
+      e.target.value = '';
+    }
+  };
+
+  const handleExecuteRestore = async () => {
+    if (!validationResult?.payload || !validationResult.valid || !restoreConfirmed) return;
+
+    setIsRestoring(true);
+    setRestoreError(null);
+
+    try {
+      const res = await restoreDatabaseBackup(validationResult.payload, 'replace');
+      if (res.success) {
+        // App needs to reload to refresh all active stores, Dexie subscribers, and pages
+        alert('Database restored successfully! The application will now reload to refresh all views.');
+        window.location.reload();
+      } else {
+        setRestoreError(res.message);
+      }
+    } catch (err) {
+      console.error('Restore error:', err);
+      setRestoreError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleCloseRestoreModal = () => {
+    if (isRestoring) return;
+    setRestoreModalOpen(false);
+    setSelectedFile(null);
+    setValidationResult(null);
+    setRestoreConfirmed(false);
+    setRestoreError(null);
+  };
+
+  return (
+    <section className="settings-section card" style={{ marginTop: '24px' }}>
+      <div className="card-header" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <div className="section-title-wrap">
+          <div className="section-title flex items-center gap-2">
+            <Icon name="database" size={18} />
+            <span>Data Management (Backup &amp; Restore)</span>
+          </div>
+          <div className="section-sub">
+            Protect your clinical and billing data. Export complete offline snapshots or restore previous backups.
+          </div>
+        </div>
+      </div>
+      <div className="card-body">
+        <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginBottom: '16px', lineHeight: 1.5 }}>
+          VetRx stores all clinical records, patients, prescriptions, medicines, and invoices locally in your browser&apos;s IndexedDB storage.
+          To prevent data loss from browser cache resets or hardware changes, download regular backups.
+        </p>
+
+        {/* Persistence Status pill if available */}
+        {storagePersisted !== null && (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-full)',
+              background: storagePersisted ? 'rgba(0, 104, 95, 0.08)' : 'rgba(234, 179, 8, 0.1)',
+              color: storagePersisted ? 'var(--color-primary)' : 'var(--color-on-surface)',
+              fontSize: '12px',
+              fontWeight: 500,
+              marginBottom: '16px',
+            }}
+          >
+            <Icon name={storagePersisted ? 'verified' : 'info'} size={14} />
+            <span>
+              {storagePersisted
+                ? 'Browser Storage Status: Persistent (protected from automatic browser eviction)'
+                : 'Browser Storage Status: Standard (regular backup export strongly recommended)'}
+            </span>
+          </div>
+        )}
+
+        {/* Timestamps */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px', color: 'var(--color-on-surface-variant)', marginBottom: '20px' }}>
+          <div>
+            <strong>Last Backup Export:</strong>{' '}
+            {lastBackupAt ? new Date(lastBackupAt).toLocaleString() : 'Never in this browser session'}
+          </div>
+          {lastRestoredAt && (
+            <div>
+              <strong>Last Restored:</strong> {new Date(lastRestoredAt).toLocaleString()}
+            </div>
+          )}
+        </div>
+
+        {/* Action alerts */}
+        {exportSuccess && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(0, 104, 95, 0.1)',
+              color: 'var(--color-primary)',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '16px',
+            }}
+          >
+            {exportSuccess}
+          </div>
+        )}
+
+        {exportError && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(186, 26, 26, 0.1)',
+              color: 'var(--color-error)',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '16px',
+            }}
+          >
+            {exportError}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleExport}
+            disabled={isExporting}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            <Icon name="upload" size={16} />
+            <span>{isExporting ? 'Exporting Snapshot…' : 'Download Full Backup (.json)'}</span>
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => fileInputRef.current?.click()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+          >
+            <Icon name="save" size={16} />
+            <span>Restore from Backup</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Restore Verification & Confirmation Modal */}
+      {restoreModalOpen && (
+        <div className="master-data-modal-backdrop" onClick={handleCloseRestoreModal}>
+          <div
+            className="master-data-modal"
+            style={{ maxWidth: '580px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="master-data-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="database" size={20} />
+                <h3>Restore Database from Backup</h3>
+              </div>
+              <button
+                type="button"
+                className="master-data-modal-close"
+                onClick={handleCloseRestoreModal}
+                disabled={isRestoring}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div className="master-data-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              {/* File details */}
+              <div style={{ padding: '10px 12px', background: 'var(--color-surface-container-low)', borderRadius: 'var(--radius-md)', fontSize: '13px' }}>
+                <div><strong>Selected File:</strong> {selectedFile?.name}</div>
+                {selectedFile && <div><strong>File Size:</strong> {(selectedFile.size / 1024).toFixed(1)} KB</div>}
+              </div>
+
+              {/* Validation Progress */}
+              {isValidating && (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                  <div className="spinner" style={{ margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                    Verifying backup integrity and compatibility…
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Result */}
+              {!isValidating && validationResult && (
+                <>
+                  {!validationResult.valid ? (
+                    <div
+                      style={{
+                        padding: '12px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(186, 26, 26, 0.08)',
+                        border: '1px solid rgba(186, 26, 26, 0.25)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-error)', fontWeight: 700, fontSize: '13px', marginBottom: '8px' }}>
+                        <Icon name="alert-triangle" size={16} />
+                        <span>Backup Validation Failed</span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--color-error)', marginBottom: '8px' }}>
+                        This file cannot be restored because it failed strict integrity checks:
+                      </p>
+                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: 'var(--color-error)' }}>
+                        {validationResult.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Success summary */}
+                      <div
+                        style={{
+                          padding: '12px',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'rgba(0, 104, 95, 0.08)',
+                          border: '1px solid rgba(0, 104, 95, 0.25)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-primary)', fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>
+                          <Icon name="check-circle" size={16} />
+                          <span>Backup File Verified (Format v{validationResult.payload?.backupFormatVersion}, Schema v{validationResult.payload?.schemaVersion})</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                          Exported at: {validationResult.payload?.exportedAt ? new Date(validationResult.payload.exportedAt).toLocaleString() : 'Unknown'}
+                        </div>
+                      </div>
+
+                      {/* Warnings if any */}
+                      {validationResult.warnings.length > 0 && (
+                        <div
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'rgba(234, 179, 8, 0.08)',
+                            border: '1px solid rgba(234, 179, 8, 0.3)',
+                            fontSize: '12px',
+                          }}
+                        >
+                          <strong style={{ display: 'block', color: 'var(--color-on-surface)', marginBottom: '4px' }}>
+                            Warnings:
+                          </strong>
+                          <ul style={{ margin: 0, paddingLeft: '16px' }}>
+                            {validationResult.warnings.map((w, idx) => (
+                              <li key={idx}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Record counts table */}
+                      <div>
+                        <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+                          Records to be Restored ({Object.values(validationResult.summary).reduce((a, b) => a + b, 0)} total):
+                        </strong>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                            gap: '6px',
+                            fontSize: '12px',
+                            background: 'var(--color-surface-container-low)',
+                            padding: '10px',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--color-border)',
+                          }}
+                        >
+                          {Object.entries(validationResult.summary).map(([tbl, count]) => (
+                            <div key={tbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px' }}>
+                              <span style={{ color: 'var(--color-on-surface-variant)' }}>{tbl}:</span>
+                              <strong>{count}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Explicit Danger & Safety Warning */}
+                      <div
+                        style={{
+                          padding: '12px',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'rgba(186, 26, 26, 0.05)',
+                          border: '1px solid rgba(186, 26, 26, 0.25)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-error)', fontWeight: 700, fontSize: '13px', marginBottom: '6px' }}>
+                          <Icon name="warning" size={16} />
+                          <span>Important: Replace Mode Warning</span>
+                        </div>
+                        <p style={{ fontSize: '12px', color: 'var(--color-on-surface)', margin: '0 0 8px 0', lineHeight: 1.4 }}>
+                          Restoring will <strong>replace all existing records</strong> in the current database with the contents of this backup file.
+                          An automated safety backup of your current database will be saved in browser memory before replacement begins.
+                        </p>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--color-error)' }}>
+                          <input
+                            type="checkbox"
+                            checked={restoreConfirmed}
+                            onChange={(e) => setRestoreConfirmed(e.target.checked)}
+                            style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--color-error)' }}
+                          />
+                          <span>
+                            I understand that current local records will be replaced with this backup and wish to proceed.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Restore error message */}
+                      {restoreError && (
+                        <div
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'rgba(186, 26, 26, 0.1)',
+                            color: 'var(--color-error)',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {restoreError}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="master-data-modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleCloseRestoreModal}
+                disabled={isRestoring}
+              >
+                Cancel
+              </button>
+
+              {validationResult?.valid && (
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={handleExecuteRestore}
+                  disabled={!restoreConfirmed || isRestoring}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Icon name="sync" size={14} />
+                  <span>{isRestoring ? 'Restoring Database…' : 'Confirm & Restore Database'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 // ── Developer Data Reset Section ─────────────────────────────
 function DeveloperDataResetSection() {
@@ -934,6 +1464,8 @@ export const SettingsPage: React.FC = () => {
         <div className="settings-sections">
           <PractitionerSection />
           <OrganisationSection />
+          <InvoiceSettingsSection />
+          <BackupRestoreSection />
           <DeveloperDataResetSection />
         </div>
       ) : (

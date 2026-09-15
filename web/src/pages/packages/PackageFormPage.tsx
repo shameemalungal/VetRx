@@ -23,6 +23,7 @@ interface DraftMedItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
+  dose?: string;
   quantity: number;
   unit: string;
   frequency: string;
@@ -38,6 +39,20 @@ const QUICK_CATEGORIES = [
   'Preventive Care',
   'Dental Prophylaxis',
   'Emergency Protocol',
+];
+
+const SPECIES_OPTIONS = [
+  { id: 'General', label: '🌐 General (All Species)' },
+  { id: 'Canine', label: '🐶 Canine' },
+  { id: 'Feline', label: '🐱 Feline' },
+  { id: 'Bovine', label: '🐮 Bovine' },
+  { id: 'Caprine', label: '🐐 Caprine' },
+  { id: 'Ovine', label: '🐑 Ovine' },
+  { id: 'Equine', label: '🐴 Equine' },
+  { id: 'Swine', label: '🐷 Swine' },
+  { id: 'Avian', label: '🦜 Avian' },
+  { id: 'Rabbit', label: '🐇 Rabbit' },
+  { id: 'Other', label: '✨ Other' },
 ];
 
 export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
@@ -69,12 +84,13 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
 
   // ── Form State ────────────────────────────────────────────────
   const [name, setName] = useState('');
-  const [species, setSpecies] = useState('canine');
+  const [targetSpecies, setTargetSpecies] = useState<string[]>(['General']);
   const [category, setCategory] = useState('Dermatology / Otic');
   const [description, setDescription] = useState('');
   const [defaultAdvice, setDefaultAdvice] = useState('');
   const [protocolCode, setProtocolCode] = useState('');
   const [items, setItems] = useState<DraftMedItem[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
 
   // Validation & saving state
   const [errors, setErrors] = useState<{ name?: string; items?: string }>({});
@@ -98,12 +114,43 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
     unit: 'tabs',
     directions: 'Give after food with clean drinking water. Complete full course.',
   });
+  const [durationDaysStr, setDurationDaysStr] = useState('5');
+  const [quantityStr, setQuantityStr] = useState('10');
+
+  const handleToggleSpecies = (specId: string) => {
+    if (specId === 'General') {
+      setTargetSpecies(['General']);
+    } else {
+      let next = targetSpecies.filter((s) => s !== 'General');
+      if (next.includes(specId)) {
+        next = next.filter((s) => s !== specId);
+        if (next.length === 0) {
+          next = ['General'];
+        }
+      } else {
+        next.push(specId);
+      }
+      setTargetSpecies(next);
+    }
+  };
 
   // Populate form on Edit/View mode
   useEffect(() => {
     if (existingPkg) {
       setName(existingPkg.name || '');
-      setSpecies(existingPkg.species ? existingPkg.species.toLowerCase() : 'canine');
+      if (existingPkg.targetSpecies && existingPkg.targetSpecies.length > 0) {
+        setTargetSpecies(existingPkg.targetSpecies);
+      } else if (existingPkg.species) {
+        const raw = existingPkg.species.toLowerCase();
+        if (raw === 'universal' || raw === 'general' || raw === 'all') {
+          setTargetSpecies(['General']);
+        } else {
+          const matched = SPECIES_OPTIONS.find((s) => s.id.toLowerCase() === raw);
+          setTargetSpecies([matched ? matched.id : existingPkg.species]);
+        }
+      } else {
+        setTargetSpecies(['General']);
+      }
       setCategory(existingPkg.category || 'Dermatology / Otic');
       setDescription(existingPkg.description || '');
       setDefaultAdvice(existingPkg.defaultInstructions || '');
@@ -122,6 +169,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
           genericName: itm.genericName,
           presentation: itm.presentation || 'Tablet',
           strengthVolume: itm.strengthVolume || itm.presentation,
+          dose: itm.dose || itm.strengthVolume,
           quantity: itm.quantity,
           unit: itm.unit || 'units',
           frequency: itm.frequency,
@@ -167,6 +215,8 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
     setEditingItemIndex(null);
     setSelectedMedRef(null);
     setMedModalSearch('');
+    setDurationDaysStr('5');
+    setQuantityStr('10');
     setMedForm({
       brandName: '',
       genericName: '',
@@ -187,11 +237,13 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
     setEditingItemIndex(index);
     setSelectedMedRef(null);
     setMedModalSearch(item.brandName);
+    setDurationDaysStr(String(item.durationDays || 5));
+    setQuantityStr(String(item.quantity || 10));
     setMedForm({
       brandName: item.brandName,
       genericName: item.genericName || '',
       presentation: item.presentation,
-      doseUnit: item.strengthVolume || '1 tab',
+      doseUnit: item.dose || item.strengthVolume || '1 tab',
       route: item.route || 'PO (Oral)',
       frequency: item.frequency || 'BID (q12h / Twice daily)',
       durationDays: item.durationDays || 5,
@@ -228,6 +280,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
       strengthVolume: medForm.doseUnit,
+      dose: medForm.doseUnit,
       quantity: Number(medForm.quantity) || 1,
       unit: medForm.unit || 'tabs',
       frequency: medForm.frequency,
@@ -244,18 +297,18 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
       setItems([...items, newItem]);
     }
 
+    setIsDirty(true);
     setErrors((prev) => ({ ...prev, items: undefined }));
     setModalOpen(false);
   };
 
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
+    setIsDirty(true);
   };
 
   // ── Save Treatment Package ────────────────────────────────────
   const handleSavePackage = async () => {
-    if (mode === 'view') return;
-
     const newErrors: { name?: string; items?: string } = {};
     if (!name.trim()) {
       newErrors.name = 'Package Name is required.';
@@ -279,7 +332,8 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
         targetPkgId = (await db.treatmentPackages.add({
           name: name.trim(),
           category,
-          species,
+          species: targetSpecies.join(', '),
+          targetSpecies,
           description: description.trim() || undefined,
           defaultInstructions: defaultAdvice.trim() || undefined,
           protocolCode: protocolCode.trim() || `PROTO-${Date.now().toString().slice(-4)}`,
@@ -291,7 +345,8 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
         await db.treatmentPackages.update(targetPkgId, {
           name: name.trim(),
           category,
-          species,
+          species: targetSpecies.join(', '),
+          targetSpecies,
           description: description.trim() || undefined,
           defaultInstructions: defaultAdvice.trim() || undefined,
           protocolCode: protocolCode.trim() || undefined,
@@ -311,6 +366,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
           genericName: itm.genericName,
           presentation: itm.presentation,
           strengthVolume: itm.strengthVolume,
+          dose: itm.dose || itm.strengthVolume,
           quantity: itm.quantity,
           unit: itm.unit,
           frequency: itm.frequency,
@@ -321,10 +377,11 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
         }))
       );
 
+      setIsDirty(false);
       setSaveSuccess(true);
       setTimeout(() => {
         navigate('/packages');
-      }, 700);
+      }, 600);
     } catch (err) {
       console.error('Error saving package:', err);
       alert('Failed to save treatment package. Please check console for details.');
@@ -338,9 +395,9 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
       {/* ── BREADCRUMB & MODE NAVIGATION ──────────────────────── */}
       <div className="pkg-editor-nav">
         <nav className="pkg-breadcrumb">
-          <Link to="/packages" className="pkg-back-btn">
-            <Icon name="chevron-left" size={16} />
-            <span>Back to Package Library</span>
+          <Link to="/packages" className="btn-back" title="Back to Package Library">
+            <Icon name="arrow-left" size={14} />
+            <span>Back</span>
           </Link>
           <span>/</span>
           <span className="text-outline font-medium">Template Editor</span>
@@ -402,9 +459,10 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                     className={`form-input ${errors.name ? 'border-error' : ''}`}
                     placeholder="e.g. Canine Acute Otitis Externa"
                     value={name}
-                    disabled={mode === 'view'}
+                    disabled={isSaving}
                     onChange={(e) => {
                       setName(e.target.value);
+                      setIsDirty(true);
                       if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
                     }}
                   />
@@ -415,26 +473,47 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                 </div>
 
                 {/* Target Species */}
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" htmlFor="species-target">
+                <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                  <label className="form-label">
                     Target Species <span className="text-error">*</span>
                   </label>
-                  <select
-                    id="species-target"
-                    className="form-select"
-                    value={species}
-                    disabled={mode === 'view'}
-                    onChange={(e) => setSpecies(e.target.value)}
-                  >
-                    <option value="canine">🐶 Canine</option>
-                    <option value="feline">🐱 Feline</option>
-                    <option value="equine">🐴 Equine</option>
-                    <option value="avian">🦜 Avian</option>
-                    <option value="universal">🌐 Universal (All Species)</option>
-                    <option value="other">✨ Other</option>
-                  </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    {SPECIES_OPTIONS.map((spec) => {
+                      const isSelected = targetSpecies.includes(spec.id);
+                      return (
+                        <button
+                          key={spec.id}
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => {
+                            handleToggleSpecies(spec.id);
+                            setIsDirty(true);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 20,
+                            fontSize: '0.8125rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            border: isSelected
+                              ? '1.5px solid var(--color-primary)'
+                              : '1px solid var(--color-outline-variant)',
+                            background: isSelected
+                              ? 'var(--color-primary-container)'
+                              : 'var(--color-surface-container-low)',
+                            color: isSelected
+                              ? 'var(--color-on-primary-container)'
+                              : 'var(--color-on-surface-variant)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {spec.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <span className="text-xs text-outline mt-1 block">
-                    Restricts protocol filter logic.
+                    'General' applies universally to any species. Selecting specific species restricts protocol filtering to those animals.
                   </span>
                 </div>
               </div>
@@ -452,8 +531,11 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                         key={cat}
                         type="button"
                         className={`pkg-category-btn ${isActive ? 'active' : ''}`}
-                        disabled={mode === 'view'}
-                        onClick={() => setCategory(cat)}
+                        disabled={isSaving}
+                        onClick={() => {
+                          setCategory(cat);
+                          setIsDirty(true);
+                        }}
                       >
                         {cat}
                       </button>
@@ -473,8 +555,11 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                   className="form-input"
                   placeholder="e.g. Triple action: broad-spectrum systemic coverage, topical suspension, and cox-2 NSAID analgesia."
                   value={description}
-                  disabled={mode === 'view'}
-                  onChange={(e) => setDescription(e.target.value)}
+                  disabled={isSaving}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    setIsDirty(true);
+                  }}
                 />
               </div>
             </section>
@@ -490,16 +575,15 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                   </span>
                 </div>
 
-                {mode !== 'view' && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={openAddMedModal}
-                  >
-                    <Icon name="plus" size={16} />
-                    <span>Add Medicine</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={openAddMedModal}
+                  disabled={isSaving}
+                >
+                  <Icon name="plus" size={16} />
+                  <span>Add Medicine</span>
+                </button>
               </div>
 
               {errors.items && <span className="form-error">{errors.items}</span>}
@@ -525,16 +609,15 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                     <p className="text-xs text-outline mb-3">
                       Add the default pharmaceutical items, dosing regimens, and routes for this protocol.
                     </p>
-                    {mode !== 'view' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={openAddMedModal}
-                      >
-                        <Icon name="plus" size={16} />
-                        <span>Add First Medicine</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={openAddMedModal}
+                      disabled={isSaving}
+                    >
+                      <Icon name="plus" size={16} />
+                      <span>Add First Medicine</span>
+                    </button>
                   </div>
                 ) : (
                   items.map((itm, idx) => (
@@ -553,28 +636,28 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                           </div>
                         </div>
 
-                        {mode !== 'view' && (
-                          <div className="pkg-med-actions">
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => openEditMedModal(idx)}
-                              title="Edit Item"
-                            >
-                              <Icon name="edit" size={14} />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-destructive btn-sm"
-                              onClick={() => handleRemoveItem(idx)}
-                              title="Remove Item"
-                            >
-                              <Icon name="trash" size={14} />
-                              <span>Remove</span>
-                            </button>
-                          </div>
-                        )}
+                        <div className="pkg-med-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => openEditMedModal(idx)}
+                            title="Edit Item"
+                            disabled={isSaving}
+                          >
+                            <Icon name="edit" size={14} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-destructive btn-sm"
+                            onClick={() => handleRemoveItem(idx)}
+                            title="Remove Item"
+                            disabled={isSaving}
+                          >
+                            <Icon name="trash" size={14} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* 4-Column Metric Grid */}
@@ -645,8 +728,11 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                   rows={4}
                   placeholder="Enter specific post-consult instructions, red flag symptoms, dietary requirements..."
                   value={defaultAdvice}
-                  disabled={mode === 'view'}
-                  onChange={(e) => setDefaultAdvice(e.target.value)}
+                  disabled={isSaving}
+                  onChange={(e) => {
+                    setDefaultAdvice(e.target.value);
+                    setIsDirty(true);
+                  }}
                 />
                 <div className="pkg-char-counter">
                   <span>Supports auto-tokens: [Pet Name], [Duration], [Clinic Emergency Line]</span>
@@ -660,29 +746,30 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => navigate('/packages')}
+                onClick={() => {
+                  if (isDirty && !window.confirm('You have unsaved changes. Discard and leave?')) return;
+                  navigate('/packages');
+                }}
               >
-                {mode === 'view' ? 'Back' : 'Cancel'}
+                Cancel / Back
               </button>
 
-              {mode !== 'view' && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ minWidth: 150 }}
-                  disabled={isSaving}
-                  onClick={handleSavePackage}
-                >
-                  <Icon name={saveSuccess ? 'check' : 'save'} size={18} />
-                  <span>
-                    {isSaving
-                      ? 'Saving Package...'
-                      : saveSuccess
-                      ? 'Saved Successfully'
-                      : 'Save Package'}
-                  </span>
-                </button>
-              )}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ minWidth: 160 }}
+                disabled={isSaving}
+                onClick={handleSavePackage}
+              >
+                <Icon name={saveSuccess ? 'check' : 'save'} size={18} />
+                <span>
+                  {isSaving
+                    ? 'Saving Package...'
+                    : saveSuccess
+                    ? 'Saved Successfully'
+                    : 'Save Changes'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -725,7 +812,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
             <div className="pkg-summary-table">
               <div className="pkg-summary-row">
                 <span className="pkg-summary-lbl">Selected Target</span>
-                <span className="pkg-summary-val capitalize">{species} Specie</span>
+                <span className="pkg-summary-val">{targetSpecies.join(', ')}</span>
               </div>
               <div className="pkg-summary-row">
                 <span className="pkg-summary-lbl">Medication Items</span>
@@ -954,27 +1041,36 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
                   <label className="form-label">Duration &amp; Qty</label>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       className="form-input"
                       style={{ width: 65, textAlign: 'center' }}
                       placeholder="Days"
-                      value={medForm.durationDays}
-                      onChange={(e) =>
-                        setMedForm({
-                          ...medForm,
-                          durationDays: parseInt(e.target.value, 10) || 0,
-                        })
-                      }
+                      value={durationDaysStr}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        setDurationDaysStr(val);
+                        setMedForm((prev) => ({
+                          ...prev,
+                          durationDays: val ? parseInt(val, 10) : 0,
+                        }));
+                      }}
                     />
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       className="form-input"
                       style={{ width: 65, textAlign: 'center' }}
                       placeholder="Qty"
-                      value={medForm.quantity}
-                      onChange={(e) =>
-                        setMedForm({ ...medForm, quantity: parseInt(e.target.value, 10) || 1 })
-                      }
+                      value={quantityStr}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        setQuantityStr(val);
+                        setMedForm((prev) => ({
+                          ...prev,
+                          quantity: val ? parseInt(val, 10) : 0,
+                        }));
+                      }}
                     />
                   </div>
                 </div>

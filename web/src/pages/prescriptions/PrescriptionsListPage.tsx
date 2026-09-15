@@ -13,7 +13,7 @@ import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import './Prescriptions.css';
 
-type StatusFilter = 'all' | 'Issued' | 'Draft';
+type StatusFilter = 'all' | 'Issued' | 'Draft' | 'Cancelled';
 
 export const PrescriptionsListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -59,6 +59,10 @@ export const PrescriptionsListPage: React.FC = () => {
   );
   const draftCount = useMemo(
     () => prescriptions?.filter((rx) => rx.status === 'Draft').length || 0,
+    [prescriptions]
+  );
+  const cancelledCount = useMemo(
+    () => prescriptions?.filter((rx) => rx.status === 'Cancelled').length || 0,
     [prescriptions]
   );
 
@@ -271,6 +275,14 @@ export const PrescriptionsListPage: React.FC = () => {
             <span>Draft</span>
             <span className="rx-chip-count">({draftCount})</span>
           </button>
+          <button
+            type="button"
+            className={`rx-filter-chip ${statusFilter === 'Cancelled' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('Cancelled')}
+          >
+            <span>Cancelled</span>
+            <span className="rx-chip-count">({cancelledCount})</span>
+          </button>
         </div>
       </div>
 
@@ -385,7 +397,7 @@ export const PrescriptionsListPage: React.FC = () => {
 
                       {/* Status Badge */}
                       <td>
-                        <span className={`rx-status-pill ${rx.status === 'Issued' ? 'issued' : 'draft'}`}>
+                        <span className={`rx-status-pill ${rx.status === 'Issued' ? 'issued' : rx.status === 'Cancelled' ? 'cancelled' : 'draft'}`}>
                           <span className="status-dot" />
                           <span>{rx.status}</span>
                         </span>

@@ -8,6 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Medicine, Species, DosingMethod, WeightBandRule } from '../../types';
 import { Icon } from '../../components/ui/Icon';
+import { formatControlledNumber } from '../../utils/doseCalculator';
 
 interface MedicineFormModalProps {
   isOpen: boolean;
@@ -181,6 +182,32 @@ export function MedicineFormModal({
   const [doseUnit, setDoseUnit] = useState<string>('mg');
   const [weightBands, setWeightBands] = useState<WeightBandRule[]>([]);
 
+  const availableDoseUnits = useMemo(() => {
+    const units = [...availableUnits];
+    if (doseUnit && !units.includes(doseUnit)) {
+      units.push(doseUnit);
+    }
+    return units;
+  }, [availableUnits, doseUnit]);
+
+  // Method A: Volume per Body Weight
+  const [doseVolumeAmount, setDoseVolumeAmount] = useState<string>('1');
+  const [doseVolumeUnit, setDoseVolumeUnit] = useState<string>('mL');
+  const [weightBasis, setWeightBasis] = useState<string>('20');
+  const [weightBasisUnit, setWeightBasisUnit] = useState<string>('kg');
+
+  // Method B & C: Reconstitution
+  const [reconstitutionSourceQty, setReconstitutionSourceQty] = useState<string>('1');
+  const [reconstitutionSourceUnit, setReconstitutionSourceUnit] = useState<string>('tablet');
+  const [reconstitutionDiluentVolume, setReconstitutionDiluentVolume] = useState<string>('20');
+  const [reconstitutionDiluentUnit, setReconstitutionDiluentUnit] = useState<string>('mL');
+  const [reconstitutionAdminVolume, setReconstitutionAdminVolume] = useState<string>('1');
+  const [reconstitutionAdminUnit, setReconstitutionAdminUnit] = useState<string>('mL');
+
+  // Method C: Drops specific
+  const [dropsPerMl, setDropsPerMl] = useState<string>('');
+  const [doseDrops, setDoseDrops] = useState<string>('20');
+
   // Formulation / Concentration Conversion
   const [concentrationStrength, setConcentrationStrength] = useState<string>('');
   const [concentrationStrengthUnit, setConcentrationStrengthUnit] = useState<string>('mg');
@@ -266,6 +293,24 @@ export function MedicineFormModal({
       setDoseUnit(medicine.doseUnit || 'mg');
       setWeightBands(medicine.weightBands ? JSON.parse(JSON.stringify(medicine.weightBands)) : []);
 
+      // Method A: Volume per Body Weight
+      setDoseVolumeAmount(medicine.doseVolumeAmount !== undefined ? String(medicine.doseVolumeAmount) : '1');
+      setDoseVolumeUnit(medicine.doseVolumeUnit || 'mL');
+      setWeightBasis(medicine.weightBasis !== undefined ? String(medicine.weightBasis) : '20');
+      setWeightBasisUnit(medicine.weightBasisUnit || 'kg');
+
+      // Method B & C: Reconstitution
+      setReconstitutionSourceQty(medicine.reconstitutionSourceQty !== undefined ? String(medicine.reconstitutionSourceQty) : '1');
+      setReconstitutionSourceUnit(medicine.reconstitutionSourceUnit || 'tablet');
+      setReconstitutionDiluentVolume(medicine.reconstitutionDiluentVolume !== undefined ? String(medicine.reconstitutionDiluentVolume) : '20');
+      setReconstitutionDiluentUnit(medicine.reconstitutionDiluentUnit || 'mL');
+      setReconstitutionAdminVolume(medicine.reconstitutionAdminVolume !== undefined ? String(medicine.reconstitutionAdminVolume) : '1');
+      setReconstitutionAdminUnit(medicine.reconstitutionAdminUnit || 'mL');
+
+      // Method C: Drops specific
+      setDropsPerMl(medicine.dropsPerMl !== undefined ? String(medicine.dropsPerMl) : '');
+      setDoseDrops(medicine.doseDrops !== undefined ? String(medicine.doseDrops) : '20');
+
       // Concentration conversion
       setConcentrationStrength(medicine.concentrationStrength !== undefined ? String(medicine.concentrationStrength) : '');
       setConcentrationStrengthUnit(medicine.concentrationStrengthUnit || 'mg');
@@ -296,6 +341,18 @@ export function MedicineFormModal({
       setFixedDose('1');
       setDoseUnit('mg');
       setWeightBands([]);
+      setDoseVolumeAmount('1');
+      setDoseVolumeUnit('mL');
+      setWeightBasis('20');
+      setWeightBasisUnit('kg');
+      setReconstitutionSourceQty('1');
+      setReconstitutionSourceUnit('tablet');
+      setReconstitutionDiluentVolume('20');
+      setReconstitutionDiluentUnit('mL');
+      setReconstitutionAdminVolume('1');
+      setReconstitutionAdminUnit('mL');
+      setDropsPerMl('');
+      setDoseDrops('20');
       setConcentrationStrength('');
       setConcentrationStrengthUnit('mg');
       setConcentrationVolume('1');
@@ -337,6 +394,14 @@ export function MedicineFormModal({
       const parsedConcVolume = concentrationVolume ? parseFloat(concentrationVolume) : undefined;
       const parsedDuration = defaultDurationDays ? parseInt(defaultDurationDays, 10) : undefined;
 
+      const parsedDoseVolumeAmount = doseVolumeAmount ? parseFloat(doseVolumeAmount) : undefined;
+      const parsedWeightBasis = weightBasis ? parseFloat(weightBasis) : undefined;
+      const parsedReconstitutionSourceQty = reconstitutionSourceQty ? parseFloat(reconstitutionSourceQty) : undefined;
+      const parsedReconstitutionDiluentVolume = reconstitutionDiluentVolume ? parseFloat(reconstitutionDiluentVolume) : undefined;
+      const parsedReconstitutionAdminVolume = reconstitutionAdminVolume ? parseFloat(reconstitutionAdminVolume) : undefined;
+      const parsedDropsPerMl = dropsPerMl ? parseFloat(dropsPerMl) : undefined;
+      const parsedDoseDrops = doseDrops ? parseFloat(doseDrops) : undefined;
+
       const medicinePayload: Partial<Medicine> = {
         brandName: brandName.trim(),
         genericName: genericName.trim() || undefined,
@@ -355,6 +420,21 @@ export function MedicineFormModal({
         fixedDose: parsedFixedDose,
         doseUnit: doseUnit.trim() || undefined,
         weightBands: weightBands.length > 0 ? weightBands : undefined,
+        // Volume per body weight
+        doseVolumeAmount: parsedDoseVolumeAmount,
+        doseVolumeUnit: doseVolumeUnit.trim() || undefined,
+        weightBasis: parsedWeightBasis,
+        weightBasisUnit: weightBasisUnit.trim() || undefined,
+        // Reconstitution
+        reconstitutionSourceQty: parsedReconstitutionSourceQty,
+        reconstitutionSourceUnit: reconstitutionSourceUnit.trim() || undefined,
+        reconstitutionDiluentVolume: parsedReconstitutionDiluentVolume,
+        reconstitutionDiluentUnit: reconstitutionDiluentUnit.trim() || undefined,
+        reconstitutionAdminVolume: parsedReconstitutionAdminVolume,
+        reconstitutionAdminUnit: reconstitutionAdminUnit.trim() || undefined,
+        dropsPerMl: parsedDropsPerMl,
+        doseDrops: parsedDoseDrops,
+        // Concentration conversion
         concentrationStrength: parsedConcStrength,
         concentrationStrengthUnit: concentrationStrengthUnit.trim() || undefined,
         concentrationVolume: parsedConcVolume,
@@ -543,8 +623,8 @@ export function MedicineFormModal({
                   value={defaultUnit}
                   onChange={(e) => setDefaultUnit(e.target.value)}
                 >
-                  {availableUnits.map((u) => (
-                    <option key={u} value={u}>
+                  {availableUnits.map((u, idx) => (
+                    <option key={`med-form-unit-${u}-${idx}`} value={u}>
                       {u}
                     </option>
                   ))}
@@ -621,6 +701,9 @@ export function MedicineFormModal({
                         <option value="weight_based">Weight-Based (Patient Weight × Dose per kg)</option>
                         <option value="weight_range">Weight-Based Range (min–max mg/kg)</option>
                         <option value="weight_band">Weight-Band (Tier-Based by Weight Range)</option>
+                        <option value="volume_per_weight">Volume per Body Weight (e.g. 1 mL per 20 kg)</option>
+                        <option value="reconstituted_liquid">Reconstituted Tablet/Unit → Liquid Volume</option>
+                        <option value="reconstituted_drops">Reconstituted Tablet/Unit → Drops</option>
                         <option value="fixed">Fixed Dose (1 tablet/sachet/vial per dose)</option>
                       </select>
                       <span className="medicine-form-hint">
@@ -628,6 +711,9 @@ export function MedicineFormModal({
                         {dosingMethod === 'weight_based' && 'Calculates: Patient weight (kg) × configured dose per kg.'}
                         {dosingMethod === 'weight_range' && 'Calculates: Patient weight (kg) × min & max range; doctor selects final dose.'}
                         {dosingMethod === 'weight_band' && 'Selects pre-configured dose band corresponding to patient weight.'}
+                        {dosingMethod === 'volume_per_weight' && 'Calculates: Patient Weight × (Dose Volume ÷ Weight Basis). e.g. 1 mL per 20 kg.'}
+                        {dosingMethod === 'reconstituted_liquid' && 'Calculates administered liquid volume and source unit equivalent.'}
+                        {dosingMethod === 'reconstituted_drops' && 'Calculates administered drops into volume and source equivalent using calibrated drops/mL.'}
                         {dosingMethod === 'fixed' && 'Applies fixed dose directly without weight multiplication.'}
                       </span>
                     </div>
@@ -674,17 +760,19 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="e.g. 10"
-                                  value={dosePerKg}
+                                  value={formatControlledNumber(dosePerKg)}
                                   onChange={(e) => setDosePerKg(e.target.value)}
                                 />
-                                <input
-                                  type="text"
-                                  className="medicine-form-input"
-                                  style={{ width: '90px' }}
-                                  placeholder="Unit"
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
                                   value={doseUnit}
                                   onChange={(e) => setDoseUnit(e.target.value)}
-                                />
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`med-dose-unit-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
                               </div>
                               <span className="medicine-form-hint">e.g. 10 mg/kg</span>
                             </div>
@@ -699,7 +787,7 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="Min /kg"
-                                  value={minDosePerKg}
+                                  value={formatControlledNumber(minDosePerKg)}
                                   onChange={(e) => setMinDosePerKg(e.target.value)}
                                 />
                                 <span style={{ color: 'var(--color-outline)', fontSize: '12px' }}>to</span>
@@ -708,7 +796,7 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="Max /kg"
-                                  value={maxDosePerKg}
+                                  value={formatControlledNumber(maxDosePerKg)}
                                   onChange={(e) => setMaxDosePerKg(e.target.value)}
                                 />
                               </div>
@@ -730,7 +818,7 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="Min /kg"
-                                  value={minDosePerKg}
+                                  value={formatControlledNumber(minDosePerKg)}
                                   onChange={(e) => setMinDosePerKg(e.target.value)}
                                 />
                                 <span style={{ color: 'var(--color-outline)', fontSize: '12px' }}>–</span>
@@ -739,17 +827,19 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="Max /kg"
-                                  value={maxDosePerKg}
+                                  value={formatControlledNumber(maxDosePerKg)}
                                   onChange={(e) => setMaxDosePerKg(e.target.value)}
                                 />
-                                <input
-                                  type="text"
-                                  className="medicine-form-input"
-                                  style={{ width: '90px' }}
-                                  placeholder="Unit"
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
                                   value={doseUnit}
                                   onChange={(e) => setDoseUnit(e.target.value)}
-                                />
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`med-range-unit-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
                               </div>
                               <span className="medicine-form-hint">e.g. 10–20 mg/kg</span>
                             </div>
@@ -764,7 +854,7 @@ export function MedicineFormModal({
                                 step="any"
                                 className="medicine-form-input"
                                 placeholder="e.g. 15 (optional midpoint)"
-                                value={dosePerKg}
+                                value={formatControlledNumber(dosePerKg)}
                                 onChange={(e) => setDosePerKg(e.target.value)}
                               />
                               <span className="medicine-form-hint">Pre-selected for the doctor in the prescription modal.</span>
@@ -800,14 +890,14 @@ export function MedicineFormModal({
                               <div className="medicine-weight-bands-list">
                                 {weightBands.map((band, idx) => (
                                   <div key={band.id || idx} className="medicine-weight-band-row">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: '160px' }}>
                                       <input
                                         type="number"
                                         step="any"
                                         className="medicine-form-input"
                                         placeholder="Min kg"
-                                        value={band.minWeightKg ?? ''}
-                                        onChange={(e) => handleUpdateWeightBand(idx, 'minWeightKg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                        value={formatControlledNumber(band.minWeightKg)}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'minWeightKg', e.target.value !== '' ? parseFloat(e.target.value) : undefined)}
                                         style={{ width: '80px' }}
                                       />
                                       <span style={{ fontSize: '11px', color: 'var(--color-outline)' }}>–</span>
@@ -816,29 +906,31 @@ export function MedicineFormModal({
                                         step="any"
                                         className="medicine-form-input"
                                         placeholder="Max kg (empty=∞)"
-                                        value={band.maxWeightKg ?? ''}
-                                        onChange={(e) => handleUpdateWeightBand(idx, 'maxWeightKg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                        value={formatControlledNumber(band.maxWeightKg)}
+                                        onChange={(e) => handleUpdateWeightBand(idx, 'maxWeightKg', e.target.value !== '' ? parseFloat(e.target.value) : undefined)}
                                         style={{ width: '80px' }}
                                       />
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: '160px' }}>
                                       <input
                                         type="number"
                                         step="any"
                                         className="medicine-form-input"
                                         placeholder="Dose"
-                                        value={band.doseValue}
+                                        value={formatControlledNumber(band.doseValue)}
                                         onChange={(e) => handleUpdateWeightBand(idx, 'doseValue', parseFloat(e.target.value) || 0)}
                                         style={{ width: '70px' }}
                                       />
-                                      <input
-                                        type="text"
-                                        className="medicine-form-input"
-                                        placeholder="Unit"
-                                        value={band.doseUnit}
+                                      <select
+                                        className="medicine-form-select"
+                                        value={band.doseUnit || doseUnit}
                                         onChange={(e) => handleUpdateWeightBand(idx, 'doseUnit', e.target.value)}
-                                        style={{ width: '80px' }}
-                                      />
+                                        style={{ width: '90px' }}
+                                      >
+                                        {availableDoseUnits.map((u, uIdx) => (
+                                          <option key={`band-unit-${u}-${uIdx}`} value={u}>{u}</option>
+                                        ))}
+                                      </select>
                                     </div>
                                     <input
                                       type="text"
@@ -846,7 +938,7 @@ export function MedicineFormModal({
                                       placeholder="Label (e.g. ≤10 kg)"
                                       value={band.label || ''}
                                       onChange={(e) => handleUpdateWeightBand(idx, 'label', e.target.value)}
-                                      style={{ flex: 1 }}
+                                      style={{ flex: 1, minWidth: '120px' }}
                                     />
                                     <button
                                       type="button"
@@ -878,19 +970,265 @@ export function MedicineFormModal({
                                   step="any"
                                   className="medicine-form-input"
                                   placeholder="e.g. 1"
-                                  value={fixedDose}
+                                  value={formatControlledNumber(fixedDose)}
                                   onChange={(e) => setFixedDose(e.target.value)}
+                                />
+                                <select
+                                  id="med-fixed-dose-unit"
+                                  className="medicine-form-select"
+                                  style={{ width: '130px' }}
+                                  value={doseUnit}
+                                  onChange={(e) => setDoseUnit(e.target.value)}
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`fixed-unit-${u}-${idx}`} value={u}>
+                                      {u}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="medicine-form-hint">e.g. 1 tablet, 1 sachet, 1 pipette per dose.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* VOLUME PER BODY WEIGHT FIELDS (e.g. 1 mL per 20 kg) */}
+                        {dosingMethod === 'volume_per_weight' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-vol-dose">
+                                Dose Volume <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-vol-dose"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 1"
+                                  value={formatControlledNumber(doseVolumeAmount)}
+                                  onChange={(e) => setDoseVolumeAmount(e.target.value)}
+                                />
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
+                                  value={doseVolumeUnit}
+                                  onChange={(e) => setDoseVolumeUnit(e.target.value)}
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`med-vol-unit-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="medicine-form-hint">e.g. 1 mL</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-weight-basis">
+                                Weight Basis <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-weight-basis"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 20"
+                                  value={formatControlledNumber(weightBasis)}
+                                  onChange={(e) => setWeightBasis(e.target.value)}
+                                />
+                                <span className="rx-unit-badge">kg</span>
+                              </div>
+                              <span className="medicine-form-hint">e.g. per 20 kg</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* RECONSTITUTED TABLET/UNIT -> LIQUID VOLUME */}
+                        {dosingMethod === 'reconstituted_liquid' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-recon-source-qty">
+                                Source Quantity & Unit <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-recon-source-qty"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 1"
+                                  value={formatControlledNumber(reconstitutionSourceQty)}
+                                  onChange={(e) => setReconstitutionSourceQty(e.target.value)}
                                 />
                                 <input
                                   type="text"
                                   className="medicine-form-input"
                                   style={{ width: '100px' }}
-                                  placeholder="Unit"
-                                  value={doseUnit}
-                                  onChange={(e) => setDoseUnit(e.target.value)}
+                                  placeholder="tablet / vial"
+                                  value={reconstitutionSourceUnit}
+                                  onChange={(e) => setReconstitutionSourceUnit(e.target.value)}
                                 />
                               </div>
-                              <span className="medicine-form-hint">e.g. 1 tablet, 1 sachet, 1 pipette per dose.</span>
+                              <span className="medicine-form-hint">e.g. 1 tablet</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-recon-dil-vol">
+                                Diluent / Reconstitution Volume <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-recon-dil-vol"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 20"
+                                  value={formatControlledNumber(reconstitutionDiluentVolume)}
+                                  onChange={(e) => setReconstitutionDiluentVolume(e.target.value)}
+                                />
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
+                                  value={reconstitutionDiluentUnit}
+                                  onChange={(e) => setReconstitutionDiluentUnit(e.target.value)}
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`recon-dil-u-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="medicine-form-hint">e.g. dissolved in 20 mL water</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-recon-admin-vol">
+                                Administration Dose Volume <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-recon-admin-vol"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 1"
+                                  value={formatControlledNumber(reconstitutionAdminVolume)}
+                                  onChange={(e) => setReconstitutionAdminVolume(e.target.value)}
+                                />
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
+                                  value={reconstitutionAdminUnit}
+                                  onChange={(e) => setReconstitutionAdminUnit(e.target.value)}
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`recon-adm-u-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="medicine-form-hint">e.g. give 1 mL (1/20 tablet equivalent)</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* RECONSTITUTED TABLET/UNIT -> DROPS */}
+                        {dosingMethod === 'reconstituted_drops' && (
+                          <div className="medicine-form-grid full-width" style={{ marginTop: '6px' }}>
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-recon-d-source-qty">
+                                Source Quantity & Unit <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-recon-d-source-qty"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 1"
+                                  value={formatControlledNumber(reconstitutionSourceQty)}
+                                  onChange={(e) => setReconstitutionSourceQty(e.target.value)}
+                                />
+                                <input
+                                  type="text"
+                                  className="medicine-form-input"
+                                  style={{ width: '100px' }}
+                                  placeholder="tablet / vial"
+                                  value={reconstitutionSourceUnit}
+                                  onChange={(e) => setReconstitutionSourceUnit(e.target.value)}
+                                />
+                              </div>
+                              <span className="medicine-form-hint">e.g. 1 tablet</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-recon-d-dil-vol">
+                                Diluent Volume <span className="required">*</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                  id="med-recon-d-dil-vol"
+                                  type="number"
+                                  step="any"
+                                  min="0.01"
+                                  className="medicine-form-input"
+                                  placeholder="e.g. 20"
+                                  value={formatControlledNumber(reconstitutionDiluentVolume)}
+                                  onChange={(e) => setReconstitutionDiluentVolume(e.target.value)}
+                                />
+                                <select
+                                  className="medicine-form-select"
+                                  style={{ width: '100px' }}
+                                  value={reconstitutionDiluentUnit}
+                                  onChange={(e) => setReconstitutionDiluentUnit(e.target.value)}
+                                >
+                                  {availableDoseUnits.map((u, idx) => (
+                                    <option key={`recon-d-dil-u-${u}-${idx}`} value={u}>{u}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <span className="medicine-form-hint">e.g. 20 mL water</span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-drops-per-ml">
+                                Drops per mL (Calibrated) <span className="required">*</span>
+                              </label>
+                              <input
+                                id="med-drops-per-ml"
+                                type="number"
+                                step="any"
+                                min="1"
+                                className="medicine-form-input"
+                                placeholder="e.g. 20 (dropper calibration)"
+                                value={formatControlledNumber(dropsPerMl)}
+                                onChange={(e) => setDropsPerMl(e.target.value)}
+                              />
+                              <span className="medicine-form-hint">
+                                Calibrated value required. System never assumes 20 drops = 1 mL.
+                              </span>
+                            </div>
+
+                            <div className="medicine-form-group">
+                              <label className="medicine-form-label" htmlFor="med-dose-drops">
+                                Dose in Drops <span className="required">*</span>
+                              </label>
+                              <input
+                                id="med-dose-drops"
+                                type="number"
+                                step="any"
+                                min="1"
+                                className="medicine-form-input"
+                                placeholder="e.g. 20"
+                                value={formatControlledNumber(doseDrops)}
+                                onChange={(e) => setDoseDrops(e.target.value)}
+                              />
+                              <span className="medicine-form-hint">e.g. give 20 drops</span>
                             </div>
                           </div>
                         )}
@@ -910,19 +1248,19 @@ export function MedicineFormModal({
                             Base Volume: 1<br />
                             Volume Unit: mL
                           </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'end' }}>
-                            <div>
+                          <div className="medicine-dosing-grid-4">
+                            <div className="medicine-form-group">
                               <label className="medicine-form-label">Strength of active ingredient <span className="required">*</span></label>
                               <input
                                 type="number"
                                 step="any"
                                 className="medicine-form-input"
                                 placeholder="Example: 5"
-                                value={concentrationStrength}
+                                value={formatControlledNumber(concentrationStrength)}
                                 onChange={(e) => setConcentrationStrength(e.target.value)}
                               />
                             </div>
-                            <div>
+                            <div className="medicine-form-group">
                               <label className="medicine-form-label">Unit of active ingredient</label>
                               <select
                                 className="medicine-form-select"
@@ -936,8 +1274,8 @@ export function MedicineFormModal({
                                   }
                                 }}
                               >
-                                {activeIngredientUnitOptions.map((u) => (
-                                  <option key={u} value={u}>{u}</option>
+                                {activeIngredientUnitOptions.map((u, idx) => (
+                                  <option key={`med-ing-unit-${u}-${idx}`} value={u}>{u}</option>
                                 ))}
                               </select>
                               {isOtherStrengthUnit && (
@@ -952,18 +1290,18 @@ export function MedicineFormModal({
                                 />
                               )}
                             </div>
-                            <div>
+                            <div className="medicine-form-group">
                               <label className="medicine-form-label">Base Volume</label>
                               <input
                                 type="number"
                                 step="any"
                                 className="medicine-form-input"
                                 placeholder="Example: 1"
-                                value={concentrationVolume}
+                                value={formatControlledNumber(concentrationVolume)}
                                 onChange={(e) => setConcentrationVolume(e.target.value)}
                               />
                             </div>
-                            <div>
+                            <div className="medicine-form-group">
                               <label className="medicine-form-label">Volume Unit</label>
                               <select
                                 className="medicine-form-select"
@@ -977,8 +1315,8 @@ export function MedicineFormModal({
                                   }
                                 }}
                               >
-                                {volumeUnitOptions.map((u) => (
-                                  <option key={u} value={u}>{u}</option>
+                                {volumeUnitOptions.map((u, idx) => (
+                                  <option key={`med-vol-unit-${u}-${idx}`} value={u}>{u}</option>
                                 ))}
                               </select>
                               {isOtherVolumeUnit && (
@@ -1000,7 +1338,7 @@ export function MedicineFormModal({
                         </div>
 
                         {/* PRESCRIBING DEFAULTS */}
-                        <div className="medicine-form-grid full-width" style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--color-border)' }}>
+                        <div className="medicine-dosing-grid-4" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed var(--color-border)' }}>
                           <div className="medicine-form-group">
                             <label className="medicine-form-label" htmlFor="med-default-route">
                               Default Route
@@ -1018,8 +1356,8 @@ export function MedicineFormModal({
                                 }
                               }}
                             >
-                              {routeOptions.map((r) => (
-                                <option key={r} value={r}>{r}</option>
+                              {routeOptions.map((r, idx) => (
+                                <option key={`med-def-route-${r}-${idx}`} value={r}>{r}</option>
                               ))}
                             </select>
                             {isOtherRoute && (
@@ -1052,8 +1390,8 @@ export function MedicineFormModal({
                                 }
                               }}
                             >
-                              {frequencyOptions.map((f) => (
-                                <option key={f} value={f}>{f}</option>
+                              {frequencyOptions.map((f, idx) => (
+                                <option key={`med-def-freq-${f}-${idx}`} value={f}>{f}</option>
                               ))}
                             </select>
                             {isOtherFrequency && (

@@ -4,7 +4,7 @@
 // multiple animals for owner, and historical prescriptions & invoices.
 // =============================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
@@ -84,6 +84,76 @@ export const PatientDetailsPage: React.FC = () => {
     [patientId]
   );
 
+  // ── Owner Edit Modal State & Handlers ─────────────────────────
+  const [isEditOwnerOpen, setIsEditOwnerOpen] = useState(false);
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerAddress, setOwnerAddress] = useState('');
+  const [ownerNotes, setOwnerNotes] = useState('');
+  const [ownerError, setOwnerError] = useState<string | null>(null);
+  const [isSavingOwner, setIsSavingOwner] = useState(false);
+
+  const openEditOwner = () => {
+    if (!owner) return;
+    setOwnerName(owner.name || '');
+    setOwnerPhone(owner.phone || '');
+    setOwnerEmail(owner.email || '');
+    setOwnerAddress(owner.address || '');
+    setOwnerNotes(owner.notes || '');
+    setOwnerError(null);
+    setIsEditOwnerOpen(true);
+  };
+
+  const handleSaveOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!owner?.id) return;
+    const trimmedName = ownerName.trim();
+    const trimmedPhone = ownerPhone.trim();
+    if (!trimmedName) {
+      setOwnerError('Owner full name is required.');
+      return;
+    }
+    if (!trimmedPhone) {
+      setOwnerError('Owner phone number is required.');
+      return;
+    }
+    const cleanPhone = trimmedPhone.replace(/[^0-9+]/g, '');
+    if (cleanPhone.replace(/\D/g, '').length < 7) {
+      setOwnerError('Please enter a valid phone number (at least 7 digits).');
+      return;
+    }
+
+    setIsSavingOwner(true);
+    try {
+      // Duplicate phone normalization check
+      const existingWithPhone = await db.owners.where('phone').equals(cleanPhone).first();
+      if (existingWithPhone && existingWithPhone.id !== owner.id) {
+        setOwnerError(
+          `Another client record (${existingWithPhone.name}) already has this phone number (${cleanPhone}). Please verify.`
+        );
+        setIsSavingOwner(false);
+        return;
+      }
+
+      await db.owners.update(owner.id, {
+        name: trimmedName,
+        phone: cleanPhone,
+        email: ownerEmail.trim() || undefined,
+        address: ownerAddress.trim() || undefined,
+        notes: ownerNotes.trim() || undefined,
+        updatedAt: new Date(),
+      });
+
+      setIsEditOwnerOpen(false);
+    } catch (err) {
+      console.error('Failed to update owner:', err);
+      setOwnerError('Failed to save owner changes.');
+    } finally {
+      setIsSavingOwner(false);
+    }
+  };
+
   if (patient === undefined) {
     return (
       <div className="patients-page">
@@ -135,50 +205,51 @@ export const PatientDetailsPage: React.FC = () => {
   return (
     <div className="patients-page">
       {/* ── Breadcrumb & Top Bar ───────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-space-sm">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-space-xs text-sm">
-          <Link to="/patients" className="text-primary hover:underline font-medium flex items-center gap-1">
-            <Icon name="chevron-left" size={14} />
-            <span>Patients</span>
+      <div className="patient-details-header flex items-center justify-between flex-wrap gap-space-sm">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-space-sm text-sm flex-wrap">
+          <Link to="/patients" className="btn-back" title="Back to Patients">
+            <Icon name="arrow-left" size={14} />
+            <span>Back</span>
           </Link>
           <span className="text-outline-variant">/</span>
           <span className="text-on-surface font-semibold">{formatOwnerPrimary(owner, 'Client')} — {!isArtificialOrBlankName(patient.name) ? patient.name : patient.species}</span>
         </nav>
 
-        <div className="flex items-center gap-space-md flex-wrap">
-          {/* Group 1: Clinical / Billing Actions */}
-          <div className="flex items-center gap-space-xs flex-wrap">
+        <div className="patient-details-actions">
+          {/* Group 1: Primary Clinical / Billing Actions */}
+          <div className="patient-actions-group patient-actions-primary-group">
             <Link
               to={`/prescriptions/new?patientId=${patient.id}`}
-              className="btn btn-primary"
+              className="btn patient-action-btn patient-btn-primary"
               id="btn-add-new-rx"
-              style={{ background: '#15803d', borderColor: '#15803d', color: '#ffffff', fontWeight: 600 }}
             >
-              <Icon name="plus" size={15} /> Add New Rx
+              <Icon name="plus" size={15} />
+              <span>Add New Rx</span>
             </Link>
             <Link
               to={`/invoices/new?patientId=${patient.id}`}
-              className="btn btn-primary"
+              className="btn patient-action-btn patient-btn-primary"
               id="btn-add-new-invoice"
-              style={{ background: '#15803d', borderColor: '#15803d', color: '#ffffff', fontWeight: 600 }}
             >
-              <Icon name="plus" size={15} /> Add New Invoice/Receipt
+              <Icon name="plus" size={15} />
+              <span>Add New Invoice/Receipt</span>
             </Link>
           </div>
 
-          {/* Visual Divider */}
-          <div style={{ width: '1px', height: '28px', background: 'var(--color-outline-variant)', margin: '0 4px' }} className="hidden sm:block" />
-
           {/* Group 2: Patient Record Management */}
-          <div className="flex items-center gap-space-xs flex-wrap">
-            <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary" id="btn-edit-patient">
+          <div className="patient-actions-group patient-actions-secondary-group">
+            <Link
+              to={`/patients/${patient.id}/edit`}
+              className="btn patient-action-btn patient-btn-secondary"
+              id="btn-edit-patient"
+            >
               <Icon name="edit" size={15} />
               <span>Edit Patient</span>
             </Link>
             {owner?.id && (
               <Link
                 to={`/patients/new?ownerId=${owner.id}`}
-                className="btn btn-secondary"
+                className="btn patient-action-btn patient-btn-secondary"
                 id="btn-add-sibling-animal"
                 title={`Add another animal for ${owner.name}`}
               >
@@ -395,7 +466,21 @@ export const PatientDetailsPage: React.FC = () => {
           <section className="client-profile-card" aria-label="Registered Owner Profile">
             <div className="client-card-header">
               <span className="client-section-label">Registered Owner</span>
-              <span className="client-profile-badge">Client Profile</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {owner && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ height: '26px', fontSize: '11.5px', padding: '0 8px', color: 'var(--color-primary)' }}
+                    onClick={openEditOwner}
+                    title="Edit owner profile & contact details"
+                  >
+                    <Icon name="edit" size={13} />
+                    <span>Edit Details</span>
+                  </button>
+                )}
+                <span className="client-profile-badge">Client Profile</span>
+              </div>
             </div>
 
             {owner ? (
@@ -521,6 +606,161 @@ export const PatientDetailsPage: React.FC = () => {
           </section>
         </div>
       </div>
+
+      {/* Edit Owner Modal */}
+      {isEditOwnerOpen && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+          onClick={() => setIsEditOwnerOpen(false)}
+        >
+          <div
+            className="card"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              padding: '24px',
+              borderRadius: 'var(--radius-xl)',
+              background: 'var(--color-surface, #ffffff)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: 'var(--color-primary-container)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="user" size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700 }}>Edit Owner Profile</h3>
+                  <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>Client ID: #{owner?.id}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon btn-sm"
+                onClick={() => setIsEditOwnerOpen(false)}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            {ownerError && (
+              <div
+                style={{
+                  background: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 14px',
+                  marginBottom: '16px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Icon name="warning" size={16} />
+                <span>{ownerError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveOwner} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>
+                  Owner Full Name <span style={{ color: 'var(--color-error)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Rahul Sharma"
+                  value={ownerName}
+                  onChange={(e) => setOwnerName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>
+                  Phone Number <span style={{ color: 'var(--color-error)' }}>*</span>
+                </label>
+                <input
+                  type="tel"
+                  className="form-input"
+                  placeholder="e.g. +91 9876543210"
+                  value={ownerPhone}
+                  onChange={(e) => setOwnerPhone(e.target.value)}
+                  required
+                />
+                <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
+                  Used across sibling animal records
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Email Address</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="e.g. rahul@example.com"
+                  value={ownerEmail}
+                  onChange={(e) => setOwnerEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Residential Address</label>
+                <textarea
+                  className="form-input"
+                  rows={2}
+                  placeholder="e.g. Flat 402, Green Valley Apartments"
+                  value={ownerAddress}
+                  onChange={(e) => setOwnerAddress(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 600 }}>Notes / Preferences</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Prefers WhatsApp communication"
+                  value={ownerNotes}
+                  onChange={(e) => setOwnerNotes(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsEditOwnerOpen(false)}
+                  disabled={isSavingOwner}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSavingOwner}
+                >
+                  {isSavingOwner ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

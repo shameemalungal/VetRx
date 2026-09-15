@@ -72,21 +72,28 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
     return options;
   }, [masterSpecies, species]);
 
-  // Active master data sex + current patient's sex if it happens to be inactive
+  // Active master data sex + current patient's sex if it happens to be inactive (strictly deduplicated)
   const availableSexOptions = useMemo(() => {
-    if (!masterSex || masterSex.length === 0) {
-      return SEX_OPTIONS.map((s) => ({ value: s, label: s }));
+    const raw = (!masterSex || masterSex.length === 0)
+      ? SEX_OPTIONS.map((s) => ({ value: s, label: s }))
+      : masterSex
+          .filter((item) => item.isActive || item.name === sex)
+          .map((item) => ({
+            value: item.name,
+            label: item.name,
+          }));
+
+    const map = new Map<string, { value: string; label: string }>();
+    for (const opt of raw) {
+      const key = opt.value.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, opt);
+      }
     }
-    const options = masterSex
-      .filter((item) => item.isActive || item.name === sex)
-      .map((item) => ({
-        value: item.name,
-        label: item.name,
-      }));
-    if (sex && !options.some((o) => o.value === sex)) {
-      options.push({ value: sex, label: sex });
+    if (sex && !map.has(sex.trim().toLowerCase())) {
+      map.set(sex.trim().toLowerCase(), { value: sex, label: sex });
     }
-    return options;
+    return Array.from(map.values());
   }, [masterSex, sex]);
 
   // Owner association
@@ -98,16 +105,20 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   const [newOwnerEmail, setNewOwnerEmail] = useState('');
   const [newOwnerAddress, setNewOwnerAddress] = useState('');
 
-  // Filtered existing owners by name or phone
+  // Filtered existing owners by name or phone (including normalized digits)
   const filteredExistingOwners = useMemo(() => {
     if (!existingOwners) return [];
     const q = ownerSearchQuery.trim().toLowerCase();
     if (!q) return existingOwners;
-    return existingOwners.filter((o) =>
-      o.name.toLowerCase().includes(q) ||
-      (o.phone && o.phone.toLowerCase().includes(q)) ||
-      (o.address && o.address.toLowerCase().includes(q))
-    );
+    const qDigits = q.replace(/\D/g, '');
+    return existingOwners.filter((o) => {
+      const nameMatch = o.name.toLowerCase().includes(q);
+      const addressMatch = !!(o.address && o.address.toLowerCase().includes(q));
+      const phoneMatch = !!(o.phone && o.phone.toLowerCase().includes(q));
+      const phoneDigitsMatch =
+        qDigits.length >= 3 && o.phone && o.phone.replace(/\D/g, '').includes(qDigits);
+      return nameMatch || phoneMatch || phoneDigitsMatch || addressMatch;
+    });
   }, [existingOwners, ownerSearchQuery]);
 
   // Status & Errors
@@ -279,10 +290,10 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   return (
     <div className="patients-page">
       {/* ── Breadcrumb ─────────────────────────────────────────── */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-space-xs text-sm">
-        <Link to="/patients" className="text-primary hover:underline font-medium flex items-center gap-1">
-          <Icon name="chevron-left" size={14} />
-          <span>Patients</span>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-space-sm text-sm flex-wrap">
+        <Link to="/patients" className="btn-back" title="Back to Patients">
+          <Icon name="arrow-left" size={14} />
+          <span>Back</span>
         </Link>
         <span className="text-outline-variant">/</span>
         <span className="text-on-surface font-semibold">
@@ -465,40 +476,51 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                   )}
                 </div>
 
-                <select
-                  id="existing-owner-select"
-                  className="form-select"
-                  value={selectedOwnerId}
-                  onChange={(e) => {
-                    setSelectedOwnerId(Number(e.target.value) || '');
-                    if (errors.owner) setErrors(({ owner: _, ...rest }) => rest);
-                  }}
-                  style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}
-                >
-                  <option value="">-- Choose from full client dropdown ({existingOwners?.length || 0}) --</option>
-                  {existingOwners?.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} ({o.phone}) {o.address ? `• ${o.address}` : ''}
-                    </option>
-                  ))}
-                </select>
                 {errors.owner && <span className="form-error">{errors.owner}</span>}
 
                 {/* Selected Owner Preview */}
                 {selectedOwnerRecord && (
                   <div className="owner-preview-banner mt-space-sm">
-                    <div className="flex items-center gap-space-sm min-w-0">
-                      <div className="w-9 h-9 rounded-full bg-secondary-fixed text-on-secondary-fixed font-bold flex items-center justify-center shrink-0">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                      <div
+                        style={{
+                          width: '36px',
+                          height: '36px',
+                          minWidth: '36px',
+                          borderRadius: '50%',
+                          background: 'var(--color-primary-container, #d1fae5)',
+                          color: 'var(--color-primary, #065f46)',
+                          fontWeight: 700,
+                          fontSize: '14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
                         {selectedOwnerRecord.name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <strong className="text-on-surface truncate">{selectedOwnerRecord.name}</strong>
-                        <span className="text-xs text-outline truncate">
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <strong style={{ color: 'var(--color-on-surface)', fontSize: '13px' }} className="truncate">
+                          {selectedOwnerRecord.name}
+                        </strong>
+                        <span style={{ fontSize: '11.5px', color: 'var(--color-outline)' }} className="truncate">
                           {selectedOwnerRecord.phone} {selectedOwnerRecord.email ? `• ${selectedOwnerRecord.email}` : ''}
+                          {selectedOwnerRecord.address ? ` • ${selectedOwnerRecord.address}` : ''}
                         </span>
                       </div>
                     </div>
-                    <span className="badge badge-primary shrink-0">Selected Client</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="badge badge-primary shrink-0">Selected Client</span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm text-xs"
+                        onClick={() => setSelectedOwnerId('')}
+                        title="Change selected client"
+                      >
+                        Change
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

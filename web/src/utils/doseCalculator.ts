@@ -1,7 +1,19 @@
 import type { Medicine, Species, WeightBandRule } from '../types';
 
 export interface DoseCalculationResult {
-  status: 'calculated' | 'range' | 'band' | 'fixed' | 'missing_weight' | 'species_mismatch' | 'no_rule';
+  status:
+    | 'calculated'
+    | 'range'
+    | 'band'
+    | 'fixed'
+    | 'volume_per_weight'
+    | 'reconstituted_liquid'
+    | 'reconstituted_drops'
+    | 'missing_weight'
+    | 'missing_drops_per_ml'
+    | 'species_mismatch'
+    | 'invalid_parameters'
+    | 'no_rule';
   calculatedDoseValue?: number;
   calculatedDoseUnit?: string;
   minCalculatedDose?: number;
@@ -18,6 +30,8 @@ export interface DoseCalculationResult {
   calculatedQuantity?: number;
   quantityUnit?: string;
   quantityFormulaDisplay?: string;
+  calculatedSourceEquivalent?: string; // e.g. "1/20 tablet equivalent (0.05 tablet)"
+  calculatedVolumeMl?: number;         // e.g. 1 mL for drops
 }
 
 /**
@@ -242,6 +256,132 @@ export function calculateSmartDose(
     };
   }
 
+  // 3b. Handle RECONSTITUTED TABLET/UNIT -> LIQUID VOLUME (Does not require patient weight)
+  if (medicine.dosingMethod === 'reconstituted_liquid') {
+    const srcQty = medicine.reconstitutionSourceQty;
+    const srcUnit = medicine.reconstitutionSourceUnit || 'tablet';
+    const dilVol = medicine.reconstitutionDiluentVolume;
+    const dilUnit = medicine.reconstitutionDiluentUnit || 'mL';
+    const adminVol = medicine.reconstitutionAdminVolume;
+    const adminUnit = medicine.reconstitutionAdminUnit || 'mL';
+
+    // Validation: check for missing, zero, or negative values
+    if (
+      srcQty === undefined || srcQty === null || srcQty <= 0 ||
+      dilVol === undefined || dilVol === null || dilVol <= 0 ||
+      adminVol === undefined || adminVol === null || adminVol <= 0
+    ) {
+      return {
+        status: 'invalid_parameters',
+        formattedDoseString: '',
+        requiresManualDose: true,
+        warningMessage: 'Reconstitution requires positive Source Quantity, Diluent Volume, and Administration Dose.',
+        suggestedRoute,
+        suggestedFrequency,
+        suggestedDurationDays,
+        suggestedDirections,
+      };
+    }
+
+    // Fraction of original source quantity: (Admin Volume / Diluent Volume) * Source Quantity
+    const fractionVal = (adminVol / dilVol) * srcQty;
+    const simplifiedFraction = Number(fractionVal.toFixed(4));
+    const sourceEquiv = `${srcQty === 1 ? `1/${Math.round(dilVol / adminVol)}` : simplifiedFraction} ${srcUnit} equivalent (${simplifiedFraction} ${srcUnit})`;
+
+    const formatted = `${adminVol} ${adminUnit}`;
+    const formula = `Reconstituted: ${srcQty} ${srcUnit} in ${dilVol} ${dilUnit} → Administer ${adminVol} ${adminUnit} (${sourceEquiv})`;
+
+    const qtyResult = calculateDispenseQuantity(adminVol, adminUnit, suggestedFrequency, suggestedDurationDays, medicine);
+
+    return {
+      status: 'reconstituted_liquid',
+      calculatedDoseValue: adminVol,
+      calculatedDoseUnit: adminUnit,
+      formattedDoseString: formatted,
+      formulaDisplay: formula,
+      calculatedSourceEquivalent: sourceEquiv,
+      requiresManualDose: false,
+      suggestedRoute,
+      suggestedFrequency,
+      suggestedDurationDays,
+      suggestedDirections,
+      calculatedQuantity: qtyResult.quantity,
+      quantityUnit: qtyResult.unit || adminUnit,
+      quantityFormulaDisplay: qtyResult.formulaDisplay,
+    };
+  }
+
+  // 3c. Handle RECONSTITUTED TABLET/UNIT -> DROPS (Does not require patient weight)
+  if (medicine.dosingMethod === 'reconstituted_drops') {
+    const srcQty = medicine.reconstitutionSourceQty;
+    const srcUnit = medicine.reconstitutionSourceUnit || 'tablet';
+    const dilVol = medicine.reconstitutionDiluentVolume;
+    const dilUnit = medicine.reconstitutionDiluentUnit || 'mL';
+    const dropsPerMl = medicine.dropsPerMl;
+    const doseInDrops = medicine.doseDrops;
+
+    // Safety requirement: Missing dropsPerMl must NOT assume 20 drops/mL!
+    if (!dropsPerMl || dropsPerMl <= 0) {
+      return {
+        status: 'missing_drops_per_ml',
+        formattedDoseString: doseInDrops && doseInDrops > 0 ? `${doseInDrops} drops` : '',
+        requiresManualDose: true,
+        warningMessage: 'Calibrated Drops per mL is required to calculate liquid volume and source equivalent. Do not assume 20 drops = 1 mL.',
+        suggestedRoute,
+        suggestedFrequency,
+        suggestedDurationDays,
+        suggestedDirections,
+      };
+    }
+
+    if (
+      srcQty === undefined || srcQty === null || srcQty <= 0 ||
+      dilVol === undefined || dilVol === null || dilVol <= 0 ||
+      doseInDrops === undefined || doseInDrops === null || doseInDrops <= 0
+    ) {
+      return {
+        status: 'invalid_parameters',
+        formattedDoseString: '',
+        requiresManualDose: true,
+        warningMessage: 'Reconstitution requires positive Source Quantity, Diluent Volume, Drops per mL, and Dose in Drops.',
+        suggestedRoute,
+        suggestedFrequency,
+        suggestedDurationDays,
+        suggestedDirections,
+      };
+    }
+
+    // Calculated mL = Dose in Drops ÷ Drops per mL
+    const calculatedMl = Number((doseInDrops / dropsPerMl).toFixed(3));
+    // Fraction of source = Calculated mL ÷ Reconstitution Volume × Source Quantity
+    const fractionVal = (calculatedMl / dilVol) * srcQty;
+    const simplifiedFraction = Number(fractionVal.toFixed(4));
+    const sourceEquiv = `${simplifiedFraction} ${srcUnit} equivalent`;
+
+    const formatted = `${doseInDrops} drops (${calculatedMl} mL)`;
+    const formula = `${doseInDrops} drops ÷ ${dropsPerMl} drops/mL = ${calculatedMl} mL administered (${srcQty} ${srcUnit} in ${dilVol} ${dilUnit} → ${sourceEquiv})`;
+
+    const qtyResult = calculateDispenseQuantity(doseInDrops, 'drops', suggestedFrequency, suggestedDurationDays, medicine);
+
+    return {
+      status: 'reconstituted_drops',
+      calculatedDoseValue: doseInDrops,
+      calculatedDoseUnit: 'drops',
+      calculatedVolumeMl: calculatedMl,
+      calculatedSourceEquivalent: sourceEquiv,
+      formattedDoseString: formatted,
+      formulaDisplay: formula,
+      requiresManualDose: false,
+      suggestedRoute,
+      suggestedFrequency,
+      suggestedDurationDays,
+      suggestedDirections,
+      calculatedQuantity: qtyResult.quantity,
+      quantityUnit: qtyResult.unit || 'drops',
+      quantityFormulaDisplay: qtyResult.formulaDisplay,
+    };
+  }
+
   // For weight-dependent dosing methods, patient weight is mandatory
   if (patientWeightKg === undefined || patientWeightKg === null || patientWeightKg <= 0 || isNaN(patientWeightKg)) {
     return {
@@ -258,6 +398,63 @@ export function calculateSmartDose(
 
   const weight = patientWeightKg;
   const doseUnit = medicine.doseUnit || 'mg';
+
+  // 3d. Handle VOLUME PER BODY WEIGHT (e.g. 1 mL per 20 kg)
+  if (medicine.dosingMethod === 'volume_per_weight') {
+    const doseAmt = medicine.doseVolumeAmount !== undefined ? medicine.doseVolumeAmount : (medicine.fixedDose || 1);
+    const volUnit = medicine.doseVolumeUnit || medicine.doseUnit || 'mL';
+    const weightBasis = medicine.weightBasis;
+    const weightUnit = medicine.weightBasisUnit || 'kg';
+
+    if (!weightBasis || weightBasis <= 0) {
+      return {
+        status: 'invalid_parameters',
+        formattedDoseString: '',
+        requiresManualDose: true,
+        warningMessage: 'Weight basis must be greater than 0 (e.g. 20 for 1 mL per 20 kg).',
+        suggestedRoute,
+        suggestedFrequency,
+        suggestedDurationDays,
+        suggestedDirections,
+      };
+    }
+
+    if (doseAmt <= 0) {
+      return {
+        status: 'invalid_parameters',
+        formattedDoseString: '',
+        requiresManualDose: true,
+        warningMessage: 'Dose volume amount must be greater than 0.',
+        suggestedRoute,
+        suggestedFrequency,
+        suggestedDurationDays,
+        suggestedDirections,
+      };
+    }
+
+    // Calculated Volume = Patient Weight × (Dose Amount ÷ Weight Basis)
+    const calculatedVolume = Number((weight * (doseAmt / weightBasis)).toFixed(2));
+    const formula = `${weight} ${weightUnit} × (${doseAmt} ${volUnit} ÷ ${weightBasis} ${weightUnit}) = ${calculatedVolume} ${volUnit}`;
+    const formatted = `${calculatedVolume} ${volUnit}/dose`;
+
+    const qtyResult = calculateDispenseQuantity(calculatedVolume, volUnit, suggestedFrequency, suggestedDurationDays, medicine);
+
+    return {
+      status: 'volume_per_weight',
+      calculatedDoseValue: calculatedVolume,
+      calculatedDoseUnit: volUnit,
+      formattedDoseString: formatted,
+      formulaDisplay: formula,
+      requiresManualDose: false,
+      suggestedRoute,
+      suggestedFrequency,
+      suggestedDurationDays,
+      suggestedDirections,
+      calculatedQuantity: qtyResult.quantity,
+      quantityUnit: qtyResult.unit || volUnit,
+      quantityFormulaDisplay: qtyResult.formulaDisplay,
+    };
+  }
 
   // 4. Handle WEIGHT-BASED (e.g. 10 mg/kg)
   if (medicine.dosingMethod === 'weight_based') {
@@ -415,4 +612,21 @@ export function calculateSmartDose(
     suggestedDurationDays,
     suggestedDirections
   };
+}
+
+/**
+ * Safely normalizes numeric values for controlled input bindings.
+ * Preserves numeric zero ('0'), returns string representation for valid numbers,
+ * and distinguishes null/undefined as empty string ('') without destructive falsy coercion.
+ */
+export function formatControlledNumber(val: number | string | undefined | null): string {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'number') {
+    if (isNaN(val)) return '';
+    return String(val);
+  }
+  const str = String(val).trim();
+  if (str === '') return '';
+  if (isNaN(Number(str)) && str !== '-' && str !== '.') return '';
+  return str;
 }

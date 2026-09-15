@@ -52,6 +52,8 @@ const PATHS: Record<string, string | string[]> = {
   upload: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12',
   save: 'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4',
   'dots-vertical': 'M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z',
+  'arrow-left': 'M10 19l-7-7m0 0l7-7m-7 7h18',
+  'arrow-back': 'M10 19l-7-7m0 0l7-7m-7 7h18',
   'arrow-right': 'M14 5l7 7m0 0l-7 7m7-7H3',
   'arrow-forward': 'M14 5l7 7m0 0l-7 7m7-7H3',
   play: 'M5 3l14 9-14 9V3z',

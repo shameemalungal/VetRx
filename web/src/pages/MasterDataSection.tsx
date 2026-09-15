@@ -58,6 +58,7 @@ export const MasterDataSection: React.FC = () => {
       duration_unit: { total: 0, active: 0 },
       sex: { total: 0, active: 0 },
       invoice_item: { total: 0, active: 0 },
+      invoice_unit: { total: 0, active: 0 },
     };
 
     allItems.forEach((item) => {

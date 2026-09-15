@@ -11,17 +11,41 @@ interface SettingsState {
   practitioner: Practitioner | null;
   organisation: Organisation | null;
   loading: boolean;
+  showHsnColumn: boolean;
+  showSacColumn: boolean;
+  showSpecialInstructionsForOwner: boolean;
 
   loadSettings: () => Promise<void>;
   savePractitioner: (data: Omit<Practitioner, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   saveOrganisation: (data: Partial<Omit<Organisation, 'id' | 'createdAt' | 'updatedAt'>> | null) => Promise<void>;
   setClinicActive: (active: boolean) => Promise<void>;
+  setShowHsnColumn: (show: boolean) => void;
+  setShowSacColumn: (show: boolean) => void;
+  setShowSpecialInstructionsForOwner: (show: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   practitioner: null,
   organisation: null,
   loading: true,
+  showHsnColumn: localStorage.getItem('vetrx_show_hsn') !== 'false',
+  showSacColumn: localStorage.getItem('vetrx_show_sac') !== 'false',
+  showSpecialInstructionsForOwner: localStorage.getItem('vetrx_show_owner_instructions') !== 'false',
+
+  setShowHsnColumn: (show: boolean) => {
+    localStorage.setItem('vetrx_show_hsn', String(show));
+    set({ showHsnColumn: show });
+  },
+
+  setShowSacColumn: (show: boolean) => {
+    localStorage.setItem('vetrx_show_sac', String(show));
+    set({ showSacColumn: show });
+  },
+
+  setShowSpecialInstructionsForOwner: (show: boolean) => {
+    localStorage.setItem('vetrx_show_owner_instructions', String(show));
+    set({ showSpecialInstructionsForOwner: show });
+  },
 
   loadSettings: async () => {
     const [practitioner, organisation] = await Promise.all([

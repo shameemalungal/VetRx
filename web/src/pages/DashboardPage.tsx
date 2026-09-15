@@ -11,6 +11,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/schema';
 import { useSettingsStore } from '../store/settingsStore';
 import { Icon } from '../components/ui/Icon';
+import { ShareModal } from '../components/ui/ShareModal';
 import type { Patient, Owner, TreatmentPackageItem, Medicine, Invoice } from '../types';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../utils/patientFormat';
 import './DashboardPage.css';
@@ -45,6 +46,7 @@ export const DashboardPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const formularySearchRef = useRef<HTMLDivElement>(null);
+  const [shareInvoice, setShareInvoice] = useState<(Invoice & { patient?: Patient; owner?: Owner }) | null>(null);
 
   // ── Metric Counts ───────────────────────────────────────────
   const rxCount      = useLiveQuery(() => db.prescriptions.count(), []);
@@ -154,7 +156,7 @@ export const DashboardPage: React.FC = () => {
   }, []);
 
   // ── Share Invoice Handler ────────────────────────────────────
-  const handleShareInvoice = async (inv: Invoice & { patient?: Patient }) => {
+  const handleShareInvoice = async (inv: Invoice & { patient?: Patient; owner?: Owner }) => {
     const invUrl = `${window.location.origin}/invoices/${inv.id}`;
     const shareData = {
       title: `Tax Invoice ${inv.invoiceNumber}`,
@@ -166,17 +168,15 @@ export const DashboardPage: React.FC = () => {
       try {
         await navigator.share(shareData);
         return;
-      } catch {
-        // User closed native dialog or error occurred; continue to clipboard fallback
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
       }
     }
 
-    try {
-      await navigator.clipboard.writeText(invUrl);
-      alert(`Invoice document link copied to clipboard:\n${invUrl}`);
-    } catch {
-      navigate(`/invoices/${inv.id}`);
-    }
+    // Fallback for desktop / unsupported browsers: open ShareModal
+    setShareInvoice(inv);
   };
 
   const isClinicActive = Boolean(organisation && organisation.isActive !== false && organisation.name?.trim());
@@ -818,6 +818,20 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Share Document Dialog Fallback */}
+      {shareInvoice && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setShareInvoice(null)}
+          documentTitle="Invoice"
+          documentNumber={shareInvoice.invoiceNumber}
+          documentUrl={`${window.location.origin}/invoices/${shareInvoice.id}`}
+          patientName={shareInvoice.patient?.name}
+          ownerName={shareInvoice.owner?.name}
+          grandTotalPaisa={shareInvoice.grandTotal}
+        />
+      )}
     </div>
   );
 };

@@ -187,6 +187,22 @@ export const DEFAULT_MASTER_DATA: DefaultMasterItemDef[] = [
     description: 'Complete blood count & basic biochemistry',
     unit: 'test',
   },
+
+  // 8. Invoice Units
+  { category: 'invoice_unit', code: 'per_unit', name: 'Per unit', sortOrder: 1, isActive: true },
+  { category: 'invoice_unit', code: 'per_consultation', name: 'Per consultation', sortOrder: 2, isActive: true },
+  { category: 'invoice_unit', code: 'per_certificate', name: 'Per certificate', sortOrder: 3, isActive: true },
+  { category: 'invoice_unit', code: 'per_report', name: 'Per report', sortOrder: 4, isActive: true },
+  { category: 'invoice_unit', code: 'per_procedure', name: 'Per procedure', sortOrder: 5, isActive: true },
+  { category: 'invoice_unit', code: 'per_visit', name: 'Per visit', sortOrder: 6, isActive: true },
+  { category: 'invoice_unit', code: 'per_dose', name: 'Per dose', sortOrder: 7, isActive: true },
+  { category: 'invoice_unit', code: 'per_vial', name: 'Per vial', sortOrder: 8, isActive: true },
+  { category: 'invoice_unit', code: 'per_tablet', name: 'Per tablet', sortOrder: 9, isActive: true },
+  { category: 'invoice_unit', code: 'per_strip', name: 'Per strip', sortOrder: 10, isActive: true },
+  { category: 'invoice_unit', code: 'per_bottle', name: 'Per bottle', sortOrder: 11, isActive: true },
+  { category: 'invoice_unit', code: 'per_test', name: 'Per test', sortOrder: 12, isActive: true },
+  { category: 'invoice_unit', code: 'per_session', name: 'Per session', sortOrder: 13, isActive: true },
+  { category: 'invoice_unit', code: 'other', name: 'Other', sortOrder: 14, isActive: true },
 ];
 
 export const MASTER_DATA_CATEGORIES: { id: MasterDataCategory; label: string; description: string; icon: string }[] = [
@@ -197,6 +213,7 @@ export const MASTER_DATA_CATEGORIES: { id: MasterDataCategory; label: string; de
   { id: 'duration_unit', label: 'Duration Units', description: 'Treatment duration unit options (Days, Weeks, Months)', icon: 'calendar' },
   { id: 'sex', label: 'Sex', description: 'Biological sex and reproductive status options for patients', icon: 'dna' },
   { id: 'invoice_item', label: 'Invoice Items / Government Rates', description: 'Catalog items, services & government-prescribed rates (G.O.)', icon: 'receipt_long' },
+  { id: 'invoice_unit', label: 'Invoice Item Units', description: 'Configurable billing units for invoice line items', icon: 'tag' },
 ];
 
 /**
@@ -275,6 +292,35 @@ export async function ensureMasterDataSeeded(): Promise<void> {
           createdAt: now,
           updatedAt: now,
         } as MasterDataItem);
+      }
+    }
+
+    // Ensure invoice units exist in pre-existing databases
+    for (const unitItem of DEFAULT_MASTER_DATA.filter((i) => i.category === 'invoice_unit')) {
+      const existing = await db.masterDataItems
+        .where('category')
+        .equals('invoice_unit')
+        .and((i) => i.name.toLowerCase() === unitItem.name.toLowerCase())
+        .first();
+
+      if (!existing) {
+        await db.masterDataItems.add({
+          ...unitItem,
+          createdAt: now,
+          updatedAt: now,
+        } as MasterDataItem);
+      }
+    }
+
+    // Ensure sex category items are deduplicated on code/name in Dexie
+    const sexItems = await db.masterDataItems.where('category').equals('sex').toArray();
+    const seenSex = new Set<string>();
+    for (const item of sexItems) {
+      const key = item.name.toLowerCase().trim();
+      if (seenSex.has(key)) {
+        await db.masterDataItems.delete(item.id!);
+      } else {
+        seenSex.add(key);
       }
     }
   } catch (err) {

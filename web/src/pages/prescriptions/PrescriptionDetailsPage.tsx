@@ -11,6 +11,9 @@ import { db } from '../../db/schema';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
+import { CreatePackageFromPrescriptionModal } from './CreatePackageFromPrescriptionModal';
+import { generatePdfBlob, savePdfWithFilePicker, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { ShareModal } from '../../components/ui/ShareModal';
 import './Prescriptions.css';
 
 export const PrescriptionDetailsPage: React.FC = () => {
@@ -22,6 +25,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmIssueModal, setShowConfirmIssueModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCreatePackageModal, setShowCreatePackageModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [cachedPdfBlob, setCachedPdfBlob] = useState<Blob | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -85,15 +94,87 @@ export const PrescriptionDetailsPage: React.FC = () => {
     setShowConfirmIssueModal(true);
   };
 
+  const handleExecuteCancel = async () => {
+    if (!prescription?.id || prescription.status === 'Cancelled') return;
+    setIsUpdating(true);
+    try {
+      const now = new Date();
+      await db.prescriptions.update(prescription.id, {
+        status: 'Cancelled',
+        cancelledAt: now,
+        cancellationReason: cancelReason.trim() || 'Prescription cancelled by clinician',
+        updatedAt: now,
+      });
+      setShowCancelModal(false);
+      showToast(`Prescription ${prescription.rxNumber} has been cancelled.`);
+    } catch (err) {
+      console.error('Failed to cancel prescription:', err);
+      showToast('Error cancelling prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
-  const handleSavePdf = () => {
-    showToast("Select 'Save as PDF' as the destination in the print preview.");
-    setTimeout(() => {
-      window.print();
-    }, 400);
+  const handleSavePdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      const sheet = document.getElementById('prescription-sheet');
+      if (!sheet) {
+        showToast('Prescription sheet element not found in DOM.');
+        return;
+      }
+      const blob = await generatePdfBlob(sheet);
+      setCachedPdfBlob(blob);
+      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
+      const result = await savePdfWithFilePicker(blob, filename);
+      if (result.success) {
+        showToast(`Prescription PDF saved: ${filename}`);
+      } else if (result.error) {
+        showToast(`Failed to save PDF: ${result.error}`);
+      }
+    } catch (err: unknown) {
+      console.error('Save PDF failed:', err);
+      showToast('Failed to generate PDF. Please try again.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      const sheet = document.getElementById('prescription-sheet');
+      if (!sheet) return;
+      const blob = cachedPdfBlob || (await generatePdfBlob(sheet));
+      setCachedPdfBlob(blob);
+      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: `Prescription ${prescription?.rxNumber}`,
+            text: `Veterinary Prescription ${prescription?.rxNumber} for ${patient?.name || 'Patient'}`,
+            files: [file],
+          });
+          return;
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            return;
+          }
+        }
+      }
+      setShareModalOpen(true);
+    } catch (err: unknown) {
+      console.error('Share failed:', err);
+      setShareModalOpen(true);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   if (!rxId || prescription === undefined) {
@@ -224,6 +305,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
     : doctorEmail;
 
   const isIssued = prescription.status === 'Issued';
+  const isCancelled = prescription.status === 'Cancelled';
 
   return (
     <div className="rx-page-container">
@@ -255,7 +337,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
 
       {/* ── Workflow Progress & Stepper Ribbon (Horizontal Layout) ── */}
       <div className="no-print rx-preview-stepper-header">
-        <div className="rx-breadcrumbs">
+        <div className="rx-breadcrumbs flex items-center gap-2">
+          <Link to="/prescriptions" className="btn-back" title="Back to Prescriptions">
+            <Icon name="arrow-left" size={14} />
+            <span>Back</span>
+          </Link>
+          <span className="text-outline-variant">/</span>
           <Link to="/prescriptions" className="rx-crumb-link">CONSULTATIONS</Link>
           <Icon name="chevron-right" size={14} className="rx-crumb-sep" />
           <Link to="/prescriptions" className="rx-crumb-link">OUTPATIENT RX</Link>
@@ -297,6 +384,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <span className="status-dot"></span>
                 Issued Record
               </span>
+            ) : isCancelled ? (
+              <span className="rx-status-chip cancelled">
+                <span className="status-dot"></span>
+                Cancelled
+              </span>
             ) : (
               <span className="rx-status-chip ready">
                 <span className="status-dot pulse"></span>
@@ -304,7 +396,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="rx-subtitle">Review the prescription before printing or saving.</p>
+          <p className="rx-subtitle">
+            {isCancelled
+              ? 'This prescription is cancelled and preserved as a read-only historical record.'
+              : isIssued
+              ? 'Official issued veterinary prescription. Printable and recorded in patient history.'
+              : 'Review the prescription before printing or saving.'}
+          </p>
         </div>
 
         <div className="rx-preview-header-right">
@@ -315,10 +413,66 @@ export const PrescriptionDetailsPage: React.FC = () => {
           <button
             type="button"
             className="btn btn-secondary"
+            onClick={() => navigate('/prescriptions')}
+            title="Back to Prescriptions History"
+          >
+            <span>View History</span>
+          </button>
+          {isIssued && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                color: '#b91c1c',
+                borderColor: '#fecaca',
+                background: '#fef2f2',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600,
+              }}
+              onClick={() => setShowCancelModal(true)}
+              title="Cancel this issued prescription"
+            >
+              <Icon name="x-mark" size={16} />
+              <span>Cancel Prescription</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
           >
             <Icon name="copy" size={16} />
             <span>Clone Prescription</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowCreatePackageModal(true)}
+            title="Create a treatment package from this prescription"
+          >
+            <Icon name="package" size={16} />
+            <span>Create Treatment Package</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleShare}
+            disabled={isGeneratingPdf}
+            title="Share prescription"
+          >
+            <Icon name="share" size={16} />
+            <span>Share</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => navigate(`/invoices/new?fromRx=${prescription.id}`)}
+            title="Generate itemized invoice from this prescription"
+          >
+            <Icon name="invoices" size={16} />
+            <span>Add Invoice from Rx</span>
           </button>
           <Link to="/prescriptions/new" className="btn btn-primary">
             <Icon name="plus" size={16} />
@@ -333,8 +487,38 @@ export const PrescriptionDetailsPage: React.FC = () => {
         <div className="prescription-sheet-wrapper" id="printable-prescription-wrapper">
           <div id="prescription-sheet">
             <div>
+              {/* Prominent Cancellation Banner if Cancelled */}
+              {isCancelled && (
+                <div
+                  style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    marginBottom: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: '#991b1b',
+                  }}
+                >
+                  <Icon name="warning" size={20} color="#dc2626" style={{ flexShrink: 0 }} />
+                  <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
+                    <strong>CANCELLED PRESCRIPTION:</strong> This prescription was cancelled
+                    {prescription.cancelledAt ? ` on ${new Date(prescription.cancelledAt).toLocaleDateString('en-GB')}` : ''}.
+                    {prescription.cancellationReason && (
+                      <span> Reason: <em>{prescription.cancellationReason}</em></span>
+                    )}
+                    <span style={{ display: 'block', fontSize: '11px', color: '#b91c1c', marginTop: '2px' }}>
+                      Preserved for clinical history. Use "Clone Prescription" to create a new editable version.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Shared Document Top Bar */}
               <div
+                className="prescription-doc-top-bar"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -343,12 +527,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   borderBottom: '1px solid #e2e8f0',
                   marginBottom: '14px',
                   gap: '12px',
-                  flexWrap: 'nowrap',
+                  flexWrap: 'wrap',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexShrink: 0 }}>
+                <div className="prescription-doc-top-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
                   <span
+                    className="prescription-doc-top-badge"
                     style={{
                       fontFamily: 'var(--font-data)',
                       fontSize: '11px',
@@ -356,24 +541,23 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase',
                       color: 'var(--color-outline)',
-                      whiteSpace: 'nowrap',
                     }}
                   >
                     OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
                   </span>
                 </div>
                 <div
+                  className="prescription-doc-top-right"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
                     fontSize: '11px',
                     fontFamily: 'var(--font-data)',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
+                    flexWrap: 'wrap',
                   }}
                 >
-                  <span style={{ color: 'var(--color-outline)', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: 'var(--color-outline)' }}>
                     Doc Ref: <strong>{prescription.rxNumber}</strong>
                   </span>
                   <span
@@ -595,8 +779,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
 
               {/* Structured Medications Table */}
-              <div style={{ marginBottom: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '8px', marginBottom: '8px' }}>
+              <div className="rx-meds-table-container">
+                <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', marginBottom: '6px' }}>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Icon name="pill" size={18} color="var(--color-primary)" />
                     Prescribed Medication Schedule
@@ -796,7 +980,17 @@ export const PrescriptionDetailsPage: React.FC = () => {
             </div>
 
             {/* Primary Action Trigger */}
-            {!isIssued ? (
+            {isCancelled ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}
+                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+              >
+                <Icon name="copy" size={20} />
+                <span>Clone Prescription</span>
+              </button>
+            ) : !isIssued ? (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -820,7 +1014,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             )}
 
             {/* Secondary Document Handlers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -835,14 +1029,61 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 className="btn btn-secondary"
                 style={{ height: '42px', fontSize: '13px' }}
                 onClick={handleSavePdf}
+                disabled={isGeneratingPdf}
               >
                 <Icon name="download" size={16} />
-                <span>Save PDF</span>
+                <span>{isGeneratingPdf ? 'Saving PDF…' : 'Save PDF'}</span>
               </button>
             </div>
 
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                height: '42px',
+                fontSize: '13px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+              onClick={handleShare}
+              disabled={isGeneratingPdf}
+            >
+              <Icon name="share" size={16} />
+              <span>Share Prescription</span>
+            </button>
+
+            {/* Cancel Action Button (clearly visible when issued) */}
+            {isIssued && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  fontSize: '13px',
+                  marginBottom: '10px',
+                  color: '#b91c1c',
+                  borderColor: '#fecaca',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                }}
+                onClick={() => setShowCancelModal(true)}
+              >
+                <Icon name="x-mark" size={16} />
+                <span>Cancel Prescription</span>
+              </button>
+            )}
+
             {/* Return / Edit / Clone Action Button */}
-            {!isIssued ? (
+            {!isIssued && !isCancelled ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -852,7 +1093,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <Icon name="arrow-left" size={16} />
                 <span>Back to Medication Editor</span>
               </button>
-            ) : (
+            ) : !isCancelled ? (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -862,6 +1103,21 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <Icon name="copy" size={16} />
                 <span>Clone Prescription</span>
               </button>
+            ) : (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 'var(--radius)',
+                  fontSize: '12px',
+                  color: '#991b1b',
+                  lineHeight: 1.4,
+                  marginBottom: '6px',
+                }}
+              >
+                <strong>Prescription Cancelled:</strong> This medical record is read-only. Use "Clone Prescription" above to issue a new prescription.
+              </div>
             )}
 
             {/* Start New Prescription */}
@@ -884,6 +1140,31 @@ export const PrescriptionDetailsPage: React.FC = () => {
             </Link>
 
             {/* Generate Invoice Link */}
+            {!isCancelled && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  fontSize: '13px',
+                  marginTop: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  color: 'var(--color-primary)',
+                  borderColor: 'rgba(0, 104, 95, 0.3)',
+                  background: 'rgba(0, 104, 95, 0.04)',
+                }}
+                onClick={() => navigate(`/invoices/new?prescriptionId=${prescription.id}`)}
+              >
+                <Icon name="invoices" size={16} />
+                <span>Generate Invoice for Rx</span>
+              </button>
+            )}
+
+            {/* Create Treatment Package Button */}
             <button
               type="button"
               className="btn btn-secondary"
@@ -899,11 +1180,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 color: 'var(--color-primary)',
                 borderColor: 'rgba(0, 104, 95, 0.3)',
                 background: 'rgba(0, 104, 95, 0.04)',
+                fontWeight: 600,
               }}
-              onClick={() => navigate(`/invoices/new?prescriptionId=${prescription.id}`)}
+              onClick={() => setShowCreatePackageModal(true)}
+              title="Create a reusable treatment package from this prescription"
             >
-              <Icon name="invoices" size={16} />
-              <span>Generate Invoice for Rx</span>
+              <Icon name="package" size={16} />
+              <span>Create Treatment Package</span>
             </button>
 
             {/* Clinical Governance Advisory Note */}
@@ -1014,10 +1297,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
             <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
               No editing will be allowed after generating. If you want to edit, use Save Draft.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
+                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => setShowConfirmIssueModal(false)}
                 disabled={isUpdating}
               >
@@ -1026,6 +1310,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
               <button
                 type="button"
                 className="btn btn-primary"
+                style={{ height: '42px', minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={handleExecuteIssue}
                 disabled={isUpdating}
               >
@@ -1034,6 +1319,118 @@ export const PrescriptionDetailsPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cancellation Confirmation Modal */}
+      {showCancelModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="warning" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Cancel Prescription?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Permanent status update for {prescription.rxNumber}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '16px' }}>
+              Are you sure you want to cancel this issued prescription? This action cannot be undone. All original medicines, patient, owner, and date records will remain preserved in clinical history.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="rx-cancel-reason">
+                Reason for Cancellation <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="rx-cancel-reason"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Clinical regimen updated, wrong patient chosen, dosage correction needed..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => {
+                  setShowCancelModal(false);
+                  setCancelReason('');
+                }}
+                disabled={isUpdating}
+              >
+                Keep Active
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  height: '42px',
+                  minWidth: '160px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  borderColor: '#b91c1c',
+                  fontWeight: 600,
+                }}
+                onClick={handleExecuteCancel}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Cancelling…' : 'Cancel Prescription'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Treatment Package from Prescription Modal */}
+      {showCreatePackageModal && prescription && (
+        <CreatePackageFromPrescriptionModal
+          isOpen={showCreatePackageModal}
+          onClose={() => setShowCreatePackageModal(false)}
+          prescription={prescription}
+          items={items || []}
+          patientSpecies={patient?.species}
+          onSuccessToast={showToast}
+        />
+      )}
+
+      {/* Share Document Modal */}
+      {prescription && (
+        <ShareModal
+          isOpen={shareModalOpen}
+          onClose={() => setShareModalOpen(false)}
+          documentTitle="Prescription"
+          documentNumber={prescription.rxNumber}
+          recipientName={patient?.name || 'Patient'}
+          pdfBlob={cachedPdfBlob}
+          suggestedFilename={buildPrescriptionFilename(patient?.name, prescription.rxNumber)}
+          documentUrl={window.location.href}
+        />
       )}
     </div>
   );

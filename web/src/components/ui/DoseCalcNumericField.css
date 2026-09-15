@@ -1,0 +1,128 @@
+/* =============================================================
+   VetRx — DoseCalcNumericField.css
+   Definitive shared styling for Dose Calculator numeric fields
+   ============================================================= */
+
+.rx-numeric-field-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rx-numeric-field-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant, #475569);
+  margin-bottom: 4px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  display: block;
+}
+
+.rx-numeric-required {
+  color: var(--color-error, #ba1a1a);
+  margin-left: 2px;
+}
+
+.rx-numeric-control-container {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.rx-numeric-input-wrapper {
+  flex: 1 1 0%;
+  min-width: 75px; /* Guarantees input never collapses below readable width */
+  position: relative;
+  display: flex;
+}
+
+.rx-numeric-input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 24px 0 10px; /* 10px left padding, 24px right padding for native spinner */
+  font-family: var(--font-data, monospace);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-on-surface, #0f172a);
+  background: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-outline-variant, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rx-numeric-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #00685f);
+  box-shadow: 0 0 0 3px rgba(0, 104, 95, 0.12);
+}
+
+.rx-numeric-input::placeholder {
+  color: var(--color-outline, #94a3b8);
+  font-weight: 400;
+}
+
+.rx-numeric-unit-select-wrapper {
+  flex: 0 0 auto;
+  width: 84px;
+  min-width: 72px;
+  max-width: 105px;
+}
+
+.rx-numeric-unit-select {
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 20px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-on-surface, #0f172a);
+  background: var(--color-surface-container-low, #f8fafc);
+  border: 1px solid var(--color-outline-variant, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rx-numeric-unit-select:focus {
+  outline: none;
+  border-color: var(--color-primary, #00685f);
+  box-shadow: 0 0 0 3px rgba(0, 104, 95, 0.12);
+}
+
+.rx-numeric-unit-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  height: 38px;
+  min-height: 38px;
+  min-width: 44px;
+  box-sizing: border-box;
+  background: var(--color-surface-container-low, #f8fafc);
+  border: 1px solid var(--color-outline-variant, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-on-surface-variant, #64748b);
+  white-space: nowrap;
+}
+
+.rx-numeric-field-hint {
+  font-size: 11px;
+  color: var(--color-outline, #94a3b8);
+  margin-top: 3px;
+  line-height: 1.3;
+}

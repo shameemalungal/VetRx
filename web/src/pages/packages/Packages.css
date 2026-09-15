@@ -427,9 +427,19 @@
   color: var(--color-on-secondary-fixed-variant);
 }
 
+.package-species-pill.general,
+.package-species-pill.universal {
+  background: var(--color-tertiary-fixed, #d0e8d7);
+  color: var(--color-on-tertiary-fixed-variant, #0f5223);
+}
+
+.package-species-pill.bovine,
+.package-species-pill.caprine,
+.package-species-pill.ovine,
 .package-species-pill.equine,
+.package-species-pill.swine,
 .package-species-pill.avian,
-.package-species-pill.universal,
+.package-species-pill.rabbit,
 .package-species-pill.other {
   background: var(--color-surface-container-high);
   color: var(--color-on-surface);

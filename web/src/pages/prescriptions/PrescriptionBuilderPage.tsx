@@ -14,7 +14,10 @@ import type {
   Owner,
   Medicine,
   TreatmentPackage,
+  DosingMethod,
+  WeightBandRule,
 } from '../../types';
+import { DOSING_METHOD_OPTIONS } from '../../types';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
@@ -24,6 +27,7 @@ import {
   getDosesPerDay,
 } from '../../utils/doseCalculator';
 import './Prescriptions.css';
+import { DoseCalcNumericField } from '../../components/ui/DoseCalcNumericField';
 
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
@@ -127,6 +131,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     []
   );
 
+  // Query past prescriptions for clinical symptom & diagnosis auto-suggestions
+  const allPastPrescriptions = useLiveQuery(() => db.prescriptions.toArray(), []);
+
   // ── Local Builder State ───────────────────────────────────────
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(
     preselectedPatientId
@@ -147,6 +154,24 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   // Package Popover state
   const [showPkgPopover, setShowPkgPopover] = useState(false);
+  const pkgPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        pkgPopoverRef.current &&
+        !pkgPopoverRef.current.contains(event.target as Node)
+      ) {
+        setShowPkgPopover(false);
+      }
+    };
+    if (showPkgPopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPkgPopover]);
 
   // Add/Edit Medicine Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -169,6 +194,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   };
 
   const [medModalSearch, setMedModalSearch] = useState('');
+  const [highlightedMedIndex, setHighlightedMedIndex] = useState<number>(-1);
   const [selectedMedRef, setSelectedMedRef] = useState<Medicine | null>(null);
   const [medForm, setMedForm] = useState({
     brandName: '',
@@ -183,8 +209,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     directions: 'Give after food with drinking water. Complete full course.',
   });
 
-  // Optional Dose Calculation Section States (UAT Issue 3 & 4)
+  // Controlled string inputs for duration and quantity to allow clean backspace clearing without '01' / '11'
+  const [durationDaysStr, setDurationDaysStr] = useState<string>('5');
+  const [quantityStr, setQuantityStr] = useState<string>('10');
+
+  // Optional Dose Calculation Section States (UAT Issue 3 & 4 + Addendum)
   const [isDoseCalcOpen, setIsDoseCalcOpen] = useState(false);
+  const [calcMethod, setCalcMethod] = useState<DosingMethod>('weight_based');
   const [calcWeight, setCalcWeight] = useState<string>('');
   const [calcDosePerKg, setCalcDosePerKg] = useState<string>('');
   const [calcDoseUnit, setCalcDoseUnit] = useState<string>('mg');
@@ -194,12 +225,54 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [calcVolumeUnit, setCalcVolumeUnit] = useState<string>('mL');
   const [calcFrequency, setCalcFrequency] = useState<string>('BID (q12h)');
   const [calcDurationDays, setCalcDurationDays] = useState<number>(5);
+
+  // Method A: Volume per Body Weight
+  const [calcDoseVolumeAmount, setCalcDoseVolumeAmount] = useState<string>('1');
+  const [calcDoseVolumeUnit, setCalcDoseVolumeUnit] = useState<string>('mL');
+  const [calcWeightBasis, setCalcWeightBasis] = useState<string>('20');
+  const [calcWeightBasisUnit, setCalcWeightBasisUnit] = useState<string>('kg');
+
+  // Method B & C: Reconstitution
+  const [calcReconSourceQty, setCalcReconSourceQty] = useState<string>('1');
+  const [calcReconSourceUnit, setCalcReconSourceUnit] = useState<string>('tablet');
+  const [calcReconDiluentVol, setCalcReconDiluentVol] = useState<string>('20');
+  const [calcReconDiluentUnit, setCalcReconDiluentUnit] = useState<string>('mL');
+  const [calcReconAdminVol, setCalcReconAdminVol] = useState<string>('1');
+  const [calcReconAdminUnit, setCalcReconAdminUnit] = useState<string>('mL');
+
+  // Method C: Drops specific
+  const [calcDropsPerMl, setCalcDropsPerMl] = useState<string>('20');
+  const [calcDoseDrops, setCalcDoseDrops] = useState<string>('20');
+
+  // Method D: Weight-Based Range
+  const [calcMinDosePerKg, setCalcMinDosePerKg] = useState<string>('10');
+  const [calcMaxDosePerKg, setCalcMaxDosePerKg] = useState<string>('20');
+
+  // Method E: Fixed Dose
+  const [calcFixedDose, setCalcFixedDose] = useState<string>('1');
+  const [calcFixedDoseUnit, setCalcFixedDoseUnit] = useState<string>('tablet');
+
+  // Method F: Weight-Band
+  const [calcWeightBands, setCalcWeightBands] = useState<WeightBandRule[]>([]);
+  const [calcBandMinWeight, setCalcBandMinWeight] = useState<string>('0');
+  const [calcBandMaxWeight, setCalcBandMaxWeight] = useState<string>('10');
+  const [calcBandDoseValue, setCalcBandDoseValue] = useState<string>('1');
+  const [calcBandDoseUnit, setCalcBandDoseUnit] = useState<string>('tablet');
+
   const [inlineWeight, setInlineWeight] = useState<string>('');
   const [rangeValidationWarning, setRangeValidationWarning] = useState<string | null>(null);
   const [userModifiedDose, setUserModifiedDose] = useState<boolean>(false);
 
   // Generation confirmation modal state (UAT Issue 7)
   const [showIssueConfirmModal, setShowIssueConfirmModal] = useState(false);
+
+  // Validation & Generation Error modal states
+  const [validationErrors, setValidationErrors] = useState<
+    { field: string; message: string; refKey: 'patient' | 'symptoms' | 'diagnosis' | 'medicines' }[]
+  >([]);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [showGenerationErrorModal, setShowGenerationErrorModal] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
@@ -215,7 +288,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const diagnosisRef = useRef<HTMLInputElement>(null);
   const medicinesRef = useRef<HTMLDivElement>(null);
 
-  // Live medicine search filtering against Brand Name, Generic Name, and Therapeutic Category
+  // Live medicine search filtering against Brand Name, Generic Name, Therapeutic Category, Presentation, Strength
   const matchingMedicines = useMemo(() => {
     if (!availableMedicines) return [];
     const q = medModalSearch.trim().toLowerCase();
@@ -224,7 +297,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const brand = (m.brandName || '').toLowerCase();
       const generic = (m.genericName || '').toLowerCase();
       const cat = (m.category || '').toLowerCase();
-      return brand.includes(q) || generic.includes(q) || cat.includes(q);
+      const pres = (m.presentation || '').toLowerCase();
+      const str = (m.strengthVolume || '').toLowerCase();
+      return (
+        brand.includes(q) ||
+        generic.includes(q) ||
+        cat.includes(q) ||
+        pres.includes(q) ||
+        str.includes(q)
+      );
     });
   }, [availableMedicines, medModalSearch]);
 
@@ -241,10 +322,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     ];
     if (!masterRoutes || masterRoutes.length === 0) return fallback;
     const active = masterRoutes.filter((r) => r.isActive).map((r) => r.name);
-    if (medForm.route && !active.includes(medForm.route)) {
-      active.push(medForm.route);
+    const unique = Array.from(new Set(active));
+    if (medForm.route && !unique.includes(medForm.route)) {
+      unique.push(medForm.route);
     }
-    return active.length > 0 ? active : fallback;
+    return unique.length > 0 ? unique : fallback;
   }, [masterRoutes, medForm.route]);
 
   const availableFrequencies = useMemo(() => {
@@ -258,10 +340,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     ];
     if (!masterFrequencies || masterFrequencies.length === 0) return fallback;
     const active = masterFrequencies.filter((f) => f.isActive).map((f) => f.name);
-    if (medForm.frequency && !active.includes(medForm.frequency)) {
-      active.push(medForm.frequency);
+    const unique = Array.from(new Set(active));
+    if (medForm.frequency && !unique.includes(medForm.frequency)) {
+      unique.push(medForm.frequency);
     }
-    return active.length > 0 ? active : fallback;
+    return unique.length > 0 ? unique : fallback;
   }, [masterFrequencies, medForm.frequency]);
 
   const availableUnits = useMemo(() => {
@@ -293,8 +376,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     if (medForm.unit && !merged.includes(medForm.unit)) {
       merged.push(medForm.unit);
     }
+    if (calcFixedDoseUnit && !merged.includes(calcFixedDoseUnit)) {
+      merged.push(calcFixedDoseUnit);
+    }
     return merged.length > 0 ? merged : defaultUnits;
-  }, [masterUnits, medForm.unit]);
+  }, [masterUnits, medForm.unit, calcFixedDoseUnit]);
 
   // Map lookups
   const ownersMap = useMemo(() => {
@@ -318,16 +404,46 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     return ownersMap.get(selectedPatient.ownerId) || null;
   }, [selectedPatient, ownersMap]);
 
+  // Suggestions for Symptoms and Diagnoses from historical prescriptions
+  const suggestedSymptoms = useMemo(() => {
+    if (!allPastPrescriptions) return [];
+    const set = new Set<string>();
+    for (const rx of allPastPrescriptions) {
+      if (rx.symptoms) {
+        rx.symptoms.split(/[\n,;]+/).forEach((s) => {
+          const trimmed = s.trim();
+          if (trimmed.length > 2) set.add(trimmed);
+        });
+      }
+    }
+    return Array.from(set).slice(0, 10);
+  }, [allPastPrescriptions]);
+
+  const suggestedDiagnoses = useMemo(() => {
+    if (!allPastPrescriptions) return [];
+    const set = new Set<string>();
+    for (const rx of allPastPrescriptions) {
+      if (rx.diagnosis && rx.diagnosis.trim().length > 2) {
+        set.add(rx.diagnosis.trim());
+      }
+    }
+    return Array.from(set).slice(0, 10);
+  }, [allPastPrescriptions]);
+
   // ── Populate State for Edit Mode ──────────────────────────────
   useEffect(() => {
     if (mode === 'edit' && existingRx) {
+      if (existingRx.status === 'Issued' || existingRx.status === 'Cancelled') {
+        navigate(`/prescriptions/${existingRx.id}`);
+        return;
+      }
       setSelectedPatientId(existingRx.patientId);
       setSymptoms(existingRx.symptoms || '');
       setDiagnosis(existingRx.diagnosis || '');
       setAdvice(existingRx.instructions || '');
       setFollowUpDays(existingRx.followUpDays);
     }
-  }, [mode, existingRx]);
+  }, [mode, existingRx, navigate]);
 
   useEffect(() => {
     if (mode === 'edit' && existingRxItems && existingRxItems.length > 0) {
@@ -413,17 +529,267 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     });
   }, [allPatients, ownersMap, animalSearch, speciesFilter]);
 
-  // ── Calculated metrics for Optional Dose Calculation Section (UAT 4) ──
+  // ── Calculated metrics for Optional Dose Calculation Section (UAT 4 + Addendum) ──
   const doseCalcMetrics = useMemo(() => {
     const w = parseFloat(calcWeight) || 0;
+    const dosesPerDay = getDosesPerDay(calcFrequency) || 1;
+
+    // Method: Volume per Body Weight (e.g. 1 mL per 20 kg)
+    if (calcMethod === 'volume_per_weight') {
+      const volAmt = parseFloat(calcDoseVolumeAmount) || 0;
+      const basis = parseFloat(calcWeightBasis) || 0;
+      let calculatedVolume = 0;
+      let warning: string | null = null;
+
+      if (w <= 0) {
+        warning = 'Missing patient weight: enter patient weight (kg) to calculate volume.';
+      } else if (basis <= 0) {
+        warning = 'Missing or invalid weight basis: enter positive value (e.g. 20 for per 20 kg).';
+      } else if (volAmt <= 0) {
+        warning = 'Missing dose volume amount.';
+      } else {
+        calculatedVolume = Number((w * (volAmt / basis)).toFixed(2));
+      }
+
+      const totalDispenseQty =
+        calculatedVolume > 0 && calcDurationDays > 0
+          ? Math.ceil(calculatedVolume * dosesPerDay * calcDurationDays)
+          : 0;
+
+      return {
+        calcMethod,
+        calculatedDose: 0,
+        calculatedVolume,
+        totalDispenseQty,
+        dosesPerDay,
+        warning,
+        displayDose: calculatedVolume > 0 ? `${calculatedVolume} ${calcDoseVolumeUnit}` : '—',
+        formula:
+          w > 0 && basis > 0 && volAmt > 0
+            ? `${w} kg × (${volAmt} ${calcDoseVolumeUnit} ÷ ${basis} ${calcWeightBasisUnit}) = ${calculatedVolume} ${calcDoseVolumeUnit}`
+            : undefined,
+      };
+    }
+
+    // Method: Reconstituted Tablet/Unit -> Liquid Volume
+    if (calcMethod === 'reconstituted_liquid') {
+      const srcQty = parseFloat(calcReconSourceQty) || 0;
+      const dilVol = parseFloat(calcReconDiluentVol) || 0;
+      const adminVol = parseFloat(calcReconAdminVol) || 0;
+      let warning: string | null = null;
+      let sourceEquiv = '';
+
+      if (srcQty <= 0) {
+        warning = 'Missing or invalid source quantity.';
+      } else if (dilVol <= 0) {
+        warning = 'Missing or zero reconstitution volume: dilution cannot be calculated.';
+      } else if (adminVol <= 0) {
+        warning = 'Missing administration dose volume.';
+      } else {
+        const frac = (adminVol / dilVol) * srcQty;
+        const simplified = Number(frac.toFixed(4));
+        sourceEquiv = `${srcQty === 1 && Math.round(dilVol / adminVol) > 0 ? `1/${Math.round(dilVol / adminVol)}` : simplified} ${calcReconSourceUnit} equivalent`;
+      }
+
+      const totalDispenseQty =
+        adminVol > 0 && calcDurationDays > 0
+          ? Math.ceil(adminVol * dosesPerDay * calcDurationDays)
+          : 0;
+
+      return {
+        calcMethod,
+        calculatedDose: adminVol,
+        calculatedVolume: adminVol,
+        totalDispenseQty,
+        dosesPerDay,
+        warning,
+        sourceEquiv,
+        displayDose: adminVol > 0 ? `${adminVol} ${calcReconAdminUnit}` : '—',
+        formula:
+          srcQty > 0 && dilVol > 0 && adminVol > 0
+            ? `${srcQty} ${calcReconSourceUnit} + ${dilVol} ${calcReconDiluentUnit} → ${adminVol} ${calcReconAdminUnit} (${sourceEquiv})`
+            : undefined,
+      };
+    }
+
+    // Method: Reconstituted Tablet/Unit -> Drops
+    if (calcMethod === 'reconstituted_drops') {
+      const srcQty = parseFloat(calcReconSourceQty) || 0;
+      const dilVol = parseFloat(calcReconDiluentVol) || 0;
+      const dropsPerMl = parseFloat(calcDropsPerMl) || 0;
+      const doseDrops = parseFloat(calcDoseDrops) || 0;
+      let warning: string | null = null;
+      let calculatedVolume = 0;
+      let sourceEquiv = '';
+
+      if (!dropsPerMl || dropsPerMl <= 0) {
+        warning = 'Calibrated Drops per mL is required for volume conversion. System does not assume 20 drops = 1 mL.';
+      } else if (srcQty <= 0) {
+        warning = 'Missing or invalid source quantity.';
+      } else if (dilVol <= 0) {
+        warning = 'Missing or zero reconstitution volume.';
+      } else if (doseDrops <= 0) {
+        warning = 'Missing dose in drops.';
+      } else {
+        calculatedVolume = Number((doseDrops / dropsPerMl).toFixed(3));
+        const frac = (calculatedVolume / dilVol) * srcQty;
+        const simplified = Number(frac.toFixed(4));
+        sourceEquiv = `${simplified} ${calcReconSourceUnit} equivalent`;
+      }
+
+      const totalDispenseQty =
+        doseDrops > 0 && calcDurationDays > 0
+          ? Math.ceil(doseDrops * dosesPerDay * calcDurationDays)
+          : 0;
+
+      return {
+        calcMethod,
+        calculatedDose: doseDrops,
+        calculatedVolume,
+        totalDispenseQty,
+        dosesPerDay,
+        warning,
+        sourceEquiv,
+        displayDose: doseDrops > 0 ? `${doseDrops} drops${calculatedVolume > 0 ? ` (${calculatedVolume} mL)` : ''}` : '—',
+        formula:
+          doseDrops > 0 && dropsPerMl > 0
+            ? `${doseDrops} drops ÷ ${dropsPerMl} drops/mL = ${calculatedVolume} mL (${sourceEquiv})`
+            : undefined,
+      };
+    }
+
+    // Method: Weight-Based Range (e.g. 10–20 mg/kg)
+    if (calcMethod === 'weight_range') {
+      const minPerKg = parseFloat(calcMinDosePerKg) || 0;
+      const maxPerKg = parseFloat(calcMaxDosePerKg) || minPerKg;
+      let warning: string | null = null;
+      if (w <= 0) {
+        warning = 'Enter patient weight (kg) to calculate dose range.';
+      } else if (minPerKg <= 0 && maxPerKg <= 0) {
+        warning = 'Enter min and max dose per kg.';
+      }
+      const minCalculated = w > 0 && minPerKg > 0 ? Number((w * minPerKg).toFixed(2)) : 0;
+      const maxCalculated = w > 0 && maxPerKg > 0 ? Number((w * maxPerKg).toFixed(2)) : minCalculated;
+      const totalDispenseQty =
+        minCalculated > 0 && calcDurationDays > 0
+          ? Math.ceil(minCalculated * dosesPerDay * calcDurationDays)
+          : 0;
+      return {
+        calcMethod,
+        calculatedDose: minCalculated,
+        minCalculatedDose: minCalculated,
+        maxCalculatedDose: maxCalculated,
+        calculatedVolume: 0,
+        totalDispenseQty,
+        dosesPerDay,
+        warning,
+        displayDose: minCalculated > 0 ? `${minCalculated}–${maxCalculated} ${calcDoseUnit}` : '—',
+        formula:
+          w > 0 && minPerKg > 0
+            ? `${w} kg × (${minPerKg}–${maxPerKg} ${calcDoseUnit}/kg) = ${minCalculated}–${maxCalculated} ${calcDoseUnit}/dose`
+            : undefined,
+      };
+    }
+
+    // Method: Weight-Band (Tier-Based by Weight Range)
+    if (calcMethod === 'weight_band') {
+      let warning: string | null = null;
+      let matchedDose = 0;
+      let matchedUnit = calcBandDoseUnit || 'tablet';
+      let matchedLabel = '';
+
+      if (w <= 0) {
+        warning = 'Enter patient weight (kg) to match weight band.';
+      } else if (calcWeightBands && calcWeightBands.length > 0) {
+        const matched = calcWeightBands.find((b) => {
+          const minOk = b.minWeightKg === undefined || b.minWeightKg === null || w >= b.minWeightKg;
+          const maxOk = b.maxWeightKg === undefined || b.maxWeightKg === null || w <= b.maxWeightKg;
+          return minOk && maxOk;
+        });
+        if (matched) {
+          matchedDose = matched.doseValue;
+          matchedUnit = matched.doseUnit;
+          matchedLabel = matched.label || `${matched.minWeightKg ?? 0}–${matched.maxWeightKg ?? '∞'} kg`;
+        } else {
+          warning = `Patient weight (${w} kg) does not fall into any configured band.`;
+        }
+      } else {
+        const minW = parseFloat(calcBandMinWeight) || 0;
+        const maxW = parseFloat(calcBandMaxWeight) || Infinity;
+        const dVal = parseFloat(calcBandDoseValue) || 0;
+        if (w >= minW && w <= maxW && dVal > 0) {
+          matchedDose = dVal;
+          matchedUnit = calcBandDoseUnit;
+          matchedLabel = `${minW}–${maxW} kg`;
+        } else if (dVal <= 0) {
+          warning = 'Enter band dose value.';
+        } else {
+          warning = `Patient weight (${w} kg) outside specified band (${minW}–${maxW} kg).`;
+        }
+      }
+
+      const totalDispenseQty =
+        matchedDose > 0 && calcDurationDays > 0
+          ? Math.ceil(matchedDose * dosesPerDay * calcDurationDays)
+          : 0;
+
+      return {
+        calcMethod,
+        calculatedDose: matchedDose,
+        calculatedDoseUnit: matchedUnit,
+        calculatedVolume: 0,
+        totalDispenseQty,
+        dosesPerDay,
+        warning,
+        displayDose: matchedDose > 0 ? `${matchedDose} ${matchedUnit}` : '—',
+        formula:
+          matchedDose > 0
+            ? `Weight band matched (${matchedLabel}) for ${w} kg → ${matchedDose} ${matchedUnit}/dose`
+            : undefined,
+      };
+    }
+
+    // Method: Fixed Dose (Independent of Weight)
+    if (calcMethod === 'fixed') {
+      const fx = parseFloat(calcFixedDose) || 0;
+      const totalDispenseQty =
+        fx > 0 && calcDurationDays > 0
+          ? Math.ceil(fx * dosesPerDay * calcDurationDays)
+          : 0;
+      return {
+        calcMethod,
+        calculatedDose: fx,
+        calculatedVolume: 0,
+        totalDispenseQty,
+        dosesPerDay,
+        warning: fx <= 0 ? 'Enter fixed dose value.' : null,
+        displayDose: fx > 0 ? `${fx} ${calcFixedDoseUnit}` : '—',
+        formula: fx > 0 ? `Fixed dose: ${fx} ${calcFixedDoseUnit} per administration` : undefined,
+      };
+    }
+
+    // Method: No Smart Dosing (Manual Entry)
+    if (calcMethod === 'none') {
+      return {
+        calcMethod,
+        calculatedDose: 0,
+        calculatedVolume: 0,
+        totalDispenseQty: 0,
+        dosesPerDay,
+        warning: null,
+        displayDose: 'Manual',
+        formula: 'Manual dosing — no automated calculation applied',
+      };
+    }
+
+    // Default: Weight-Based (mg/kg) + concentration
     const dpk = parseFloat(calcDosePerKg) || 0;
-    const calculatedDose = w > 0 && dpk > 0 ? w * dpk : 0;
+    const calculatedDose = w > 0 && dpk > 0 ? Number((w * dpk).toFixed(2)) : 0;
 
     const str = parseFloat(calcStrength) || 0;
     const bVol = parseFloat(calcBaseVolume) || 1;
-    const calculatedVolume = str > 0 && calculatedDose > 0 ? (calculatedDose / str) * bVol : 0;
+    const calculatedVolume = str > 0 && calculatedDose > 0 ? Number(((calculatedDose / str) * bVol).toFixed(2)) : 0;
 
-    const dosesPerDay = getDosesPerDay(calcFrequency) || 1;
     const totalDispenseQty =
       calculatedVolume > 0 && calcDurationDays > 0
         ? Math.ceil(calculatedVolume * dosesPerDay * calcDurationDays)
@@ -431,41 +797,187 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         ? Math.ceil(dosesPerDay * calcDurationDays)
         : 0;
 
+    let warning: string | null = null;
+    if (w <= 0 && dpk > 0) {
+      warning = 'Enter patient weight (kg) to calculate dose.';
+    }
+
     return {
+      calcMethod: 'weight_based' as DosingMethod,
       calculatedDose,
       calculatedVolume,
       dosesPerDay,
       totalDispenseQty,
+      warning,
+      displayDose:
+        calculatedVolume > 0
+          ? `${calculatedVolume} ${calcVolumeUnit}`
+          : calculatedDose > 0
+          ? `${calculatedDose} ${calcDoseUnit}`
+          : '—',
+      formula:
+        w > 0 && dpk > 0
+          ? `${w} kg × ${dpk} ${calcDoseUnit}/kg = ${calculatedDose} ${calcDoseUnit}`
+          : undefined,
     };
-  }, [calcWeight, calcDosePerKg, calcStrength, calcBaseVolume, calcFrequency, calcDurationDays]);
+  }, [
+    calcMethod,
+    calcWeight,
+    calcDosePerKg,
+    calcDoseUnit,
+    calcStrength,
+    calcBaseVolume,
+    calcVolumeUnit,
+    calcFrequency,
+    calcDurationDays,
+    calcDoseVolumeAmount,
+    calcDoseVolumeUnit,
+    calcWeightBasis,
+    calcWeightBasisUnit,
+    calcReconSourceQty,
+    calcReconSourceUnit,
+    calcReconDiluentVol,
+    calcReconDiluentUnit,
+    calcReconAdminVol,
+    calcReconAdminUnit,
+    calcDropsPerMl,
+    calcDoseDrops,
+    calcMinDosePerKg,
+    calcMaxDosePerKg,
+    calcFixedDose,
+    calcFixedDoseUnit,
+    calcWeightBands,
+    calcBandMinWeight,
+    calcBandMaxWeight,
+    calcBandDoseValue,
+    calcBandDoseUnit,
+  ]);
 
   const handleApplyDoseCalculation = () => {
-    const { calculatedDose, calculatedVolume, totalDispenseQty } = doseCalcMetrics;
-    if (calculatedVolume > 0) {
-      const roundedDose = Math.round(calculatedVolume * 100) / 100;
+    const { calcMethod: method, calculatedDose, calculatedVolume, totalDispenseQty } = doseCalcMetrics;
+
+    if (method === 'volume_per_weight') {
+      if (calculatedVolume > 0) {
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(calculatedVolume),
+          unit: calcDoseVolumeUnit || 'mL',
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'reconstituted_liquid') {
+      const adminVol = parseFloat(calcReconAdminVol) || 0;
+      if (adminVol > 0) {
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(adminVol),
+          unit: calcReconAdminUnit || 'mL',
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'reconstituted_drops') {
+      const doseDrops = parseFloat(calcDoseDrops) || 0;
+      if (doseDrops > 0) {
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(doseDrops),
+          unit: 'drops',
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'weight_range') {
+      const minVal = doseCalcMetrics.calculatedDose || (doseCalcMetrics as any).minCalculatedDose || 0;
+      if (minVal > 0) {
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(minVal),
+          unit: calcDoseUnit || prev.unit,
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'weight_band') {
+      if (calculatedDose > 0) {
+        const bandUnit = (doseCalcMetrics as any).calculatedDoseUnit || calcBandDoseUnit || 'tablet';
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(calculatedDose),
+          unit: bandUnit,
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'fixed') {
+      if (calculatedDose > 0) {
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(calculatedDose),
+          unit: calcFixedDoseUnit || prev.unit,
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
+    } else if (method === 'none') {
+      // Manual entry, keep current form values but update frequency/duration if user changed them in calc
       setMedForm((prev) => ({
         ...prev,
-        dose: String(roundedDose),
-        unit: calcVolumeUnit || prev.unit,
-        quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
         frequency: calcFrequency,
         durationDays: calcDurationDays,
       }));
-    } else if (calculatedDose > 0) {
-      const roundedDose = Math.round(calculatedDose * 100) / 100;
-      setMedForm((prev) => ({
-        ...prev,
-        dose: String(roundedDose),
-        unit: calcDoseUnit || prev.unit,
-        quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
-        frequency: calcFrequency,
-        durationDays: calcDurationDays,
-      }));
+      setDurationDaysStr(String(calcDurationDays));
+    } else {
+      // Weight based
+      if (calculatedVolume > 0) {
+        const roundedDose = Math.round(calculatedVolume * 100) / 100;
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(roundedDose),
+          unit: calcVolumeUnit || prev.unit,
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      } else if (calculatedDose > 0) {
+        const roundedDose = Math.round(calculatedDose * 100) / 100;
+        setMedForm((prev) => ({
+          ...prev,
+          dose: String(roundedDose),
+          unit: calcDoseUnit || prev.unit,
+          quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
+          frequency: calcFrequency,
+          durationDays: calcDurationDays,
+        }));
+        setDurationDaysStr(String(calcDurationDays));
+        if (totalDispenseQty > 0) setQuantityStr(String(totalDispenseQty));
+      }
     }
     setUserModifiedDose(true);
   };
 
-  // ── Modal Handlers (Integrated Smart Dose Calculator - Phase 7) ──
+  // ── Modal Handlers (Integrated Smart Dose Calculator - Phase 7 + Addendum) ──
   const openAddMedModal = () => {
     setEditingItemIndex(null);
     setSelectedMedRef(null);
@@ -475,6 +987,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
     setInlineWeight(currWeight);
     setCalcWeight(currWeight);
+    setCalcMethod('weight_based');
     setCalcDosePerKg('');
     setCalcDoseUnit('mg');
     setCalcStrength('');
@@ -483,6 +996,34 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     setCalcVolumeUnit('mL');
     setCalcFrequency('BID (q12h)');
     setCalcDurationDays(5);
+    setDurationDaysStr('5');
+    setQuantityStr('10');
+
+    // Method A
+    setCalcDoseVolumeAmount('1');
+    setCalcDoseVolumeUnit('mL');
+    setCalcWeightBasis('20');
+    setCalcWeightBasisUnit('kg');
+
+    // Method B & C
+    setCalcReconSourceQty('1');
+    setCalcReconSourceUnit('tablet');
+    setCalcReconDiluentVol('20');
+    setCalcReconDiluentUnit('mL');
+    setCalcReconAdminVol('1');
+    setCalcReconAdminUnit('mL');
+    setCalcDropsPerMl('20');
+    setCalcDoseDrops('20');
+    setCalcMinDosePerKg('10');
+    setCalcMaxDosePerKg('20');
+    setCalcFixedDose('1');
+    setCalcFixedDoseUnit('tablet');
+    setCalcWeightBands([]);
+    setCalcBandMinWeight('0');
+    setCalcBandMaxWeight('10');
+    setCalcBandDoseValue('1');
+    setCalcBandDoseUnit('tablet');
+
     setIsDoseCalcOpen(false);
 
     setMedForm({
@@ -516,8 +1057,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     const numericDose = extractNumericDose(itm.dose);
     const doseUnit = extractDoseUnit(itm.dose) || itm.unit || 'tablet';
+    const initDuration = itm.durationDays || 5;
+    const initQty = itm.quantity || 10;
+    setDurationDaysStr(String(initDuration));
+    setQuantityStr(String(initQty));
 
     if (matched) {
+      setCalcMethod(matched.dosingMethod && matched.dosingMethod !== 'none' ? matched.dosingMethod : 'weight_based');
       setCalcDosePerKg(matched.dosePerKg ? String(matched.dosePerKg) : '');
       setCalcDoseUnit(matched.doseUnit || 'mg');
       setCalcStrength(matched.concentrationStrength ? String(matched.concentrationStrength) : '');
@@ -525,11 +1071,38 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       setCalcBaseVolume(matched.concentrationVolume ? String(matched.concentrationVolume) : '1');
       setCalcVolumeUnit(matched.concentrationVolumeUnit || 'mL');
       setCalcFrequency(itm.frequency || matched.defaultFrequency || 'BID (q12h)');
-      setCalcDurationDays(itm.durationDays || matched.defaultDurationDays || 5);
+      setCalcDurationDays(initDuration);
+
+      // Method A
+      setCalcDoseVolumeAmount(matched.doseVolumeAmount ? String(matched.doseVolumeAmount) : '1');
+      setCalcDoseVolumeUnit(matched.doseVolumeUnit || 'mL');
+      setCalcWeightBasis(matched.weightBasis ? String(matched.weightBasis) : '20');
+      setCalcWeightBasisUnit(matched.weightBasisUnit || 'kg');
+
+      // Method B & C
+      setCalcReconSourceQty(matched.reconstitutionSourceQty ? String(matched.reconstitutionSourceQty) : '1');
+      setCalcReconSourceUnit(matched.reconstitutionSourceUnit || 'tablet');
+      setCalcReconDiluentVol(matched.reconstitutionDiluentVolume ? String(matched.reconstitutionDiluentVolume) : '20');
+      setCalcReconDiluentUnit(matched.reconstitutionDiluentUnit || 'mL');
+      setCalcReconAdminVol(matched.reconstitutionAdminVolume ? String(matched.reconstitutionAdminVolume) : '1');
+      setCalcReconAdminUnit(matched.reconstitutionAdminUnit || 'mL');
+      setCalcDropsPerMl(matched.dropsPerMl ? String(matched.dropsPerMl) : '20');
+      setCalcDoseDrops(matched.doseDrops ? String(matched.doseDrops) : '20');
+      setCalcMinDosePerKg(matched.minDosePerKg !== undefined ? String(matched.minDosePerKg) : (matched.dosePerKg ? String(matched.dosePerKg) : '10'));
+      setCalcMaxDosePerKg(matched.maxDosePerKg !== undefined ? String(matched.maxDosePerKg) : (matched.dosePerKg ? String(matched.dosePerKg) : '20'));
+      setCalcFixedDose(matched.fixedDose !== undefined ? String(matched.fixedDose) : '1');
+      setCalcFixedDoseUnit(itm.unit || matched.doseUnit || 'tablet');
+      setCalcWeightBands(matched.weightBands || []);
+      setCalcBandMinWeight('0');
+      setCalcBandMaxWeight('10');
+      setCalcBandDoseValue('1');
+      setCalcBandDoseUnit('tablet');
+
       if (matched.dosingMethod && matched.dosingMethod !== 'none') {
         setIsDoseCalcOpen(true);
       }
     } else {
+      setCalcMethod('weight_based');
       setCalcDosePerKg('');
       setCalcDoseUnit('mg');
       setCalcStrength('');
@@ -537,7 +1110,28 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       setCalcBaseVolume('1');
       setCalcVolumeUnit('mL');
       setCalcFrequency(itm.frequency || 'BID (q12h)');
-      setCalcDurationDays(itm.durationDays || 5);
+      setCalcDurationDays(initDuration);
+      setCalcDoseVolumeAmount('1');
+      setCalcDoseVolumeUnit('mL');
+      setCalcWeightBasis('20');
+      setCalcWeightBasisUnit('kg');
+      setCalcReconSourceQty('1');
+      setCalcReconSourceUnit('tablet');
+      setCalcReconDiluentVol('20');
+      setCalcReconDiluentUnit('mL');
+      setCalcReconAdminVol('1');
+      setCalcReconAdminUnit('mL');
+      setCalcDropsPerMl('20');
+      setCalcDoseDrops('20');
+      setCalcMinDosePerKg('10');
+      setCalcMaxDosePerKg('20');
+      setCalcFixedDose('1');
+      setCalcFixedDoseUnit('tablet');
+      setCalcWeightBands([]);
+      setCalcBandMinWeight('0');
+      setCalcBandMaxWeight('10');
+      setCalcBandDoseValue('1');
+      setCalcBandDoseUnit('tablet');
       setIsDoseCalcOpen(false);
     }
 
@@ -548,8 +1142,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       dose: numericDose,
       route: itm.route || 'PO (Oral)',
       frequency: itm.frequency || 'BID (q12h)',
-      durationDays: itm.durationDays || 5,
-      quantity: itm.quantity,
+      durationDays: initDuration,
+      quantity: initQty,
       unit: doseUnit,
       directions: itm.directions || '',
     });
@@ -565,7 +1159,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     const weightNum = inlineWeight ? parseFloat(inlineWeight) : selectedPatient?.weightKg;
     const res = calculateSmartDose(med, weightNum, selectedPatient?.species);
 
-    // Populate dose calculator fields from medicine formulary data
+    // Populate dose calculator fields from medicine formulary data (Formulary Inheritance)
+    setCalcMethod(med.dosingMethod && med.dosingMethod !== 'none' ? med.dosingMethod : 'weight_based');
     setCalcWeight(inlineWeight || (selectedPatient?.weightKg ? String(selectedPatient.weightKg) : ''));
     setCalcDosePerKg(med.dosePerKg ? String(med.dosePerKg) : '');
     setCalcDoseUnit(med.doseUnit || 'mg');
@@ -574,7 +1169,35 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     setCalcBaseVolume(med.concentrationVolume ? String(med.concentrationVolume) : '1');
     setCalcVolumeUnit(med.concentrationVolumeUnit || 'mL');
     setCalcFrequency(med.defaultFrequency || 'BID (q12h)');
-    setCalcDurationDays(med.defaultDurationDays || 5);
+    const chosenDur = res.suggestedDurationDays || med.defaultDurationDays || 5;
+    setCalcDurationDays(chosenDur);
+    setDurationDaysStr(String(chosenDur));
+
+    // Method A inheritance
+    setCalcDoseVolumeAmount(med.doseVolumeAmount !== undefined ? String(med.doseVolumeAmount) : '1');
+    setCalcDoseVolumeUnit(med.doseVolumeUnit || 'mL');
+    setCalcWeightBasis(med.weightBasis !== undefined ? String(med.weightBasis) : '20');
+    setCalcWeightBasisUnit(med.weightBasisUnit || 'kg');
+
+    // Method B & C inheritance
+    setCalcReconSourceQty(med.reconstitutionSourceQty !== undefined ? String(med.reconstitutionSourceQty) : '1');
+    setCalcReconSourceUnit(med.reconstitutionSourceUnit || 'tablet');
+    setCalcReconDiluentVol(med.reconstitutionDiluentVolume !== undefined ? String(med.reconstitutionDiluentVolume) : '20');
+    setCalcReconDiluentUnit(med.reconstitutionDiluentUnit || 'mL');
+    setCalcReconAdminVol(med.reconstitutionAdminVolume !== undefined ? String(med.reconstitutionAdminVolume) : '1');
+    setCalcReconAdminUnit(med.reconstitutionAdminUnit || 'mL');
+    setCalcDropsPerMl(med.dropsPerMl !== undefined ? String(med.dropsPerMl) : '20');
+    setCalcDoseDrops(med.doseDrops !== undefined ? String(med.doseDrops) : '20');
+    setCalcMinDosePerKg(med.minDosePerKg !== undefined ? String(med.minDosePerKg) : (med.dosePerKg ? String(med.dosePerKg) : '10'));
+    setCalcMaxDosePerKg(med.maxDosePerKg !== undefined ? String(med.maxDosePerKg) : (med.dosePerKg ? String(med.dosePerKg) : '20'));
+    setCalcFixedDose(med.fixedDose !== undefined ? String(med.fixedDose) : '1');
+    setCalcFixedDoseUnit(med.doseUnit || 'tablet');
+    setCalcWeightBands(med.weightBands || []);
+    setCalcBandMinWeight('0');
+    setCalcBandMaxWeight('10');
+    setCalcBandDoseValue('1');
+    setCalcBandDoseUnit('tablet');
+
     if (med.dosingMethod && med.dosingMethod !== 'none') {
       setIsDoseCalcOpen(true);
     }
@@ -585,8 +1208,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     const chosenRoute = res.suggestedRoute || med.defaultRoute || 'PO (Oral)';
     const chosenFreq = res.suggestedFrequency || med.defaultFrequency || 'BID (q12h)';
-    const chosenDur = res.suggestedDurationDays || med.defaultDurationDays || 5;
     const chosenQty = res.calculatedQuantity !== undefined ? res.calculatedQuantity : 10;
+    setQuantityStr(String(chosenQty));
     const chosenDir = res.suggestedDirections || med.defaultDirections || 'Give after food with water. Complete full course.';
 
     setMedForm((prev) => ({
@@ -602,6 +1225,49 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       unit: doseUnit,
       directions: chosenDir,
     }));
+  };
+
+  const handleCalcMethodChange = (newMethod: DosingMethod) => {
+    setCalcMethod(newMethod);
+
+    // Initialize valid defaults for the selected method while preserving shared inputs
+    if (newMethod === 'weight_based') {
+      if (!calcDosePerKg) setCalcDosePerKg(selectedMedRef?.dosePerKg ? String(selectedMedRef.dosePerKg) : '10');
+      if (!calcDoseUnit) setCalcDoseUnit(selectedMedRef?.doseUnit || medForm.unit || 'mg');
+      if (!calcBaseVolume) setCalcBaseVolume('1');
+      if (!calcVolumeUnit) setCalcVolumeUnit('mL');
+    } else if (newMethod === 'weight_range') {
+      if (!calcMinDosePerKg) setCalcMinDosePerKg(selectedMedRef?.minDosePerKg ? String(selectedMedRef.minDosePerKg) : (calcDosePerKg || '10'));
+      if (!calcMaxDosePerKg) setCalcMaxDosePerKg(selectedMedRef?.maxDosePerKg ? String(selectedMedRef.maxDosePerKg) : '20');
+      if (!calcDoseUnit) setCalcDoseUnit(selectedMedRef?.doseUnit || medForm.unit || 'mg');
+    } else if (newMethod === 'weight_band') {
+      if (calcBandMinWeight === '' || calcBandMinWeight === undefined) setCalcBandMinWeight('0');
+      if (calcBandMaxWeight === '' || calcBandMaxWeight === undefined) setCalcBandMaxWeight('10');
+      if (!calcBandDoseValue) setCalcBandDoseValue(selectedMedRef?.fixedDose ? String(selectedMedRef.fixedDose) : '1');
+      if (!calcBandDoseUnit) setCalcBandDoseUnit(selectedMedRef?.doseUnit || medForm.unit || 'tablet');
+    } else if (newMethod === 'volume_per_weight') {
+      if (!calcDoseVolumeAmount) setCalcDoseVolumeAmount(selectedMedRef?.doseVolumeAmount ? String(selectedMedRef.doseVolumeAmount) : '1');
+      if (!calcDoseVolumeUnit) setCalcDoseVolumeUnit(selectedMedRef?.doseVolumeUnit || 'mL');
+      if (!calcWeightBasis) setCalcWeightBasis(selectedMedRef?.weightBasis ? String(selectedMedRef.weightBasis) : '20');
+      if (!calcWeightBasisUnit) setCalcWeightBasisUnit('kg');
+    } else if (newMethod === 'reconstituted_liquid') {
+      if (!calcReconSourceQty) setCalcReconSourceQty(selectedMedRef?.reconstitutionSourceQty ? String(selectedMedRef.reconstitutionSourceQty) : '1');
+      if (!calcReconSourceUnit) setCalcReconSourceUnit(selectedMedRef?.reconstitutionSourceUnit || medForm.unit || 'tablet');
+      if (!calcReconDiluentVol) setCalcReconDiluentVol(selectedMedRef?.reconstitutionDiluentVolume ? String(selectedMedRef.reconstitutionDiluentVolume) : '20');
+      if (!calcReconDiluentUnit) setCalcReconDiluentUnit(selectedMedRef?.reconstitutionDiluentUnit || 'mL');
+      if (!calcReconAdminVol) setCalcReconAdminVol(selectedMedRef?.reconstitutionAdminVolume ? String(selectedMedRef.reconstitutionAdminVolume) : '1');
+      if (!calcReconAdminUnit) setCalcReconAdminUnit(selectedMedRef?.reconstitutionAdminUnit || 'mL');
+    } else if (newMethod === 'reconstituted_drops') {
+      if (!calcReconSourceQty) setCalcReconSourceQty(selectedMedRef?.reconstitutionSourceQty ? String(selectedMedRef.reconstitutionSourceQty) : '1');
+      if (!calcReconSourceUnit) setCalcReconSourceUnit(selectedMedRef?.reconstitutionSourceUnit || medForm.unit || 'tablet');
+      if (!calcReconDiluentVol) setCalcReconDiluentVol(selectedMedRef?.reconstitutionDiluentVolume ? String(selectedMedRef.reconstitutionDiluentVolume) : '20');
+      if (!calcReconDiluentUnit) setCalcReconDiluentUnit(selectedMedRef?.reconstitutionDiluentUnit || 'mL');
+      if (!calcDropsPerMl) setCalcDropsPerMl(selectedMedRef?.dropsPerMl ? String(selectedMedRef.dropsPerMl) : '20');
+      if (!calcDoseDrops) setCalcDoseDrops(selectedMedRef?.doseDrops ? String(selectedMedRef.doseDrops) : '20');
+    } else if (newMethod === 'fixed') {
+      if (!calcFixedDose) setCalcFixedDose(selectedMedRef?.fixedDose ? String(selectedMedRef.fixedDose) : '1');
+      if (!calcFixedDoseUnit) setCalcFixedDoseUnit(selectedMedRef?.doseUnit || medForm.unit || 'tablet');
+    }
   };
 
   const handleInlineWeightChange = (newWeightStr: string) => {
@@ -698,8 +1364,33 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   };
 
   // ── Apply Treatment Package ───────────────────────────────────
-  const handleApplyPackage = async (pkg: TreatmentPackage) => {
+  const handleApplyPackage = async (pkg: TreatmentPackage, skipMismatchCheck = false) => {
     if (!pkg.id) return;
+
+    // Check species compatibility if patient is selected
+    if (selectedPatient && !skipMismatchCheck) {
+      const pkgSpeciesList =
+        pkg.targetSpecies && pkg.targetSpecies.length > 0
+          ? pkg.targetSpecies
+          : pkg.species
+          ? [pkg.species]
+          : ['General'];
+
+      const isGeneral = pkgSpeciesList.some(
+        (s) => s.toLowerCase() === 'general' || s.toLowerCase() === 'universal'
+      );
+      const matchesPatient = pkgSpeciesList.some(
+        (s) => s.toLowerCase() === selectedPatient.species.toLowerCase()
+      );
+
+      if (!isGeneral && !matchesPatient) {
+        const proceed = window.confirm(
+          `Species Mismatch Warning:\n\nThis treatment package is configured for "${pkgSpeciesList.join(', ')}", but the current patient is a ${selectedPatient.species}.\n\nDo you want to proceed with clinician override?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     try {
       const pkgItems = await db.treatmentPackageItems
         .where('packageId')
@@ -759,8 +1450,19 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   // ── Save Prescription (Draft or Issued) ───────────────────────
   const handleSave = async (targetStatus: 'Draft' | 'Issued') => {
+    console.log('[VetRx] Generate Prescription requested', {
+      targetStatus,
+      selectedPatientId,
+      patientName: selectedPatient?.name,
+      symptomsLength: symptoms.trim().length,
+      diagnosisLength: diagnosis.trim().length,
+      itemsCount: items.length,
+    });
+
     if (mode === 'edit' && existingRx && existingRx.status !== 'Draft') {
-      alert('Issued or cancelled prescriptions are read-only. Clone the prescription to create a new clinical record.');
+      const msg = 'Issued or cancelled prescriptions are read-only. Clone the prescription to create a new clinical record.';
+      setGenerationError(msg);
+      setShowGenerationErrorModal(true);
       return;
     }
 
@@ -772,42 +1474,57 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       general?: string;
     } = {};
 
+    const missingList: { field: string; message: string; refKey: 'patient' | 'symptoms' | 'diagnosis' | 'medicines' }[] = [];
+
     if (!selectedPatientId) {
       newErrors.patient = 'Please select a patient animal before proceeding.';
+      missingList.push({
+        field: 'Patient Animal',
+        message: 'A patient animal must be selected to issue a prescription.',
+        refKey: 'patient',
+      });
     }
 
     if (targetStatus === 'Issued') {
       if (!symptoms.trim()) {
         newErrors.symptoms = 'Symptoms / clinical presentation is required.';
+        missingList.push({
+          field: 'Symptoms / Clinical Presentation',
+          message: 'Presenting complaints, vitals, or clinical findings are required.',
+          refKey: 'symptoms',
+        });
       }
       if (!diagnosis.trim()) {
         newErrors.diagnosis = 'Diagnosis is required to generate prescription.';
+        missingList.push({
+          field: 'Clinical Diagnosis',
+          message: 'A confirmed or provisional diagnosis is required before generating.',
+          refKey: 'diagnosis',
+        });
       }
       if (items.length === 0) {
         newErrors.medicines = 'Please add at least one prescribed medicine before generating.';
+        missingList.push({
+          field: 'Prescribed Medicines',
+          message: 'Add at least one medicine with approved dosage to the prescription.',
+          refKey: 'medicines',
+        });
       }
     }
 
-    if (Object.keys(newErrors).length > 0) {
-      newErrors.general = 'Please complete all required fields before generating the prescription.';
+    if (missingList.length > 0) {
+      console.warn('[VetRx] Validation prevented generation — missing fields:', missingList);
+      newErrors.general = `Please complete all required fields before generating (${missingList.map((m) => m.field).join(', ')}).`;
       setErrors(newErrors);
       setErrorMsg(newErrors.general);
-
-      // Automatically focus or scroll to the first invalid field
-      if (newErrors.symptoms) {
-        symptomsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        symptomsRef.current?.focus();
-      } else if (newErrors.diagnosis) {
-        diagnosisRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        diagnosisRef.current?.focus();
-      } else if (newErrors.medicines) {
-        medicinesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      setValidationErrors(missingList);
+      setShowValidationModal(true);
       return;
     }
 
     setErrors({});
     setErrorMsg(null);
+    setValidationErrors([]);
 
     if (!selectedPatientId) {
       return;
@@ -824,25 +1541,45 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   const executeSave = async (targetStatus: 'Draft' | 'Issued') => {
     setIsSaving(true);
+    console.log('[VetRx] executeSave running', { targetStatus, patientId: selectedPatientId });
 
     try {
       const now = new Date();
-      const practitionerId = practitioner?.id;
-      const ownerId = selectedPatient?.ownerId;
+
+      // Resilient practitioner lookup: check store, fallback to Dexie
+      let practitionerId = practitioner?.id;
       if (!practitionerId) {
-        setErrorMsg('Please configure the veterinarian profile in Settings before creating a prescription.');
-        setIsSaving(false);
+        const firstDoc = await db.practitioners.toCollection().first();
+        if (firstDoc?.id) {
+          practitionerId = firstDoc.id;
+        }
+      }
+
+      if (!practitionerId) {
+        const msg = 'Please configure the veterinarian profile in Settings before creating or generating a prescription.';
+        console.error('[VetRx] Generate failed:', msg);
+        setErrorMsg(msg);
+        setGenerationError(msg);
+        setShowGenerationErrorModal(true);
         return;
       }
+
+      const ownerId = selectedPatient?.ownerId;
       if (!ownerId) {
-        setErrorMsg('The selected patient has no valid owner association. Please correct the patient record first.');
-        setIsSaving(false);
+        const msg = 'The selected patient has no valid owner association. Please check the patient record in Patients.';
+        console.error('[VetRx] Generate failed:', msg, selectedPatient);
+        setErrorMsg(msg);
+        setGenerationError(msg);
+        setShowGenerationErrorModal(true);
         return;
       }
 
       if (!selectedPatientId) {
-        setErrorMsg('Please select a patient animal before proceeding.');
-        setIsSaving(false);
+        const msg = 'Please select a patient animal before proceeding.';
+        console.error('[VetRx] Generate failed:', msg);
+        setErrorMsg(msg);
+        setGenerationError(msg);
+        setShowGenerationErrorModal(true);
         return;
       }
       const safePatientId: number = selectedPatientId;
@@ -850,6 +1587,14 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       let rxId: number;
 
       if (mode === 'edit' && id) {
+        if (existingRx && existingRx.status !== 'Draft') {
+          const msg = 'Issued or cancelled prescriptions are read-only and cannot be overwritten. Please clone this prescription instead.';
+          console.error('[VetRx] Generate failed:', msg);
+          setErrorMsg(msg);
+          setGenerationError(msg);
+          setShowGenerationErrorModal(true);
+          return;
+        }
         rxId = parseInt(id, 10);
         await db.prescriptions.update(rxId, {
           patientId: safePatientId,
@@ -894,33 +1639,92 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         })) as number;
       }
 
-      // Save line items
+      // Save line items & Auto-add new medicines to formulary (UAT Requirement 4)
       if (items.length > 0) {
-        const lineItemsToInsert = items.map((itm, idx) => ({
-          prescriptionId: rxId,
-          medicineId: itm.medicineId,
-          brandName: itm.brandName,
-          genericName: itm.genericName,
-          presentation: itm.presentation,
-          strengthVolume: itm.strengthVolume,
-          dose: itm.dose || itm.strengthVolume,
-          quantity: itm.quantity,
-          unit: itm.unit,
-          frequency: itm.frequency,
-          durationDays: itm.durationDays,
-          route: itm.route,
-          directions: itm.directions,
-          sortOrder: idx,
-        }));
+        try {
+          const formulary = await db.medicines.toArray();
+          const assignedMedIds = new Map<number, number>();
 
-        await db.prescriptionItems.bulkAdd(lineItemsToInsert);
+          for (let i = 0; i < items.length; i++) {
+            const itm = items[i];
+            const normBrand = (itm.brandName || '').trim().toLowerCase();
+            const normStrength = (itm.strengthVolume || itm.presentation || '').trim().toLowerCase();
+            if (!normBrand) continue;
+
+            const exists = formulary.some((m) => {
+              const mBrand = (m.brandName || '').trim().toLowerCase();
+              const mStrength = (m.strengthVolume || m.presentation || '').trim().toLowerCase();
+              return mBrand === normBrand && (mStrength === normStrength || !normStrength);
+            });
+
+            if (!exists) {
+              const newMedId = (await db.medicines.add({
+                brandName: itm.brandName.trim(),
+                genericName: itm.genericName?.trim() || undefined,
+                presentation: itm.presentation || 'Tablet',
+                strengthVolume: itm.strengthVolume || itm.presentation || '1 unit',
+                defaultRoute: itm.route || 'PO (Oral)',
+                defaultFrequency: itm.frequency || 'BID (q12h)',
+                defaultDurationDays: itm.durationDays || 5,
+                defaultUnit: itm.unit || 'tablet',
+                defaultDirections: itm.directions?.trim() || undefined,
+                dosingMethod: 'none',
+                source: 'prescription',
+                isActive: true,
+                createdAt: now,
+                updatedAt: now,
+              })) as number;
+
+              if (!itm.medicineId) {
+                assignedMedIds.set(i, newMedId);
+              }
+
+              formulary.push({
+                id: newMedId,
+                brandName: itm.brandName.trim(),
+                presentation: itm.presentation || 'Tablet',
+                strengthVolume: itm.strengthVolume || itm.presentation || '1 unit',
+                isActive: true,
+                createdAt: now,
+                updatedAt: now,
+              } as any);
+            }
+          }
+
+          const lineItemsToInsert = items.map((itm, idx) => ({
+            prescriptionId: rxId,
+            medicineId: itm.medicineId || assignedMedIds.get(idx),
+            brandName: itm.brandName,
+            genericName: itm.genericName,
+            presentation: itm.presentation,
+            strengthVolume: itm.strengthVolume,
+            dose: itm.dose || itm.strengthVolume,
+            quantity: itm.quantity,
+            unit: itm.unit,
+            frequency: itm.frequency,
+            durationDays: itm.durationDays,
+            route: itm.route,
+            directions: itm.directions,
+            sortOrder: idx,
+          }));
+
+          await db.prescriptionItems.bulkAdd(lineItemsToInsert);
+        } catch (fErr) {
+          console.warn('[VetRx] Non-blocking: Could not auto-add new medicines to formulary:', fErr);
+        }
       }
 
+      console.log('[VetRx] Prescription generation completed successfully', { rxId, targetStatus });
       // Navigate to View / Preview page
       navigate(`/prescriptions/${rxId}`);
     } catch (err) {
-      console.error('Error saving prescription:', err);
-      setErrorMsg('An unexpected error occurred while saving the prescription.');
+      console.error('VetRx Generate failed:', err);
+      const msg = err instanceof Error
+        ? err.message
+        : 'Unable to generate the prescription. Please check the entered details.';
+      setErrorMsg(msg);
+      setGenerationError(msg);
+      setShowGenerationErrorModal(true);
     } finally {
       setIsSaving(false);
     }
@@ -986,9 +1790,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           {/* Filter Pills */}
           <div className="rx-quick-filter-pills">
             <span className="text-xs uppercase text-outline font-bold mr-1">Filter by:</span>
-            {['All', 'Canine', 'Feline', 'Equine', 'Avian'].map((spec) => (
+            {['All', 'Canine', 'Feline', 'Equine', 'Avian'].map((spec, idx) => (
               <button
-                key={spec}
+                key={`spec-pill-${spec}-${idx}`}
                 type="button"
                 className={`btn btn-sm ${speciesFilter === spec ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ borderRadius: 'var(--radius-full)' }}
@@ -1080,11 +1884,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   </button>
                 </div>
               ) : (
-                filteredPatients.map((patient) => {
+                filteredPatients.map((patient, idx) => {
                   const owner = ownersMap.get(patient.ownerId);
                   const avatarLetter = (owner?.name || patient.name || patient.species || 'C').charAt(0).toUpperCase();
                   return (
-                    <div key={patient.id} className="rx-select-animal-card">
+                    <div key={`pat-card-${patient.id || patient.name}-${idx}`} className="rx-select-animal-card">
                       <div className="rx-select-card-left">
                         <div className="rx-select-card-avatar">
                           {avatarLetter}
@@ -1259,13 +2063,68 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             1. Select Animal ({selectedPatient?.name})
           </span>
           <span>→</span>
-          <span className="rx-crumb-active">2. Clinical Details</span>
+          <span className="rx-crumb-active cursor-pointer hover:underline" onClick={() => symptomsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            2. Clinical Details
+          </span>
           <span>→</span>
-          <span className="rx-crumb-active">3. Medicines</span>
+          <span className="rx-crumb-active cursor-pointer hover:underline" onClick={() => medicinesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            3. Medicines
+          </span>
           <span>→</span>
-          <span>4. Generate</span>
+          <span
+            className="rx-crumb-active cursor-pointer font-bold hover:underline"
+            style={{ color: 'var(--color-primary)' }}
+            onClick={() => handleSave('Issued')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSave('Issued'); }}
+            title="Click to generate and issue prescription"
+          >
+            4. Generate
+          </span>
         </div>
       </div>
+
+      {mode === 'edit' && existingRx && existingRx.status !== 'Draft' && (
+        <div
+          style={{
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 'var(--radius-xl)',
+            padding: '16px 20px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            color: '#991b1b',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Icon name="warning" size={24} color="#dc2626" />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block' }}>
+                {existingRx.status === 'Issued' ? 'Issued Prescription (Read-Only)' : 'Cancelled Prescription (Read-Only)'}
+              </strong>
+              <span style={{ fontSize: '12.5px', color: '#7f1d1d' }}>
+                {existingRx.status === 'Issued'
+                  ? 'Issued prescriptions cannot be overwritten or edited.'
+                  : 'Cancelled prescriptions are permanently archived in history.'}{' '}
+                Clone this prescription to create a new editable version.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => navigate(`/prescriptions/new?cloneFrom=${existingRx.id}`)}
+            style={{ flexShrink: 0 }}
+          >
+            <Icon name="copy" size={16} />
+            <span>Clone Prescription</span>
+          </button>
+        </div>
+      )}
 
       {errorMsg && (
         <div className="p-3 bg-error-container text-on-error-container rounded-xl text-sm font-semibold flex items-center gap-2">
@@ -1349,6 +2208,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   }
                 }}
               />
+              {suggestedSymptoms.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', alignSelf: 'center' }}>Suggestions:</span>
+                  {suggestedSymptoms.map((sym, idx) => (
+                    <button
+                      key={`sugg-sym-${idx}`}
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px', height: '24px', padding: '0 8px', borderRadius: 'var(--radius-full)' }}
+                      onClick={() => setSymptoms((prev) => (prev ? `${prev}, ${sym}` : sym))}
+                    >
+                      + {sym}
+                    </button>
+                  ))}
+                </div>
+              )}
               {errors.symptoms && (
                 <div className="rx-field-error" id="symptoms-error" role="alert">
                   <Icon name="warning" size={14} />
@@ -1368,6 +2243,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 <input
                   ref={diagnosisRef}
                   type="text"
+                  list="diagnosis-suggestions-list"
                   className={`rx-diagnosis-input ${errors.diagnosis ? 'rx-input-error' : ''}`}
                   placeholder="Enter confirmed or tentative diagnosis (e.g. Canine Acute Otitis Externa)..."
                   value={diagnosis}
@@ -1381,7 +2257,28 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     }
                   }}
                 />
+                <datalist id="diagnosis-suggestions-list">
+                  {suggestedDiagnoses.map((diag, idx) => (
+                    <option key={`diag-opt-${idx}`} value={diag} />
+                  ))}
+                </datalist>
               </div>
+              {suggestedDiagnoses.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', alignSelf: 'center' }}>Suggestions:</span>
+                  {suggestedDiagnoses.slice(0, 5).map((diag, idx) => (
+                    <button
+                      key={`sugg-diag-${idx}`}
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px', height: '24px', padding: '0 8px', borderRadius: 'var(--radius-full)' }}
+                      onClick={() => setDiagnosis(diag)}
+                    >
+                      {diag}
+                    </button>
+                  ))}
+                </div>
+              )}
               {errors.diagnosis && (
                 <div className="rx-field-error" id="diagnosis-error" role="alert">
                   <Icon name="warning" size={14} />
@@ -1389,6 +2286,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 </div>
               )}
             </div>
+
           </div>
 
           {/* 3. Prescribed Medicines Section */}
@@ -1416,7 +2314,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
               <div className="rx-medicines-actions">
                 {/* Apply Treatment Package Trigger */}
-                <div className="relative">
+                <div className="relative" ref={pkgPopoverRef}>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
@@ -1430,7 +2328,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
                   {/* Popover */}
                   {showPkgPopover && (
-                    <div className="rx-pkg-popover">
+                    <div className="rx-pkg-popover" style={{ minWidth: 320, maxWidth: 360 }}>
                       <div className="rx-pkg-popover-header">
                         <span>Treatment Packages</span>
                         <span className="font-mono text-xs">{treatmentPackages?.length || 0} available</span>
@@ -1440,24 +2338,68 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                           No packages available.
                         </div>
                       ) : (
-                        treatmentPackages.map((pkg) => (
-                          <div key={pkg.id} className="rx-pkg-item">
-                            <div className="flex flex-col min-w-0">
-                              <span className="rx-pkg-name truncate">{pkg.name}</span>
-                              <span className="rx-pkg-sub truncate">
-                                {pkg.category || 'Clinical Protocol'}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              style={{ height: 26, padding: '0 8px', fontSize: 11 }}
-                              onClick={() => handleApplyPackage(pkg)}
+                        treatmentPackages.map((pkg, idx) => {
+                          const pkgSpeciesList =
+                            pkg.targetSpecies && pkg.targetSpecies.length > 0
+                              ? pkg.targetSpecies
+                              : pkg.species
+                              ? [pkg.species]
+                              : ['General'];
+                          const isGeneral = pkgSpeciesList.some(
+                            (s) => s.toLowerCase() === 'general' || s.toLowerCase() === 'universal'
+                          );
+                          const isMismatch =
+                            selectedPatient &&
+                            !isGeneral &&
+                            !pkgSpeciesList.some(
+                              (s) => s.toLowerCase() === selectedPatient.species.toLowerCase()
+                            );
+
+                          return (
+                            <div
+                              key={`pkg-item-${pkg.id || pkg.name}-${idx}`}
+                              className="rx-pkg-item"
+                              style={{ alignItems: 'flex-start', padding: '10px 12px' }}
                             >
-                              Apply
-                            </button>
-                          </div>
-                        ))
+                              <div className="flex flex-col min-w-0 flex-1 pr-2">
+                                <span className="rx-pkg-name truncate" style={{ fontWeight: 600 }}>
+                                  {pkg.name}
+                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <span className="rx-pkg-sub truncate">
+                                    {pkg.category || 'Clinical Protocol'}
+                                  </span>
+                                  <span className="text-outline-variant">•</span>
+                                  <span
+                                    className="text-xs"
+                                    style={{
+                                      color: isMismatch ? 'var(--color-error)' : 'var(--color-primary)',
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {pkgSpeciesList.join(', ')}
+                                  </span>
+                                </div>
+                                {isMismatch && (
+                                  <span
+                                    className="text-xs"
+                                    style={{ color: 'var(--color-error)', marginTop: 3, fontWeight: 500 }}
+                                  >
+                                    ⚠️ Mismatch for {selectedPatient.species}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className={`btn btn-sm ${isMismatch ? 'btn-secondary' : 'btn-primary'}`}
+                                style={{ height: 26, padding: '0 10px', fontSize: 11, flexShrink: 0 }}
+                                onClick={() => handleApplyPackage(pkg)}
+                              >
+                                {isMismatch ? 'Override' : 'Apply'}
+                              </button>
+                            </div>
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -1504,7 +2446,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             ) : (
               <div className="flex flex-col gap-2">
                 {items.map((itm, idx) => (
-                  <div key={idx} className="rx-med-item-card">
+                  <div key={`med-item-card-${itm.medicineId || itm.brandName}-${idx}`} className="rx-med-item-card">
                     <div className="rx-med-item-left">
                       <div className="rx-med-badge">Rx {idx + 1}</div>
                       <div className="rx-med-details">
@@ -1607,9 +2549,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   { label: '5 days', days: 5 },
                   { label: '7 days', days: 7 },
                   { label: '14 days', days: 14 },
-                ].map((chip) => (
+                ].map((chip, idx) => (
                   <button
-                    key={chip.days}
+                    key={`followup-chip-${chip.days}-${idx}`}
                     type="button"
                     className={`rx-followup-btn ${followUpDays === chip.days ? 'active' : ''}`}
                     onClick={() => setFollowUpDays(chip.days)}
@@ -1668,7 +2610,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 </span>
                 <div className="rx-schedule-list">
                   {items.map((itm, i) => (
-                    <div key={i} className="rx-schedule-row">
+                    <div key={`sched-item-${itm.medicineId || itm.brandName}-${i}`} className="rx-schedule-row">
                       <span className="rx-schedule-med">{itm.brandName}</span>
                       <span className="rx-schedule-freq">
                         {itm.quantity} {itm.unit} • {itm.frequency}
@@ -1681,7 +2623,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
             <div className="flex flex-col gap-2 pt-2 border-t border-surface-container">
               {errors.general && (
-                <div className="rx-summary-error-banner" role="alert">
+                <div className="rx-summary-error-banner" role="alert" style={{ cursor: 'pointer' }} onClick={() => setShowValidationModal(true)}>
                   <Icon name="warning" size={16} />
                   <span>{errors.general}</span>
                 </div>
@@ -1693,9 +2635,20 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 style={{ height: 46, width: '100%' }}
                 disabled={isSaving}
                 onClick={() => handleSave('Issued')}
+                data-testid="generate-prescription-btn"
+                id="generate-prescription-btn"
               >
-                <span>{isSaving ? 'Issuing...' : 'Generate Prescription'}</span>
-                <Icon name="arrow-forward" size={18} />
+                {isSaving ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <span>Generating Prescription…</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Generate Prescription</span>
+                    <Icon name="arrow-forward" size={18} />
+                  </>
+                )}
               </button>
 
               <button
@@ -1722,21 +2675,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         <div className="rx-modal-backdrop" onClick={() => setModalOpen(false)}>
           <div className="rx-modal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="rx-modal-header">
-              <div className="flex items-center gap-2">
-                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'var(--color-primary)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div style={{ width: 32, height: 32, minWidth: 32, minHeight: 32, borderRadius: 'var(--radius)', background: 'var(--color-primary)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon name="pill" size={18} />
                 </div>
-                <div>
-                  <h3 className="font-heading font-bold text-base text-on-surface">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-heading font-bold text-base text-on-surface truncate">
                     {editingItemIndex !== null ? 'Edit Medicine' : 'Add Medicine to Prescription'}
                   </h3>
-                  <span className="text-xs text-outline">Search formulary or configure dosing</span>
+                  <span className="text-xs text-outline block truncate">Search formulary or configure dosing</span>
                 </div>
               </div>
               <button
                 type="button"
-                className="btn btn-ghost btn-icon btn-sm"
+                className="btn btn-ghost btn-icon btn-sm shrink-0"
                 onClick={() => setModalOpen(false)}
+                aria-label="Close modal"
               >
                 <Icon name="x-mark" size={18} />
               </button>
@@ -1746,7 +2700,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               {/* Search or Brand Name */}
               <div className="form-group">
                 <label className="form-label">Search Formulation / Brand Name</label>
-                <div style={{ position: 'relative' }}>
+                <div style={{ position: 'relative', zIndex: 60 }}>
                   <input
                     type="text"
                     className="form-input"
@@ -1754,24 +2708,46 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     value={medModalSearch}
                     onChange={(e) => {
                       setMedModalSearch(e.target.value);
+                      setHighlightedMedIndex(0);
                       setMedForm((p) => ({ ...p, brandName: e.target.value }));
+                    }}
+                    onKeyDown={(e) => {
+                      const currentList = matchingMedicines.slice(0, 15);
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setHighlightedMedIndex((prev) => (currentList.length === 0 ? -1 : (prev + 1) % currentList.length));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlightedMedIndex((prev) => (currentList.length === 0 ? -1 : (prev <= 0 ? currentList.length - 1 : prev - 1)));
+                      } else if (e.key === 'Enter') {
+                        if (highlightedMedIndex >= 0 && highlightedMedIndex < currentList.length) {
+                          e.preventDefault();
+                          handleSelectMedRef(currentList[highlightedMedIndex]);
+                        }
+                      } else if (e.key === 'Escape') {
+                        setMedModalSearch('');
+                        setHighlightedMedIndex(-1);
+                      }
                     }}
                     autoFocus
                   />
 
-                  {/* Live Search Results Dropdown */}
+                  {/* Live Search Results / Empty State */}
                   {medModalSearch.trim().length > 0 && !selectedMedRef && (
-                    <div className="rx-live-med-dropdown">
-                      {matchingMedicines.length === 0 ? (
-                        <div className="rx-live-med-empty">
-                          <Icon name="search" size={14} />
-                          <span>No matching medicines found.</span>
-                        </div>
-                      ) : (
-                        matchingMedicines.slice(0, 15).map((med) => (
+                    matchingMedicines.length === 0 ? (
+                      <div className="formulation-empty-state rx-live-med-empty" role="status" aria-live="polite">
+                        <Icon name="search" size={16} />
+                        <span>No matching medicines found.</span>
+                      </div>
+                    ) : (
+                      <div className="rx-live-med-dropdown" role="listbox">
+                        {matchingMedicines.slice(0, 15).map((med, idx) => (
                           <div
-                            key={med.id}
-                            className="rx-live-med-item"
+                            key={`search-med-${med.id}-${idx}`}
+                            role="option"
+                            aria-selected={highlightedMedIndex === idx}
+                            className={`rx-live-med-item ${highlightedMedIndex === idx ? 'highlighted' : ''}`}
+                            onMouseEnter={() => setHighlightedMedIndex(idx)}
                             onClick={() => handleSelectMedRef(med)}
                           >
                             <div className="rx-live-med-left">
@@ -1791,9 +2767,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                               )}
                             </div>
                           </div>
-                        ))
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </div>
 
@@ -1833,16 +2809,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     className="rx-dose-calc-accordion-toggle"
                     onClick={() => setIsDoseCalcOpen(!isDoseCalcOpen)}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="rx-dose-calc-header-left">
                       <div className="rx-dose-calc-icon">
-                        <Icon name="calculator" size={15} />
+                        <Icon name="calculator" size={16} />
                       </div>
-                      <div className="text-left">
+                      <div className="rx-dose-calc-text-col">
                         <span className="rx-dose-calc-title">Optional dose calculation</span>
                         <span className="rx-dose-calc-subtitle">Weight-based dose, concentration &amp; quantity calculator</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-outline font-medium">
+                    <div className="rx-dose-calc-header-right">
                       <span>{isDoseCalcOpen ? 'Hide calculator' : 'Show calculator'}</span>
                       <Icon name={isDoseCalcOpen ? 'chevron-up' : 'chevron-down'} size={14} />
                     </div>
@@ -1850,176 +2826,443 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
                   {isDoseCalcOpen && (
                     <div className="rx-dose-calc-accordion-body">
-                      {/* Row 1: Weight, Dose per kg, Dose Unit, Calculated Dose */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>1. Patient Weight (kg)</label>
-                          <div className="rx-inline-weight-box">
-                            <input
-                              type="number"
-                              step="any"
-                              className="form-input"
-                              placeholder="e.g. 24"
+                      {/* Method Selector */}
+                      <div className="form-group" style={{ marginBottom: '12px' }}>
+                        <label className="form-label" style={{ fontSize: '11.5px', fontWeight: 600 }}>Calculation Method</label>
+                        <select
+                          className="form-select"
+                          value={calcMethod}
+                          onChange={(e) => handleCalcMethodChange(e.target.value as DosingMethod)}
+                        >
+                          {DOSING_METHOD_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="rx-dose-calc-grid">
+                        {/* ── METHOD A: VOLUME PER BODY WEIGHT ── */}
+                        {calcMethod === 'volume_per_weight' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Patient Weight"
                               value={calcWeight}
-                              onChange={(e) => {
-                                setCalcWeight(e.target.value);
-                                handleInlineWeightChange(e.target.value);
+                              onChange={(val) => {
+                                setCalcWeight(val);
+                                handleInlineWeightChange(val);
                               }}
+                              unit="kg"
+                              placeholder="e.g. 20"
                             />
-                            <span className="rx-inline-weight-unit">kg</span>
-                          </div>
-                        </div>
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>2. Dose per kg</label>
-                          <input
-                            type="number"
-                            step="any"
-                            className="form-input"
-                            placeholder="e.g. 10"
-                            value={calcDosePerKg}
-                            onChange={(e) => setCalcDosePerKg(e.target.value)}
-                          />
-                        </div>
+                            <DoseCalcNumericField
+                              label="2. Dose Volume"
+                              value={calcDoseVolumeAmount}
+                              onChange={setCalcDoseVolumeAmount}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcDoseVolumeUnit}
+                              onUnitChange={setCalcDoseVolumeUnit}
+                              placeholder="e.g. 1"
+                              min={0.01}
+                            />
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>3. Dose Unit</label>
-                          <select
-                            className="form-select"
-                            value={calcDoseUnit}
-                            onChange={(e) => setCalcDoseUnit(e.target.value)}
-                          >
-                            <option value="mg">mg</option>
-                            <option value="mcg">mcg</option>
-                            <option value="g">g</option>
-                            <option value="IU">IU</option>
-                            <option value="mL">mL</option>
-                          </select>
-                        </div>
+                            <DoseCalcNumericField
+                              label="3. Weight Basis"
+                              value={calcWeightBasis}
+                              onChange={setCalcWeightBasis}
+                              unit="kg"
+                              placeholder="e.g. 20"
+                              min={0.01}
+                            />
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Dose</label>
-                          <div className="rx-calc-badge-display">
-                            {doseCalcMetrics.calculatedDose > 0
-                              ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}`
-                              : '—'}
-                          </div>
-                        </div>
-                      </div>
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Volume</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.calculatedVolume > 0
+                                  ? `${doseCalcMetrics.calculatedVolume} ${calcDoseVolumeUnit}`
+                                  : '—'}
+                              </div>
+                            </div>
+                          </>
+                        )}
 
-                      {/* Row 2: Concentration / Strength Formulation & Calculated Volume */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>5. Strength of Active Ingredient</label>
-                          <input
-                            type="number"
-                            step="any"
-                            className="form-input"
-                            placeholder="e.g. 5 or 250"
-                            value={calcStrength}
-                            onChange={(e) => setCalcStrength(e.target.value)}
-                          />
-                        </div>
+                        {/* ── METHOD B: RECONSTITUTED TABLET/UNIT -> LIQUID VOLUME ── */}
+                        {calcMethod === 'reconstituted_liquid' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Source Quantity"
+                              value={calcReconSourceQty}
+                              onChange={setCalcReconSourceQty}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcReconSourceUnit}
+                              onUnitChange={setCalcReconSourceUnit}
+                              placeholder="e.g. 1"
+                              min={0.01}
+                            />
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>Unit of Active Ingredient</label>
-                          <select
-                            className="form-select"
-                            value={calcStrengthUnit}
-                            onChange={(e) => setCalcStrengthUnit(e.target.value)}
-                          >
-                            <option value="mg">mg</option>
-                            <option value="mcg">mcg</option>
-                            <option value="g">g</option>
-                            <option value="IU">IU</option>
-                          </select>
-                        </div>
+                            <DoseCalcNumericField
+                              label="2. Diluent Volume"
+                              value={calcReconDiluentVol}
+                              onChange={setCalcReconDiluentVol}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcReconDiluentUnit}
+                              onUnitChange={setCalcReconDiluentUnit}
+                              placeholder="e.g. 20"
+                              min={0.01}
+                            />
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>Base Volume / Unit</label>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <input
-                              type="number"
-                              step="any"
-                              className="form-input"
-                              style={{ width: '60px', flexShrink: 0 }}
-                              placeholder="1"
+                            <DoseCalcNumericField
+                              label="3. Dose Volume"
+                              value={calcReconAdminVol}
+                              onChange={setCalcReconAdminVol}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcReconAdminUnit}
+                              onUnitChange={setCalcReconAdminUnit}
+                              placeholder="e.g. 1"
+                              min={0.01}
+                            />
+
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Source Equivalent</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.sourceEquiv || '—'}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── METHOD C: RECONSTITUTED TABLET/UNIT -> DROPS ── */}
+                        {calcMethod === 'reconstituted_drops' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Source Quantity"
+                              value={calcReconSourceQty}
+                              onChange={setCalcReconSourceQty}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcReconSourceUnit}
+                              onUnitChange={setCalcReconSourceUnit}
+                              placeholder="e.g. 1"
+                              min={0.01}
+                            />
+
+                            <DoseCalcNumericField
+                              label="2. Diluent Volume"
+                              value={calcReconDiluentVol}
+                              onChange={setCalcReconDiluentVol}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcReconDiluentUnit}
+                              onUnitChange={setCalcReconDiluentUnit}
+                              placeholder="e.g. 20"
+                              min={0.01}
+                            />
+
+                            <DoseCalcNumericField
+                              label="3. Drops per mL (Calibrated)"
+                              required
+                              value={calcDropsPerMl}
+                              onChange={setCalcDropsPerMl}
+                              unit="drops/mL"
+                              placeholder="e.g. 20"
+                              min={1}
+                            />
+
+                            <DoseCalcNumericField
+                              label="4. Dose in Drops"
+                              value={calcDoseDrops}
+                              onChange={setCalcDoseDrops}
+                              unit="drops"
+                              placeholder="e.g. 20"
+                              min={1}
+                            />
+
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>5. Calculated Volume</label>
+                              <div className="rx-calc-badge-display">
+                                {doseCalcMetrics.calculatedVolume > 0 ? `${doseCalcMetrics.calculatedVolume} mL` : '—'}
+                              </div>
+                            </div>
+
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>6. Source Equivalent</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.sourceEquiv || '—'}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── METHOD: WEIGHT-BASED (DEFAULT) ── */}
+                        {calcMethod === 'weight_based' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Patient Weight"
+                              value={calcWeight}
+                              onChange={(val) => {
+                                setCalcWeight(val);
+                                handleInlineWeightChange(val);
+                              }}
+                              unit="kg"
+                              placeholder="e.g. 24"
+                            />
+
+                            <DoseCalcNumericField
+                              label="2. Dose per kg"
+                              value={calcDosePerKg}
+                              onChange={setCalcDosePerKg}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcDoseUnit}
+                              onUnitChange={setCalcDoseUnit}
+                              placeholder="e.g. 10"
+                            />
+
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>3. Calculated Dose</label>
+                              <div className="rx-calc-badge-display">
+                                {doseCalcMetrics.calculatedDose > 0
+                                  ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}`
+                                  : '—'}
+                              </div>
+                            </div>
+
+                            <DoseCalcNumericField
+                              label="4. Strength of Active Ingredient"
+                              value={calcStrength}
+                              onChange={setCalcStrength}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcStrengthUnit}
+                              onUnitChange={setCalcStrengthUnit}
+                              placeholder="e.g. 5 or 250"
+                            />
+
+                            <DoseCalcNumericField
+                              label="5. Base Volume"
                               value={calcBaseVolume}
-                              onChange={(e) => setCalcBaseVolume(e.target.value)}
+                              onChange={setCalcBaseVolume}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcVolumeUnit}
+                              onUnitChange={setCalcVolumeUnit}
+                              placeholder="1"
                             />
-                            <select
-                              className="form-select"
-                              value={calcVolumeUnit}
-                              onChange={(e) => setCalcVolumeUnit(e.target.value)}
-                            >
-                              <option value="mL">mL</option>
-                              <option value="tablet">tablet</option>
-                              <option value="capsule">capsule</option>
-                              <option value="bolus/boli">bolus/boli</option>
-                              <option value="drop">drop</option>
-                              <option value="sachet">sachet</option>
-                            </select>
-                          </div>
-                        </div>
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>6. Calc. Volume / Qty per Dose</label>
-                          <div className="rx-calc-badge-display highlight">
-                            {doseCalcMetrics.calculatedVolume > 0
-                              ? `${Math.round(doseCalcMetrics.calculatedVolume * 100) / 100} ${calcVolumeUnit}`
-                              : (doseCalcMetrics.calculatedDose > 0 ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}` : '—')}
-                          </div>
-                        </div>
-                      </div>
+                            <div className="form-group rx-calc-row3-item">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>6. Calculated Volume / Qty per Dose</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.calculatedVolume > 0
+                                  ? `${Math.round(doseCalcMetrics.calculatedVolume * 100) / 100} ${calcVolumeUnit}`
+                                  : (doseCalcMetrics.calculatedDose > 0 ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}` : '—')}
+                              </div>
+                            </div>
+                          </>
+                        )}
 
-                      {/* Row 3: Frequency, Duration, Total Quantity */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginBottom: '12px' }}>
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>7. Frequency</label>
+                        {/* ── METHOD: WEIGHT-BASED RANGE ── */}
+                        {calcMethod === 'weight_range' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Patient Weight"
+                              value={calcWeight}
+                              onChange={(val) => {
+                                setCalcWeight(val);
+                                handleInlineWeightChange(val);
+                              }}
+                              unit="kg"
+                              placeholder="e.g. 24"
+                            />
+
+                            <DoseCalcNumericField
+                              label="2. Min Dose per kg"
+                              value={calcMinDosePerKg}
+                              onChange={setCalcMinDosePerKg}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcDoseUnit}
+                              onUnitChange={setCalcDoseUnit}
+                              placeholder="e.g. 10"
+                            />
+
+                            <DoseCalcNumericField
+                              label="3. Max Dose per kg"
+                              value={calcMaxDosePerKg}
+                              onChange={setCalcMaxDosePerKg}
+                              unit={calcDoseUnit}
+                              placeholder="e.g. 20"
+                            />
+
+                            <div className="form-group rx-calc-row3-item">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Range</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.displayDose}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── METHOD: WEIGHT-BAND ── */}
+                        {calcMethod === 'weight_band' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Patient Weight"
+                              value={calcWeight}
+                              onChange={(val) => {
+                                setCalcWeight(val);
+                                handleInlineWeightChange(val);
+                              }}
+                              unit="kg"
+                              placeholder="e.g. 15"
+                            />
+
+                            {calcWeightBands && calcWeightBands.length > 0 ? (
+                              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <label className="form-label" style={{ fontSize: '11.5px' }}>Configured Bands</label>
+                                <div style={{ fontSize: '11.5px', color: 'var(--color-on-surface-variant)', background: 'var(--color-surface-container-low)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
+                                  {calcWeightBands.map((b, i) => (
+                                    <div key={i}>
+                                      • {b.label || `${b.minWeightKg ?? 0}–${b.maxWeightKg ?? '∞'} kg`}: <strong>{b.doseValue} {b.doseUnit}</strong>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <DoseCalcNumericField
+                                  label="2. Minimum Band Range"
+                                  value={calcBandMinWeight}
+                                  onChange={setCalcBandMinWeight}
+                                  unit="kg"
+                                  placeholder="0"
+                                  min={0}
+                                />
+
+                                <DoseCalcNumericField
+                                  label="3. Maximum Band Range"
+                                  value={calcBandMaxWeight}
+                                  onChange={setCalcBandMaxWeight}
+                                  unit="kg"
+                                  placeholder="10"
+                                  min={0.1}
+                                />
+
+                                <DoseCalcNumericField
+                                  label="4. Band Dose & Unit"
+                                  value={calcBandDoseValue}
+                                  onChange={setCalcBandDoseValue}
+                                  unitOptions={availableUnits}
+                                  selectedUnit={calcBandDoseUnit}
+                                  onUnitChange={setCalcBandDoseUnit}
+                                  placeholder="1"
+                                  min={0.01}
+                                />
+                              </>
+                            )}
+
+                            <div className="form-group">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>Matched Band Dose</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.displayDose}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── METHOD: FIXED DOSE ── */}
+                        {calcMethod === 'fixed' && (
+                          <>
+                            <DoseCalcNumericField
+                              label="1. Fixed Dose Value"
+                              value={calcFixedDose}
+                              onChange={setCalcFixedDose}
+                              unitOptions={availableUnits}
+                              selectedUnit={calcFixedDoseUnit}
+                              onUnitChange={(val) => {
+                                setCalcFixedDoseUnit(val);
+                                setMedForm((prev) => ({ ...prev, unit: val }));
+                              }}
+                              placeholder="e.g. 1"
+                              min={0.01}
+                            />
+
+                            <div className="form-group rx-calc-row3-item">
+                              <label className="form-label" style={{ fontSize: '11.5px' }}>Administer per Dose</label>
+                              <div className="rx-calc-badge-display highlight">
+                                {doseCalcMetrics.displayDose}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {/* ── METHOD: NONE (MANUAL) ── */}
+                        {calcMethod === 'none' && (
+                          <div style={{ gridColumn: '1 / -1', padding: '10px 14px', background: 'var(--color-surface-container-low)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-outline-variant)' }}>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                              <strong>Manual Mode:</strong> No automated dosing formula is applied for this medication. Please enter the clinical dose, route, frequency, and dispense quantity manually in the medicine form above.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* ── SHARED: Frequency, Duration, Total Dispense Qty, Apply Button ── */}
+                        <div className="form-group rx-calc-row4-start">
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>Frequency</label>
                           <select
                             className="form-select"
                             value={calcFrequency}
                             onChange={(e) => setCalcFrequency(e.target.value)}
                           >
-                            {availableFrequencies.map((f) => (
-                              <option key={f} value={f}>{f}</option>
+                            {availableFrequencies.map((f, idx) => (
+                              <option key={`calc-freq-${f}-${idx}`} value={f}>{f}</option>
                             ))}
                           </select>
                         </div>
 
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>8. Duration (Days)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            className="form-input"
-                            placeholder="e.g. 5"
-                            value={calcDurationDays}
-                            onChange={(e) => setCalcDurationDays(parseInt(e.target.value, 10) || 0)}
-                          />
-                        </div>
+                        <DoseCalcNumericField
+                          label="Duration (Days)"
+                          value={calcDurationDays}
+                          onChange={(val) => setCalcDurationDays(parseInt(val, 10) || 0)}
+                          unit="days"
+                          placeholder="e.g. 5"
+                          min={1}
+                        />
 
                         <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>9. Total Dispense Qty</label>
+                          <label className="form-label" style={{ fontSize: '11.5px' }}>Total Dispense Qty</label>
                           <div className="rx-calc-badge-display grand">
                             {doseCalcMetrics.totalDispenseQty > 0
-                              ? `${doseCalcMetrics.totalDispenseQty} ${calcVolumeUnit || medForm.unit}`
+                              ? `${doseCalcMetrics.totalDispenseQty} ${
+                                  calcMethod === 'volume_per_weight'
+                                    ? calcDoseVolumeUnit
+                                    : calcMethod === 'reconstituted_liquid'
+                                    ? calcReconAdminUnit
+                                    : calcMethod === 'reconstituted_drops'
+                                    ? 'drops'
+                                    : calcVolumeUnit || medForm.unit
+                                }`
                               : '—'}
                           </div>
                         </div>
 
-                        <div className="form-group" style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <div className="form-group rx-calc-action-cell">
+                          <label className="form-label rx-calc-action-label" style={{ fontSize: '11.5px', visibility: 'hidden' }}>Apply</label>
                           <button
                             type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ height: '38px', width: '100%', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                            className="btn btn-secondary rx-apply-calc-btn"
                             onClick={handleApplyDoseCalculation}
                             title="Apply calculated dose, unit, frequency, duration and quantity into prescription medicine fields"
                           >
-                            <Icon name="check" size={14} />
+                            <Icon name="check" size={15} />
                             <span>Apply to Medicine</span>
                           </button>
                         </div>
+
+                        {/* Formula & Warning Feedback */}
+                        {doseCalcMetrics.formula && (
+                          <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: 'var(--color-primary)', background: 'var(--color-primary-container-low, #f0fdf4)', border: '1px solid #bbf7d0', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
+                            <strong>Formula: </strong>{doseCalcMetrics.formula}
+                          </div>
+                        )}
+                        {doseCalcMetrics.warning && (
+                          <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Icon name="warning" size={14} />
+                            <span>{doseCalcMetrics.warning}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2033,9 +3276,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <span>Quick suggestions from formulary:</span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {availableMedicines.slice(0, 6).map((med) => (
+                      {availableMedicines.slice(0, 6).map((med, idx) => (
                         <button
-                          key={med.id}
+                          key={`sugg-${med.id}-${idx}`}
                           type="button"
                           className="btn btn-secondary btn-sm"
                           style={{ height: 26, fontSize: 11, borderRadius: 'var(--radius-full)' }}
@@ -2080,8 +3323,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     value={medForm.unit}
                     onChange={(e) => setMedForm({ ...medForm, unit: e.target.value })}
                   >
-                    {availableUnits.map((u) => (
-                      <option key={u} value={u}>{u}</option>
+                    {availableUnits.map((u, idx) => (
+                      <option key={`medform-unit-${u}-${idx}`} value={u}>{u}</option>
                     ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
@@ -2096,8 +3339,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     value={medForm.route}
                     onChange={(e) => setMedForm({ ...medForm, route: e.target.value })}
                   >
-                    {availableRoutes.map((r) => (
-                      <option key={r} value={r}>{r}</option>
+                    {availableRoutes.map((r, idx) => (
+                      <option key={`medform-route-${r}-${idx}`} value={r}>{r}</option>
                     ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
@@ -2112,8 +3355,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     value={medForm.frequency}
                     onChange={(e) => setMedForm({ ...medForm, frequency: e.target.value })}
                   >
-                    {availableFrequencies.map((f) => (
-                      <option key={f} value={f}>{f}</option>
+                    {availableFrequencies.map((f, idx) => (
+                      <option key={`medform-freq-${f}-${idx}`} value={f}>{f}</option>
                     ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
@@ -2124,12 +3367,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 <div className="form-group">
                   <label className="form-label">Duration (Days)</label>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="numeric"
                     className="form-input"
                     placeholder="e.g. 5"
-                    value={medForm.durationDays}
-                    onChange={(e) => setMedForm({ ...medForm, durationDays: parseInt(e.target.value, 10) || 0 })}
+                    value={durationDaysStr}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      setDurationDaysStr(val);
+                      setMedForm((prev) => ({ ...prev, durationDays: val ? parseInt(val, 10) : 0 }));
+                    }}
                   />
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
                     Total days course
@@ -2139,17 +3386,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 <div className="form-group">
                   <label className="form-label">Dispense Quantity</label>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="numeric"
                     className="form-input"
                     placeholder="e.g. 10"
-                    value={medForm.quantity}
-                    onChange={(e) => setMedForm({ ...medForm, quantity: parseInt(e.target.value, 10) || 1 })}
+                    value={quantityStr}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      setQuantityStr(val);
+                      setMedForm((prev) => ({ ...prev, quantity: val ? parseInt(val, 10) : 0 }));
+                    }}
                   />
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
                     Total units to dispense
                   </span>
                 </div>
+
               </div>
 
               {/* Instructions / Sig */}
@@ -2188,45 +3440,36 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
       {/* ── MODAL: CONFIRM PRESCRIPTION GENERATION (UAT Issue 7) ──── */}
       {showIssueConfirmModal && (
-        <div className="rx-modal-backdrop" onClick={() => setShowIssueConfirmModal(false)}>
-          <div className="rx-modal-dialog" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="rx-modal-header">
-              <div className="flex items-center gap-2">
-                <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: 'rgba(180, 83, 9, 0.12)', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="warning" size={18} />
-                </div>
-                <div>
-                  <h3 className="font-heading font-bold text-base text-on-surface">
-                    Confirm Prescription Generation
-                  </h3>
-                  <span className="text-xs text-outline">Final medical document sign-off</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon btn-sm"
-                onClick={() => setShowIssueConfirmModal(false)}
+        <div className="rx-modal-backdrop" onClick={() => setShowIssueConfirmModal(false)} style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '460px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#fef3c7',
+                  color: '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
               >
-                <Icon name="x-mark" size={18} />
-              </button>
-            </div>
-
-            <div className="rx-modal-body" style={{ padding: '20px 24px' }}>
-              <div style={{ background: 'rgba(180, 83, 9, 0.08)', border: '1px solid rgba(180, 83, 9, 0.3)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <Icon name="warning" size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface)', fontWeight: 500 }}>
-                  No editing will be allowed after generating. If you want to edit, use Save Draft.
-                </div>
+                <Icon name="warning" size={22} />
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--color-outline)', marginTop: '12px', lineHeight: 1.4 }}>
-                Generating will assign an official permanent Rx number, lock clinical findings, and make the prescription printable for client dispensing.
-              </p>
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                Generate Prescription?
+              </h3>
             </div>
-
-            <div className="rx-modal-footer">
+            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
+              No editing will be allowed after generating. If you want to edit, use Save Draft.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
+                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => setShowIssueConfirmModal(false)}
                 disabled={isSaving}
               >
@@ -2235,6 +3478,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               <button
                 type="button"
                 className="btn btn-primary"
+                style={{ height: '42px', minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => {
                   setShowIssueConfirmModal(false);
                   void executeSave('Issued');
@@ -2242,12 +3486,243 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 disabled={isSaving}
               >
                 <Icon name="check-circle" size={16} />
-                <span>{isSaving ? 'Generating...' : 'Generate Prescription'}</span>
+                <span>{isSaving ? 'Generating...' : 'Generate & Issue'}</span>
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Validation Error Modal (Mobile and Desktop) ── */}
+      {showValidationModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+        >
+          <div
+            className="rx-validation-modal-box"
+            style={{
+              background: 'var(--color-surface, #ffffff)',
+              color: 'var(--color-on-surface, #1e293b)',
+              borderRadius: 'var(--radius-xl, 16px)',
+              width: '100%',
+              maxWidth: '480px',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
+              border: '1px solid var(--color-outline-variant, #e2e8f0)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="alert-circle" size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Required Information Missing
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-outline)' }}>
+                  Please complete the following fields before generating the prescription:
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: 'var(--color-surface-container-low, #f8fafc)',
+                border: '1px solid var(--color-outline-variant, #e2e8f0)',
+                borderRadius: 'var(--radius-md, 10px)',
+                padding: '12px 14px',
+                marginBottom: '20px',
+                maxHeight: '260px',
+                overflowY: 'auto',
+              }}
+            >
+              <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {validationErrors.map((err, idx) => (
+                  <li key={`val-err-${idx}`} style={{ fontSize: '13.5px', color: '#b91c1c', fontWeight: 500 }}>
+                    {err.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', height: '42px', fontWeight: 600 }}
+                onClick={() => {
+                  setShowValidationModal(false);
+                  if (validationErrors.some((e) => e.refKey === 'patient')) {
+                    setSelectedPatientId(null);
+                  } else if (validationErrors.some((e) => e.refKey === 'symptoms' || e.refKey === 'diagnosis')) {
+                    symptomsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  } else if (validationErrors.some((e) => e.refKey === 'medicines')) {
+                    medicinesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }}
+              >
+                Got It, Complete Missing Fields
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Generation Error Modal ── */}
+      {showGenerationErrorModal && (
+        <div
+          className="modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+        >
+          <div
+            className="rx-validation-modal-box"
+            style={{
+              background: 'var(--color-surface, #ffffff)',
+              color: 'var(--color-on-surface, #1e293b)',
+              borderRadius: 'var(--radius-xl, 16px)',
+              width: '100%',
+              maxWidth: '480px',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1px solid var(--color-outline-variant, #e2e8f0)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="x-circle" size={24} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Generation Failed
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--color-outline)' }}>
+                  An unexpected error occurred while saving the prescription.
+                </p>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 'var(--radius-md, 10px)',
+                padding: '12px 14px',
+                marginBottom: '20px',
+                fontSize: '13px',
+                color: '#991b1b',
+                fontFamily: 'monospace',
+                wordBreak: 'break-word',
+              }}
+            >
+              {generationError || 'Database operation failed. Please try again.'}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '42px', minWidth: '100px' }}
+                onClick={() => setShowGenerationErrorModal(false)}
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '42px', minWidth: '120px' }}
+                onClick={() => {
+                  setShowGenerationErrorModal(false);
+                  void handleSave('Issued');
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile Sticky Bottom Action Bar ── */}
+      <div className="rx-mobile-bottom-bar" role="toolbar" aria-label="Prescription Mobile Actions">
+        <button
+          type="button"
+          className="btn btn-secondary rx-mobile-draft-btn"
+          onClick={() => handleSave('Draft')}
+          disabled={isSaving}
+          title="Save current progress as a draft"
+        >
+          <Icon name="save" size={16} />
+          <span>Save Draft</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="mobile-generate-prescription-btn"
+          className="btn btn-primary rx-mobile-gen-btn"
+          onClick={() => handleSave('Issued')}
+          disabled={isSaving}
+          title="Validate and issue finalized prescription"
+        >
+          {isSaving ? (
+            <>
+              <span className="spinner spinner-sm" aria-hidden="true" />
+              <span>Generating...</span>
+            </>
+          ) : (
+            <>
+              <Icon name="check-circle" size={16} />
+              <span>Generate</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 };

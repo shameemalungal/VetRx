@@ -46,7 +46,7 @@ function AppRoutes() {
         {/* Treatment Packages Module (Phase 4) */}
         <Route path="/packages"          element={<PackagesListPage />} />
         <Route path="/packages/new"      element={<PackageFormPage mode="new" />} />
-        <Route path="/packages/:id"      element={<PackageFormPage mode="view" />} />
+        <Route path="/packages/:id"      element={<PackageFormPage mode="edit" />} />
         <Route path="/packages/:id/edit" element={<PackageFormPage mode="edit" />} />
         <Route path="/medicines"       element={<MedicinesListPage />} />
 

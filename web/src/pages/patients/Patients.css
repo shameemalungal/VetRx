@@ -1096,3 +1096,132 @@
     width: 100%;
   }
 }
+
+/* ── Patient Details Action Buttons ─────────────────────────── */
+.patient-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.patient-details-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.patient-actions-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.patient-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 10px !important;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  margin: 0 !important;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.patient-action-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.patient-action-btn.patient-btn-primary {
+  background: #15803d !important;
+  border: 1px solid #15803d !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(21, 128, 61, 0.2);
+}
+
+.patient-action-btn.patient-btn-primary:hover {
+  background: #166534 !important;
+  border-color: #166534 !important;
+  color: #ffffff !important;
+}
+
+.patient-action-btn.patient-btn-primary:active {
+  background: #14532d !important;
+  border-color: #14532d !important;
+}
+
+.patient-action-btn.patient-btn-secondary {
+  background: var(--color-surface-container-lowest, #ffffff) !important;
+  border: 1px solid var(--color-outline-variant, #cbd5e1) !important;
+  color: var(--color-on-surface, #1e293b) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.patient-action-btn.patient-btn-secondary:hover {
+  background: var(--color-surface-container, #f1f5f9) !important;
+  border-color: var(--color-outline, #94a3b8) !important;
+  color: var(--color-on-surface, #1e293b) !important;
+}
+
+.patient-action-btn.patient-btn-secondary:active {
+  background: var(--color-surface-container-high, #e2e8f0) !important;
+}
+
+@media (max-width: 900px) {
+  .patient-details-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  .patient-details-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .patient-actions-group {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  .patient-action-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 520px) {
+  .patient-actions-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .patient-action-btn {
+    width: 100%;
+    flex: none;
+  }
+}
+

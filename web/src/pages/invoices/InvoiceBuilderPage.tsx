@@ -4,7 +4,7 @@
 // =============================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type {
@@ -12,11 +12,13 @@ import type {
   InvoiceItemCategory,
   InvoiceStatus,
   MasterDataItem,
+  Prescription,
 } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
 import { formatINR, getNextInvoiceNumber, formatLocalDateInput } from './invoiceUtils';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
+import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -37,6 +39,16 @@ interface ItemDraft {
   govOrderNumber?: string;
   govOrderDate?: string;
   rateControlled?: boolean;
+  // Multi-prescription source snapshot
+  prescriptionId?: number;
+  prescriptionNumber?: string;
+  prescriptionDate?: Date | string;
+  patientId?: number;
+  patientName?: string;
+  patientSubtitle?: string;
+  ownerId?: number;
+  ownerName?: string;
+  medicineId?: number;
 }
 
 export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
@@ -44,7 +56,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
 
-  const queryRxId = searchParams.get('prescriptionId');
+  const queryRxId = searchParams.get('prescriptionId') || searchParams.get('fromRx');
   const queryPatientId = searchParams.get('patientId');
 
   // Live queries
@@ -55,12 +67,17 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     () => db.masterDataItems.where('category').equals('invoice_item').toArray(),
     []
   ) || [];
+  const masterInvoiceUnits = useLiveQuery(
+    () => db.masterDataItems.where('category').equals('invoice_unit').toArray(),
+    []
+  ) || [];
 
   const { practitioner } = useSettingsStore();
 
   // Form states
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [selectedPatientId, setSelectedPatientId] = useState<number | ''>('');
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
   const [prescriptionId, setPrescriptionId] = useState<number | undefined>(undefined);
   const [invoiceDate, setInvoiceDate] = useState<string>(
     formatLocalDateInput()
@@ -68,27 +85,38 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const [doctorDiscountPaisa, setDoctorDiscountPaisa] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<InvoiceStatus>('Draft');
-  const [editRecordLoaded, setEditRecordLoaded] = useState(mode !== 'edit');
-
-  // Items in invoice
+  const [editRecordLoaded, setEditRecordLoaded] = useState(mode !== 'edit');  // Items in invoice
   const [items, setItems] = useState<ItemDraft[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Modal states for Add/Edit item
+  // Prescriptions for selected patient (for manual import)
+  const patientPrescriptions = useLiveQuery<Prescription[]>(
+    async () => {
+      if (!selectedPatientId) return [];
+      return db.prescriptions.where('patientId').equals(Number(selectedPatientId)).reverse().sortBy('createdAt');
+    },
+    [selectedPatientId]
+  ) || [];
+
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
-  // Modal fields
-  const [modalCategory, setModalCategory] = useState<InvoiceItemCategory>('Other');
+  // Modal form states
+  const [modalCategory, setModalCategory] = useState<InvoiceItemCategory>('Consultation Fee');
   const [modalDescription, setModalDescription] = useState('');
-  const [modalQuantity, setModalQuantity] = useState<number>(1);
+  const [modalQuantity, setModalQuantity] = useState(1);
   const [modalUnit, setModalUnit] = useState('Per unit');
-  const [modalUnitPriceRupees, setModalUnitPriceRupees] = useState<string>('0');
-  const [modalDiscountRupees, setModalDiscountRupees] = useState<string>('0');
+  const [modalUnitPriceRupees, setModalUnitPriceRupees] = useState('0');
+  const [modalDiscountRupees, setModalDiscountRupees] = useState('0');
   const [modalIsGovPrescribed, setModalIsGovPrescribed] = useState(false);
   const [modalGovOrderNumber, setModalGovOrderNumber] = useState('G.O.(Rt) No.589/2023/AHD');
   const [modalGovOrderDate, setModalGovOrderDate] = useState('13-12-2023');
   const [modalRateControlled, setModalRateControlled] = useState(false);
   const [modalError, setModalError] = useState('');
+
+  // Tab & search states for Quick Insert inside modal
+  const [catalogCategoryTab, setCatalogCategoryTab] = useState<string>('All');
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState<string>('');
 
   // Initial load
   useEffect(() => {
@@ -124,6 +152,15 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
               govOrderNumber: it.govOrderNumber,
               govOrderDate: it.govOrderDate,
               rateControlled: it.rateControlled,
+              prescriptionId: it.prescriptionId,
+              prescriptionNumber: it.prescriptionNumber,
+              prescriptionDate: it.prescriptionDate,
+              patientId: it.patientId,
+              patientName: it.patientName,
+              patientSubtitle: it.patientSubtitle,
+              ownerId: it.ownerId,
+              ownerName: it.ownerName,
+              medicineId: it.medicineId,
             }))
           );
         }
@@ -142,6 +179,11 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
             setSelectedPatientId(rx.patientId);
             setNotes(`Linked to clinical prescription #${rx.rxNumber}`);
 
+            const rxPatient = await db.patients.get(rx.patientId);
+            const rxOwner = rxPatient ? await db.owners.get(rxPatient.ownerId) : undefined;
+            const rxPatientSubtitle = rxPatient ? formatAnimalSubtitle(rxPatient) : undefined;
+            const rxDateStr = rx.createdAt instanceof Date ? rx.createdAt.toISOString() : String(rx.createdAt || '');
+
             const rxItems = await db.prescriptionItems
               .where('prescriptionId')
               .equals(rxIdNum)
@@ -149,13 +191,22 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
             const draftedItems: ItemDraft[] = rxItems.map((rxi, i) => ({
               tempId: `rx_${i}_${Date.now()}`,
-              category: 'Medicine',
-              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
+              category: 'Prescription Medicine',
+              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
               quantity: rxi.quantity || 1,
               unit: rxi.unit || 'tablets',
-              unitPricePaisa: 2500, // ₹25 default for dispensations
+              unitPricePaisa: 0, // Safe default rate of 0 (UAT Requirement 8)
               discountAmtPaisa: 0,
               rateControlled: false,
+              prescriptionId: rx.id,
+              prescriptionNumber: rx.rxNumber,
+              prescriptionDate: rxDateStr,
+              patientId: rx.patientId,
+              patientName: rxPatient?.name,
+              patientSubtitle: rxPatientSubtitle,
+              ownerId: rxPatient?.ownerId,
+              ownerName: rxOwner?.name,
+              medicineId: rxi.medicineId,
             }));
 
             // Add standard consultation fee
@@ -168,6 +219,11 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
               unitPricePaisa: 50000, // ₹500
               discountAmtPaisa: 0,
               rateControlled: false,
+              patientId: rx.patientId,
+              patientName: rxPatient?.name,
+              patientSubtitle: rxPatientSubtitle,
+              ownerId: rxPatient?.ownerId,
+              ownerName: rxOwner?.name,
             });
 
             setItems(draftedItems);
@@ -190,6 +246,218 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     if (!selectedPatient) return null;
     return allOwners.find((o) => o.id === selectedPatient.ownerId);
   }, [allOwners, selectedPatient]);
+
+  // Filtered patients for owner-first searchable selection
+  const filteredPatients = useMemo(() => {
+    if (!allPatients) return [];
+    if (!patientSearchQuery.trim()) return allPatients.slice(0, 20);
+    const q = patientSearchQuery.toLowerCase().trim();
+    return allPatients.filter((p) => {
+      const owner = allOwners.find((o) => o.id === p.ownerId);
+      const ownerName = (owner?.name || '').toLowerCase();
+      const ownerPhone = (owner?.phone || '').toLowerCase();
+      const petName = (p.name || '').toLowerCase();
+      const species = (p.species || '').toLowerCase();
+      const breed = (p.breed || '').toLowerCase();
+      return (
+        ownerName.includes(q) ||
+        ownerPhone.includes(q) ||
+        petName.includes(q) ||
+        species.includes(q) ||
+        breed.includes(q)
+      );
+    });
+  }, [allPatients, allOwners, patientSearchQuery]);
+
+  // Master invoice units dropdown list
+  const availableInvoiceUnits = useMemo(() => {
+    const fallback = [
+      'Per unit',
+      'Per consultation',
+      'Per certificate',
+      'Per report',
+      'Per procedure',
+      'Per visit',
+      'Per dose',
+      'Per vial',
+      'tablets',
+      'capsules',
+      'ml',
+      'drops',
+    ];
+    const fromDb = masterInvoiceUnits.filter((u) => u.isActive !== false).map((u) => u.name);
+    const combined = Array.from(new Set([...fromDb, ...fallback]));
+    if (modalUnit && !combined.includes(modalUnit)) {
+      combined.push(modalUnit);
+    }
+    return combined;
+  }, [masterInvoiceUnits, modalUnit]);
+
+  // Grouped and filterable Quick Insert Catalog items (UAT Requirement 7)
+  const catalogItems = useMemo(() => {
+    type CatalogEntry = {
+      id: string;
+      name: string;
+      categoryTag: string;
+      unit: string;
+      priceRupees: string;
+      isGovPrescribed: boolean;
+      onSelect: () => void;
+    };
+
+    const entries: CatalogEntry[] = [];
+
+    masterInvoiceItems.forEach((mItem) => {
+      let catTag = 'Other';
+      if (mItem.isGovPrescribed) {
+        catTag = 'Statutory / Govt';
+      } else if (
+        (mItem.category as string) === 'Consultation Fee' ||
+        mItem.code.toLowerCase().includes('consult') ||
+        mItem.name.toLowerCase().includes('consult')
+      ) {
+        catTag = 'Consultation';
+      } else if (
+        (mItem.category as string) === 'Procedure Fee' ||
+        mItem.code.toLowerCase().includes('proc') ||
+        mItem.name.toLowerCase().includes('proc') ||
+        mItem.name.toLowerCase().includes('surgery') ||
+        mItem.name.toLowerCase().includes('dressing')
+      ) {
+        catTag = 'Procedures';
+      } else if (
+        (mItem.category as string) === 'Lab Fee' ||
+        mItem.code.toLowerCase().includes('lab') ||
+        mItem.name.toLowerCase().includes('lab') ||
+        mItem.name.toLowerCase().includes('test') ||
+        mItem.name.toLowerCase().includes('blood') ||
+        mItem.name.toLowerCase().includes('skin')
+      ) {
+        catTag = 'Laboratory';
+      }
+
+      entries.push({
+        id: `m_${mItem.id}`,
+        name: mItem.name,
+        categoryTag: catTag,
+        unit: mItem.unit || 'Per unit',
+        priceRupees: ((mItem.defaultPricePaisa || 0) / 100).toFixed(0),
+        isGovPrescribed: !!mItem.isGovPrescribed,
+        onSelect: () => handleSelectMasterItem(mItem),
+      });
+    });
+
+    allMedicines.forEach((med) => {
+      entries.push({
+        id: `med_${med.id}`,
+        name: `${med.brandName}${med.presentation ? ' ' + med.presentation : ''}`,
+        categoryTag: 'Medicines',
+        unit: med.presentation || 'tablets',
+        priceRupees: '0',
+        isGovPrescribed: false,
+        onSelect: () => handleSelectMedicine(med),
+      });
+    });
+
+    let filtered = entries;
+    if (catalogCategoryTab !== 'All') {
+      filtered = filtered.filter((e) => e.categoryTag === catalogCategoryTab);
+    }
+    if (catalogSearchQuery.trim()) {
+      const q = catalogSearchQuery.toLowerCase().trim();
+      filtered = filtered.filter((e) => e.name.toLowerCase().includes(q));
+    }
+    return filtered.slice(0, 30);
+  }, [masterInvoiceItems, allMedicines, catalogCategoryTab, catalogSearchQuery]);
+
+  // Import prescription medicines handler (UAT Requirement 8)
+  const handleImportPrescription = async (rxIdToImport: number) => {
+    const rx = await db.prescriptions.get(rxIdToImport);
+    if (!rx) return;
+    const rxItems = await db.prescriptionItems.where('prescriptionId').equals(rxIdToImport).toArray();
+    if (rxItems.length === 0) {
+      alert('No medicines found in this prescription.');
+      return;
+    }
+    const rxPatient = await db.patients.get(rx.patientId);
+    const rxOwner = rxPatient ? await db.owners.get(rxPatient.ownerId) : undefined;
+    const rxPatientSubtitle = rxPatient ? formatAnimalSubtitle(rxPatient) : undefined;
+    const rxDateStr = rx.createdAt instanceof Date ? rx.createdAt.toISOString() : String(rx.createdAt || '');
+
+    const newItems: ItemDraft[] = rxItems.map((rxi, i) => ({
+      tempId: `imported_rx_${rxi.id || i}_${Date.now()}`,
+      category: 'Prescription Medicine',
+      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
+      quantity: rxi.quantity || 1,
+      unit: rxi.unit || 'tablets',
+      unitPricePaisa: 0, // Safe default rate 0
+      discountAmtPaisa: 0,
+      rateControlled: false,
+      prescriptionId: rx.id,
+      prescriptionNumber: rx.rxNumber,
+      prescriptionDate: rxDateStr,
+      patientId: rx.patientId,
+      patientName: rxPatient?.name,
+      patientSubtitle: rxPatientSubtitle,
+      ownerId: rxPatient?.ownerId,
+      ownerName: rxOwner?.name,
+      medicineId: rxi.medicineId,
+    }));
+    setItems((prev) => [...prev, ...newItems]);
+    if (!prescriptionId) {
+      setPrescriptionId(rxIdToImport);
+    }
+    if (!notes) {
+      setNotes(`From Rx: #${rx.rxNumber}`);
+    }
+  };
+
+  // Multi-Prescription Import Handler from Modal
+  const handleImportMedicinesFromModal = (importedList: SelectedMedicineImport[]) => {
+    if (!importedList.length) return;
+
+    const newDrafts: ItemDraft[] = importedList.map((imp, idx) => {
+      const dirStr = imp.directions ? ` (${imp.directions})` : '';
+      const strVolStr = imp.strengthVolume ? ` ${imp.strengthVolume}` : '';
+      return {
+        tempId: `imported_rx_${imp.prescriptionItemId || idx}_${Date.now()}_${idx}`,
+        category: 'Prescription Medicine',
+        description: imp.description || `${imp.brandName}${strVolStr}${dirStr}`.trim(),
+        quantity: Math.max(1, imp.quantity || 1),
+        unit: imp.unit || 'tablets',
+        unitPricePaisa: 0, // Safe default rate of 0
+        discountAmtPaisa: 0,
+        rateControlled: false,
+        prescriptionId: imp.prescriptionId,
+        prescriptionNumber: imp.prescriptionNumber,
+        prescriptionDate: imp.prescriptionDate,
+        patientId: imp.patientId,
+        patientName: imp.patientName,
+        patientSubtitle: imp.patientSubtitle,
+        ownerId: imp.ownerId,
+        ownerName: imp.ownerName,
+        medicineId: imp.medicineId,
+      };
+    });
+
+    setItems((prev) => [...prev, ...newDrafts]);
+
+    // If no primary patient is selected yet and items have a patient, auto-select patient
+    if (!selectedPatientId && newDrafts[0]?.patientId) {
+      setSelectedPatientId(newDrafts[0].patientId);
+    }
+    // If no primary prescriptionId is set, set the first one
+    if (!prescriptionId && newDrafts[0]?.prescriptionId) {
+      setPrescriptionId(newDrafts[0].prescriptionId);
+    }
+    // Update notes if empty with list of prescription numbers
+    if (!notes.trim()) {
+      const uniqueRxNums = Array.from(new Set(newDrafts.map((d) => d.prescriptionNumber).filter(Boolean)));
+      if (uniqueRxNums.length > 0) {
+        setNotes(`Includes medicines from Rx: ${uniqueRxNums.map((n) => `#${n}`).join(', ')}`);
+      }
+    }
+  };
 
   // Calculations
   const calculations = useMemo(() => {
@@ -281,10 +549,10 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
   // Quick Select Medicine in Modal
   const handleSelectMedicine = (med: any) => {
-    setModalDescription(`${med.brandName} (${med.genericName || ''}) ${med.presentation}`);
+    setModalDescription(`${med.brandName}${med.genericName ? ' (' + med.genericName + ')' : ''} ${med.presentation || ''}`.trim());
     setModalCategory('Medicine');
     setModalUnit(med.presentation || 'tablets');
-    setModalUnitPriceRupees('25.00');
+    setModalUnitPriceRupees('0.00');
     setModalIsGovPrescribed(false);
     setModalRateControlled(false);
   };
@@ -325,6 +593,15 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       govOrderDate: modalIsGovPrescribed ? modalGovOrderDate.trim() : undefined,
       govOrderNote: govNote,
       rateControlled: modalIsGovPrescribed ? true : modalRateControlled,
+      prescriptionId: editingItemIndex !== null ? items[editingItemIndex].prescriptionId : undefined,
+      prescriptionNumber: editingItemIndex !== null ? items[editingItemIndex].prescriptionNumber : undefined,
+      prescriptionDate: editingItemIndex !== null ? items[editingItemIndex].prescriptionDate : undefined,
+      patientId: editingItemIndex !== null ? items[editingItemIndex].patientId : undefined,
+      patientName: editingItemIndex !== null ? items[editingItemIndex].patientName : undefined,
+      patientSubtitle: editingItemIndex !== null ? items[editingItemIndex].patientSubtitle : undefined,
+      ownerId: editingItemIndex !== null ? items[editingItemIndex].ownerId : undefined,
+      ownerName: editingItemIndex !== null ? items[editingItemIndex].ownerName : undefined,
+      medicineId: editingItemIndex !== null ? items[editingItemIndex].medicineId : undefined,
     };
 
     if (editingItemIndex !== null) {
@@ -369,12 +646,26 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     try {
       let savedInvoiceId: number;
 
+      // Extract all unique prescription IDs from line items
+      const rxIdsFromItems = Array.from(
+        new Set(
+          items
+            .map((it) => it.prescriptionId)
+            .filter((pid): pid is number => typeof pid === 'number' && pid > 0)
+        )
+      );
+      const combinedRxIds = Array.from(
+        new Set([...(prescriptionId ? [prescriptionId] : []), ...rxIdsFromItems])
+      );
+      const primaryPrescriptionId = combinedRxIds[0] || undefined;
+
       if (mode === 'edit' && id) {
         const invIdNum = parseInt(id, 10);
         await db.invoices.update(invIdNum, {
           patientId: selectedPatientId as number,
           ownerId,
-          prescriptionId,
+          prescriptionId: primaryPrescriptionId,
+          prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
           invoiceDate: new Date(invoiceDate),
           discountTotal: doctorDiscountPaisa,
           taxTotal: 0,
@@ -394,7 +685,8 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           patientId: selectedPatientId as number,
           ownerId,
           practitionerId: practitioner.id,
-          prescriptionId,
+          prescriptionId: primaryPrescriptionId,
+          prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
           invoiceDate: new Date(invoiceDate),
           discountTotal: doctorDiscountPaisa,
           taxTotal: 0,
@@ -431,6 +723,15 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           govOrderDate: item.govOrderDate,
           govOrderNote: item.govOrderNote,
           rateControlled: item.rateControlled,
+          prescriptionId: item.prescriptionId,
+          prescriptionNumber: item.prescriptionNumber,
+          prescriptionDate: item.prescriptionDate,
+          patientId: item.patientId,
+          patientName: item.patientName,
+          patientSubtitle: item.patientSubtitle,
+          ownerId: item.ownerId,
+          ownerName: item.ownerName,
+          medicineId: item.medicineId,
         };
       });
 
@@ -471,6 +772,14 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
   return (
     <div className="invoices-page-container">
+      {/* Top Breadcrumb Navigation */}
+      <div style={{ marginBottom: '16px' }}>
+        <Link to="/invoices" className="btn-back" title="Back to Invoices">
+          <Icon name="arrow-left" size={14} />
+          <span>Back</span>
+        </Link>
+      </div>
+
       {/* Top Banner & Context Notification */}
       <div className="invoices-header-row">
         <div>
@@ -583,28 +892,147 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                     </button>
                   </>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label className="form-label" htmlFor="select-patient">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                    <label className="form-label" style={{ margin: 0, fontWeight: 700 }}>
                       Select Patient for Invoice <span className="text-error">*</span>
                     </label>
-                    <select
-                      id="select-patient"
-                      className="form-input"
-                      value={selectedPatientId}
-                      onChange={(e) => setSelectedPatientId(Number(e.target.value) || '')}
-                      style={{ minWidth: '240px' }}
+
+                    {/* Search Input */}
+                    <div style={{ position: 'relative', width: '100%', maxWidth: '480px' }}>
+                      <Icon
+                        name="search"
+                        size={16}
+                        style={{
+                          position: 'absolute',
+                          left: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          color: 'var(--color-outline)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        style={{ paddingLeft: '36px', paddingRight: patientSearchQuery ? '36px' : '12px' }}
+                        placeholder="Search client name, phone, pet name, species..."
+                        value={patientSearchQuery}
+                        onChange={(e) => setPatientSearchQuery(e.target.value)}
+                        autoComplete="off"
+                      />
+                      {patientSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setPatientSearchQuery('')}
+                          style={{
+                            position: 'absolute',
+                            right: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--color-outline)',
+                            cursor: 'pointer',
+                            padding: '4px',
+                          }}
+                          title="Clear search"
+                        >
+                          <Icon name="x-mark" size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtered Owner-First Patient Cards List */}
+                    <div
+                      style={{
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius)',
+                        background: 'var(--color-surface-container-lowest)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '2px',
+                        padding: '4px',
+                        maxWidth: '560px',
+                      }}
                     >
-                      <option value="">-- Choose Registered Animal --</option>
-                      {allPatients.map((p) => {
-                        const o = allOwners.find((x) => x.id === p.ownerId);
-                        const ownerPrefix = o?.name ? `${o.name} — ` : '';
-                        return (
-                          <option key={p.id} value={p.id}>
-                            {ownerPrefix}{formatAnimalSubtitle(p)}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      {filteredPatients.length === 0 ? (
+                        <div style={{ padding: '14px', textAlign: 'center', color: 'var(--color-outline)', fontSize: '12px' }}>
+                          {patientSearchQuery.trim()
+                            ? `No registered patients found matching "${patientSearchQuery}"`
+                            : 'No registered animals available'}
+                        </div>
+                      ) : (
+                        filteredPatients.map((p) => {
+                          const o = allOwners.find((x) => x.id === p.ownerId);
+                          const ownerDisplayName = formatOwnerPrimary(o, 'Registered Client');
+                          const animalSubtitle = formatAnimalSubtitle(p);
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => {
+                                setSelectedPatientId(p.id!);
+                                setPatientSearchQuery('');
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.15s ease',
+                                gap: '10px',
+                                border: '1px solid transparent',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--color-surface-container)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <strong style={{ fontSize: '13px', color: 'var(--color-on-surface)' }}>
+                                    {ownerDisplayName}
+                                  </strong>
+                                  {o?.phone && (
+                                    <span style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', fontFamily: 'var(--font-data)' }}>
+                                      {o.phone}
+                                    </span>
+                                  )}
+                                </div>
+                                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                                  {animalSubtitle}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                {p.species && (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 8px',
+                                      borderRadius: 'var(--radius-full)',
+                                      background: 'var(--color-surface-container-high)',
+                                      color: 'var(--color-on-surface-variant)',
+                                    }}
+                                  >
+                                    {p.species}
+                                  </span>
+                                )}
+                                <span style={{ color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600 }}>
+                                  Select →
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -654,6 +1082,38 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                   <Icon name="plus" size={15} />
                   <span>Add Item</span>
                 </button>
+
+                {/* Import from multi-prescription modal */}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)', fontWeight: 600 }}
+                  onClick={() => setIsImportModalOpen(true)}
+                  title="Import medicines from multiple prescriptions across owners or patients"
+                  id="btn-import-prescriptions-modal"
+                >
+                  <Icon name="pill" size={14} />
+                  <span>+ Add Prescription Medicines</span>
+                </button>
+
+                {/* Import from prescription button if patient has prescriptions */}
+                {patientPrescriptions.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)', fontWeight: 600 }}
+                    onClick={() => {
+                      const latestRx = patientPrescriptions[0];
+                      if (latestRx?.id) {
+                        void handleImportPrescription(latestRx.id);
+                      }
+                    }}
+                    title={`Import medicines from prescription #${patientPrescriptions[0]?.rxNumber}`}
+                  >
+                    <Icon name="pill" size={14} />
+                    <span>Import Latest Rx ({patientPrescriptions[0]?.rxNumber})</span>
+                  </button>
+                )}
 
                 {/* Quick Add Pill for Government Rate items */}
                 <button
@@ -765,6 +1225,34 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                             <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
                               Billing unit: <strong>{item.unit || 'Per unit'}</strong>
                             </span>
+
+                            {(item.prescriptionNumber || item.patientName) && (
+                              <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {item.prescriptionNumber && (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      background: 'var(--color-secondary-container, #e8def8)',
+                                      color: 'var(--color-on-secondary-container, #1d192b)',
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '1px 6px',
+                                      borderRadius: '4px',
+                                    }}
+                                  >
+                                    <Icon name="pill" size={11} /> Rx #{item.prescriptionNumber}
+                                  </span>
+                                )}
+                                {item.patientName && (
+                                  <span style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
+                                    Patient: <strong>{item.patientName}</strong>
+                                    {item.ownerName ? ` (${item.ownerName})` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -950,8 +1438,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       {isItemModalOpen && (
         <div className="master-data-modal-backdrop" onClick={() => setIsItemModalOpen(false)}>
           <div
-            className="master-data-modal"
-            style={{ maxWidth: '580px' }}
+            className="master-data-modal invoice-item-builder-modal"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="master-data-modal-header">
@@ -965,44 +1452,76 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
               </button>
             </div>
 
-            {/* Quick Catalog / Prescribed Rates Drawer */}
+            {/* Quick Catalog / Prescribed Rates Drawer (UAT Requirement 7) */}
             <div style={{ padding: '12px 16px', background: 'var(--color-surface-container-low)', borderBottom: '1px solid var(--color-border)' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '8px' }}>
-                Quick Insert Catalog &amp; Government Prescribed Rates:
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Quick Insert Catalog:
+                </span>
+                <input
+                  type="search"
+                  placeholder="Filter items..."
+                  value={catalogSearchQuery}
+                  onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                  className="form-input"
+                  style={{ height: '26px', fontSize: '11px', padding: '2px 8px', width: '160px' }}
+                />
+              </div>
 
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {masterInvoiceItems.map((mItem) => (
+              {/* Category Filter Chips */}
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {['All', 'Statutory / Govt', 'Consultation', 'Procedures', 'Laboratory', 'Medicines'].map((tab) => (
                   <button
-                    key={mItem.id}
+                    key={tab}
                     type="button"
-                    className="btn btn-secondary btn-sm"
                     style={{
+                      padding: '2px 8px',
                       fontSize: '11px',
-                      padding: '3px 8px',
-                      background: mItem.isGovPrescribed ? 'rgba(0, 104, 95, 0.1)' : undefined,
-                      borderColor: mItem.isGovPrescribed ? 'var(--color-primary)' : undefined,
-                      color: mItem.isGovPrescribed ? 'var(--color-primary)' : undefined,
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-full)',
+                      border: catalogCategoryTab === tab ? '1.5px solid var(--color-primary)' : '1px solid var(--color-border)',
+                      background: catalogCategoryTab === tab ? 'var(--color-primary-container)' : 'var(--color-surface)',
+                      color: catalogCategoryTab === tab ? 'var(--color-on-primary-container)' : 'var(--color-on-surface-variant)',
+                      cursor: 'pointer',
                     }}
-                    onClick={() => handleSelectMasterItem(mItem)}
+                    onClick={() => setCatalogCategoryTab(tab)}
                   >
-                    {mItem.isGovPrescribed && <Icon name="lock" size={12} />}
-                    <span>
-                      {mItem.name} (₹{((mItem.defaultPricePaisa || 0) / 100).toFixed(0)})
-                    </span>
+                    {tab}
                   </button>
                 ))}
-                {modalCategory === 'Medicine' && allMedicines.slice(0, 8).map((med) => (
-                  <button
-                    key={med.id}
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '11px', padding: '3px 8px' }}
-                    onClick={() => handleSelectMedicine(med)}
-                  >
-                    <span>{med.brandName}</span>
-                  </button>
-                ))}
+              </div>
+
+              {/* Items Cards Grid */}
+              <div style={{ maxHeight: '110px', overflowY: 'auto', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {catalogItems.length === 0 ? (
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', padding: '4px' }}>
+                    No catalog items match criteria.
+                  </span>
+                ) : (
+                  catalogItems.map((cItem) => (
+                    <button
+                      key={cItem.id}
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        background: cItem.isGovPrescribed ? 'rgba(0, 104, 95, 0.1)' : undefined,
+                        borderColor: cItem.isGovPrescribed ? 'var(--color-primary)' : undefined,
+                        color: cItem.isGovPrescribed ? 'var(--color-primary)' : undefined,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      onClick={cItem.onSelect}
+                      title={`Insert ${cItem.name} (${cItem.categoryTag})`}
+                    >
+                      {cItem.isGovPrescribed && <Icon name="lock" size={12} />}
+                      <span>{cItem.name}</span>
+                      <strong style={{ opacity: 0.85 }}>₹{cItem.priceRupees}</strong>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1015,28 +1534,31 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                   </div>
                 )}
 
-                {/* Category & Description */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '8px' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
+                {/* Type of Item & Description */}
+                <div className="invoice-modal-item-type-row">
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label className="form-label" htmlFor="modal-cat">
-                      Category
+                      Type of Item
                     </label>
                     <select
                       id="modal-cat"
-                      className="form-input"
+                      className="form-input invoice-item-type-select"
                       value={modalCategory}
                       onChange={(e) => setModalCategory(e.target.value as InvoiceItemCategory)}
                     >
                       <option value="Consultation Fee">Consultation Fee</option>
-                      <option value="Procedure Fee">Procedure Fee</option>
+                      <option value="Certificate">Certificate</option>
+                      <option value="Necropsy Report">Necropsy Report</option>
+                      <option value="Prescription Medicine">Prescription Medicine</option>
                       <option value="Medicine">Medicine</option>
+                      <option value="Procedure Fee">Procedure Fee</option>
                       <option value="Lab Fee">Lab Fee</option>
                       <option value="Travel Fee">Travel Fee</option>
                       <option value="Other">Other / Statutory</option>
                     </select>
                   </div>
 
-                  <div className="form-group" style={{ margin: 0 }}>
+                  <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                     <label className="form-label" htmlFor="modal-desc">
                       Item Description <span className="text-error">*</span>
                     </label>
@@ -1053,7 +1575,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                 </div>
 
                 {/* Quantity, Unit, Unit Price, Discount */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1.3fr 1fr', gap: '8px' }}>
+                <div className="invoice-modal-pricing-grid">
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label" htmlFor="modal-qty">
                       Qty
@@ -1072,14 +1594,18 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                     <label className="form-label" htmlFor="modal-unit">
                       Unit
                     </label>
-                    <input
+                    <select
                       id="modal-unit"
-                      type="text"
                       className="form-input"
-                      placeholder="e.g. Per certificate"
                       value={modalUnit}
                       onChange={(e) => setModalUnit(e.target.value)}
-                    />
+                    >
+                      {availableInvoiceUnits.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
@@ -1254,6 +1780,19 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           </div>
         </div>
       )}
+
+      {/* Multi-Prescription Import Modal */}
+      <ImportPrescriptionsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        selectedPatientId={selectedPatientId}
+        selectedOwnerId={selectedOwner?.id}
+        existingItemsSummary={items.map((it) => ({
+          prescriptionId: it.prescriptionId,
+          description: it.description,
+        }))}
+        onImportMedicines={handleImportMedicinesFromModal}
+      />
     </div>
   );
 };
