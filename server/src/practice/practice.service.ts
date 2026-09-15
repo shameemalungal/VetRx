@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { AuditService } from '../lib/audit.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { SafePracticeDTO, SafePracticeSettingsDTO } from '../types/index.js';
 
@@ -112,6 +113,14 @@ export class PracticeService {
       update: {
         ...updates,
       },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'PRACTICE_SETTINGS_UPDATED',
+      resource: 'PracticeSettings',
+      resourceId: updated.id,
+      details: updates,
     });
 
     return {

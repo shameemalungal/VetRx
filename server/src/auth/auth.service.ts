@@ -1,6 +1,7 @@
 import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { PasswordService } from '../lib/password.js';
+import { AuditService } from '../lib/audit.service.js';
 import { SessionService } from './session.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type {
@@ -106,6 +107,17 @@ export class AuthService {
     // 5. Create Session
     const token = await SessionService.createSession({
       userId: result.user.id,
+      ipAddress,
+      userAgent,
+    });
+    // 6. Record audit log asynchronously
+    void AuditService.record({
+      practiceId: result.practice.id,
+      userId: result.user.id,
+      action: 'USER_REGISTERED',
+      resource: 'User',
+      resourceId: result.user.id,
+      details: { email: result.user.email, practiceName: result.practice.name },
       ipAddress,
       userAgent,
     });
@@ -216,6 +228,16 @@ export class AuthService {
 
     const token = await SessionService.createSession({
       userId: user.id,
+      ipAddress,
+      userAgent,
+    });
+    // Record audit log asynchronously
+    void AuditService.record({
+      practiceId: practice.id,
+      userId: user.id,
+      action: 'USER_LOGGED_IN',
+      resource: 'Session',
+      details: { email: user.email },
       ipAddress,
       userAgent,
     });
