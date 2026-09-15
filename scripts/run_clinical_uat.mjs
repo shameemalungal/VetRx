@@ -36,10 +36,18 @@ async function run() {
   await page.setViewport({ width: 1280, height: 900 });
 
   const consoleErrors = [];
+  const uncaughtPageErrors = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
-      consoleErrors.push(msg.text());
+      const txt = msg.text();
+      // 401 is expected when probing /api/auth/me prior to login
+      if (!txt.includes('401 (Unauthorized)')) {
+        consoleErrors.push(txt);
+      }
     }
+  });
+  page.on('pageerror', (err) => {
+    uncaughtPageErrors.push(err.message);
   });
 
   try {
@@ -183,7 +191,8 @@ async function run() {
     // 9. Console & Mixed-Content Errors
     // --------------------------------------------------------------------------
     console.log('\n--- 9. Error Audits ---');
-    recordTest('Security', 'Zero Unhandled Console Errors', consoleErrors.length === 0, `Captured errors: ${consoleErrors.length}`);
+    const totalErrors = uncaughtPageErrors.length + consoleErrors.length;
+    recordTest('Security', 'Zero Unhandled Console & Page Errors', totalErrors === 0, `Page errors: ${uncaughtPageErrors.length}, Console errors: ${consoleErrors.length}`);
   } catch (err) {
     console.error('UAT script error:', err);
     recordTest('UAT', 'Execution Exception', false, String(err));
