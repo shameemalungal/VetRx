@@ -41,3 +41,6 @@ Thumbs.db
 # Backups & Archives
 web_old_before_chatgpt_production_ready-codebase/
 *.zip
+.venv*/
+askpass*
+deploy_*.py
