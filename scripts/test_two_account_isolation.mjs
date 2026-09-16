@@ -77,17 +77,26 @@ async function run() {
     console.log('--- Phase 1: Register & Setup Account A ---');
     await page.goto(`${TARGET_URL}/register`, { waitUntil: 'networkidle2' });
 
-    await page.type('#reg-name', accountA.name);
-    await page.type('#reg-email', accountA.email);
-    await page.type('#reg-password', accountA.password);
-    await page.type('#reg-practice', accountA.practiceName);
+    await page.waitForSelector('#register-name', { timeout: 10000 });
+    await page.type('#register-name', accountA.name);
+    await page.type('#register-practice-name', accountA.practiceName);
+    await page.type('#register-email', accountA.email);
+    await page.type('#register-password', accountA.password);
+    await page.type('#register-confirm-password', accountA.password);
 
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-      page.click('button[type="submit"]'),
-    ]);
+    await page.click('button[type="submit"]');
 
-    await page.waitForSelector('.app-header', { timeout: 10000 });
+    // If an error banner appears, report it
+    try {
+      await page.waitForSelector('.desktop-header, .sidebar', { timeout: 15000 });
+    } catch (e) {
+      const banner = await page.$('.auth-error-banner');
+      if (banner) {
+        const text = await page.evaluate(el => el.textContent, banner);
+        throw new Error(`Registration failed with banner: "${text}"`);
+      }
+      throw e;
+    }
 
     // Verify /api/auth/me for Account A
     const authMeA = await page.evaluate(async () => {
@@ -105,21 +114,26 @@ async function run() {
     // Create Patient Alpha
     console.log('Registering Patient Alpha under Account A...');
     await page.goto(`${TARGET_URL}/patients/new`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('#pat-name', { timeout: 8000 });
+    await page.waitForSelector('.owner-select-tabs', { timeout: 8000 });
+
+    // Switch to Create New Client tab
+    const tabs = await page.$$('.owner-select-tabs button');
+    if (tabs.length >= 2) {
+      await tabs[1].click();
+    }
+    await page.waitForSelector('#new-owner-name', { timeout: 5000 });
 
     // Fill Owner & Patient details
-    await page.type('#own-name', 'Alpha Owner');
-    await page.type('#own-phone', '9847001111');
-    await page.type('#pat-name', accountA.patientName);
-    await page.select('#pat-species', 'Canine');
+    await page.type('#new-owner-name', 'Alpha Owner');
+    await page.type('#new-owner-phone', '9847001111');
+    await page.type('#patient-name', accountA.patientName);
+    await page.select('#patient-species', 'Canine');
 
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-      page.click('button[type="submit"]'),
-    ]);
+    await page.click('button[type="submit"]');
+    await page.waitForFunction(() => window.location.pathname.startsWith('/patients/'), { timeout: 10000 });
 
     await page.goto(`${TARGET_URL}/patients`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('.patients-table, .patient-card', { timeout: 8000 });
+    await page.waitForSelector('.patients-page', { timeout: 8000 });
 
     const contentA = await page.content();
     const hasPatientAlphaInA = contentA.includes(accountA.patientName);
@@ -130,12 +144,13 @@ async function run() {
     // --------------------------------------------------------------------------
     console.log('\n--- Phase 2: Logout Account A ---');
     await page.evaluate(async () => {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      localStorage.removeItem('vetrx_active_practice_id');
-      window.location.href = '/login';
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      localStorage.clear();
+      sessionStorage.clear();
     });
 
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    await page.goto(`${TARGET_URL}/login`, { waitUntil: 'networkidle2' });
+    await page.waitForSelector('#login-email', { timeout: 10000 });
     recordCheck('Logout A', 'Account A Logged Out and Navigated to /login', page.url().includes('/login'), `URL: ${page.url()}`);
 
     // --------------------------------------------------------------------------
@@ -144,17 +159,25 @@ async function run() {
     console.log('\n--- Phase 3: Register & Verify Account B (Isolation Check) ---');
     await page.goto(`${TARGET_URL}/register`, { waitUntil: 'networkidle2' });
 
-    await page.type('#reg-name', accountB.name);
-    await page.type('#reg-email', accountB.email);
-    await page.type('#reg-password', accountB.password);
-    await page.type('#reg-practice', accountB.practiceName);
+    await page.waitForSelector('#register-name', { timeout: 10000 });
+    await page.type('#register-name', accountB.name);
+    await page.type('#register-practice-name', accountB.practiceName);
+    await page.type('#register-email', accountB.email);
+    await page.type('#register-password', accountB.password);
+    await page.type('#register-confirm-password', accountB.password);
 
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-      page.click('button[type="submit"]'),
-    ]);
+    await page.click('button[type="submit"]');
 
-    await page.waitForSelector('.app-header', { timeout: 10000 });
+    try {
+      await page.waitForSelector('.desktop-header, .sidebar', { timeout: 15000 });
+    } catch (e) {
+      const banner = await page.$('.auth-error-banner');
+      if (banner) {
+        const text = await page.evaluate(el => el.textContent, banner);
+        throw new Error(`Registration B failed with banner: "${text}"`);
+      }
+      throw e;
+    }
 
     // Verify /api/auth/me for Account B
     const authMeB = await page.evaluate(async () => {
@@ -170,7 +193,11 @@ async function run() {
     );
 
     // CRITICAL CHECK: Account B must NOT see Account A's name anywhere in the header/dashboard
-    const headerTextB = await page.evaluate(() => document.querySelector('.app-header')?.textContent || '');
+    const headerTextB = await page.evaluate(() => {
+      const header = document.querySelector('.desktop-header')?.textContent || '';
+      const sidebar = document.querySelector('.sidebar')?.textContent || '';
+      return header + ' ' + sidebar;
+    });
     const containsAlphaInB = headerTextB.includes(accountA.name) || headerTextB.includes(accountA.practiceName);
     recordCheck(
       'UI Isolation B',
@@ -181,7 +208,7 @@ async function run() {
 
     // CRITICAL CHECK: Navigate to /patients in Account B — Patient Alpha MUST NOT BE VISIBLE!
     await page.goto(`${TARGET_URL}/patients`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('.page-header, .patients-view', { timeout: 8000 });
+    await page.waitForSelector('.patients-page', { timeout: 8000 });
 
     const contentB = await page.content();
     const hasPatientAlphaInB = contentB.includes(accountA.patientName);
@@ -195,19 +222,24 @@ async function run() {
     // Create Patient Beta under Account B
     console.log('Registering Patient Beta under Account B...');
     await page.goto(`${TARGET_URL}/patients/new`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('#pat-name', { timeout: 8000 });
+    await page.waitForSelector('.owner-select-tabs', { timeout: 8000 });
 
-    await page.type('#own-name', 'Beta Owner');
-    await page.type('#own-phone', '9847002222');
-    await page.type('#pat-name', accountB.patientName);
-    await page.select('#pat-species', 'Feline');
+    const tabsB = await page.$$('.owner-select-tabs button');
+    if (tabsB.length >= 2) {
+      await tabsB[1].click();
+    }
+    await page.waitForSelector('#new-owner-name', { timeout: 5000 });
 
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-      page.click('button[type="submit"]'),
-    ]);
+    await page.type('#new-owner-name', 'Beta Owner');
+    await page.type('#new-owner-phone', '9847002222');
+    await page.type('#patient-name', accountB.patientName);
+    await page.select('#patient-species', 'Feline');
+
+    await page.click('button[type="submit"]');
+    await page.waitForFunction(() => window.location.pathname.startsWith('/patients/'), { timeout: 10000 });
 
     await page.goto(`${TARGET_URL}/patients`, { waitUntil: 'networkidle2' });
+    await page.waitForSelector('.patients-page', { timeout: 8000 });
     const contentB_updated = await page.content();
     const hasPatientBetaInB = contentB_updated.includes(accountB.patientName);
     recordCheck('Patient B', 'Patient Beta Visible in Account B Directory', hasPatientBetaInB, `Found: ${hasPatientBetaInB}`);
@@ -217,26 +249,23 @@ async function run() {
     // --------------------------------------------------------------------------
     console.log('\n--- Phase 4: Logout Account B & Re-login Account A ---');
     await page.evaluate(async () => {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      localStorage.removeItem('vetrx_active_practice_id');
-      window.location.href = '/login';
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      localStorage.clear();
+      sessionStorage.clear();
     });
 
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    await page.goto(`${TARGET_URL}/login`, { waitUntil: 'networkidle2' });
+    await page.waitForSelector('#login-email', { timeout: 10000 });
 
     // Login as Account A
-    await page.type('#email', accountA.email);
-    await page.type('#password', accountA.password);
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'networkidle2' }).catch(() => {}),
-      page.click('button[type="submit"]'),
-    ]);
-
-    await page.waitForSelector('.app-header', { timeout: 10000 });
+    await page.type('#login-email', accountA.email);
+    await page.type('#login-password', accountA.password);
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('.desktop-header, .sidebar', { timeout: 15000 });
 
     // Verify Account A sees Patient Alpha and DOES NOT see Patient Beta
     await page.goto(`${TARGET_URL}/patients`, { waitUntil: 'networkidle2' });
-    await page.waitForSelector('.page-header, .patients-view', { timeout: 8000 });
+    await page.waitForSelector('.patients-page', { timeout: 8000 });
 
     const contentA_final = await page.content();
     const hasPatientAlphaFinal = contentA_final.includes(accountA.patientName);
