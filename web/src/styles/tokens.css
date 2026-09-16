@@ -89,6 +89,11 @@
   --font-body:      'Inter', sans-serif;
   --font-mono:      'JetBrains Mono', monospace;
 
+  /* Typography Aliases used across modules */
+  --font-headline:  var(--font-heading);
+  --font-label:     var(--font-body);
+  --font-data:      var(--font-mono);
+
   --text-headline-xl:      2rem;       /* 32px */
   --text-headline-xl-lh:   2.5rem;
   --text-headline-lg:      1.5rem;     /* 24px */
@@ -112,8 +117,17 @@
   --text-label-sm:    0.6875rem;       /* 11px */
   --text-label-sm-lh: 0.875rem;
 
+  --text-xs:          0.75rem;         /* 12px */
+  --text-xs-lh:       1rem;
+
   --text-mono:    0.8125rem;           /* 13px */
   --text-mono-lh: 1.125rem;
+
+  /* Font Weights */
+  --weight-regular:   400;
+  --weight-medium:    500;
+  --weight-semibold:  600;
+  --weight-bold:      700;
 
   /* Mobile scale-down */
   --text-headline-xl-mobile:   1.625rem;  /* 26px */
@@ -121,12 +135,19 @@
   --text-headline-lg-mobile:   1.25rem;   /* 20px */
   --text-headline-lg-mobile-lh:1.75rem;
 
+  /* ── Component Dimensions ────────────────────────────────── */
+  --input-height:       42px;
+  --btn-height:         40px;
+  --btn-height-sm:      32px;
+  --touch-target-min:   44px;
+
   /* ── Radius ──────────────────────────────────────────────── */
-  --radius-sm:   0.25rem;
-  --radius:      0.5rem;
-  --radius-md:   0.75rem;
-  --radius-lg:   1rem;
-  --radius-xl:   1.5rem;
+  --radius-xs:   0.1875rem; /* 3px */
+  --radius-sm:   0.25rem;   /* 4px */
+  --radius:      0.5rem;    /* 8px */
+  --radius-md:   0.75rem;   /* 12px */
+  --radius-lg:   1rem;      /* 16px */
+  --radius-xl:   1.5rem;    /* 24px */
   --radius-full: 9999px;
 
   /* ── Spacing ─────────────────────────────────────────────── */

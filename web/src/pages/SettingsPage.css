@@ -24,6 +24,9 @@
   padding: 4px;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(188, 201, 198, 0.35);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 .settings-tab-btn {

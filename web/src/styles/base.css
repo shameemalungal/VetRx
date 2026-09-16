@@ -22,6 +22,7 @@ body {
   background-color: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 #root {
