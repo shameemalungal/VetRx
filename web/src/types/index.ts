@@ -9,6 +9,7 @@ export interface Practitioner {
   name: string;
   registrationNumber: string;
   qualifications: string;
+  designation?: string;
   phone: string;
   email: string;
   address: string;
@@ -147,6 +148,7 @@ export interface Medicine {
   presentation: string;    // e.g. Tablet, Syrup, Injection, Drops
   strengthVolume?: string; // e.g. 500mg, 15ml
   defaultUnit?: string;    // e.g. tablets, ml, vial
+  dispenseUnit?: string;   // e.g. tablet, capsule, vial, bottle
   category?: string;       // e.g. Antibiotic, NSAID, Otic / Topical
   isActive?: boolean;      // defaults to true (undefined treated as active)
   notes?: string;
@@ -211,6 +213,8 @@ export interface Prescription {
   diagnosis?: string;
   instructions?: string;   // owner advice / follow-up
   followUpDays?: number;
+  recheckIntervalPreset?: string; // 'None' | '3 days' | '5 days' | '7 days' | '14 days' | 'Custom'
+  recheckIntervalCustom?: string; // e.g. '10 days', '2 weeks', 'After 5 days'
   status: PrescriptionStatus;
   issuedAt?: Date;
   cancelledAt?: Date;
@@ -227,9 +231,12 @@ export interface PrescriptionItem {
   genericName?: string;
   presentation: string;
   strengthVolume?: string;
-  dose?: string;           // Final approved dose e.g. "240 mg", "1 tablet"
-  quantity: number;
-  unit: string;            // tablets, ml, vials …
+  dose?: string;           // Final approved numeric or clinical dose e.g. "240", "1.17"
+  doseUnit?: string;       // Clinical dose unit e.g. "mg", "g", "mL", "mg/kg"
+  quantity: number;        // Dispense quantity
+  unit: string;            // Dispense unit e.g. "tablets", "vial", "bottle", "mL"
+  dispenseQuantity?: number; // Explicit alias for quantity
+  dispenseUnit?: string;   // Explicit alias for unit
   frequency: string;       // SID, BID, TID, q12h …
   durationDays?: number;
   route?: string;          // PO, SC, IV, Topical …

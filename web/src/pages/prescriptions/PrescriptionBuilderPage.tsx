@@ -28,6 +28,8 @@ import {
 } from '../../utils/doseCalculator';
 import './Prescriptions.css';
 import { DoseCalcNumericField } from '../../components/ui/DoseCalcNumericField';
+import { ClinicalCombobox } from '../../components/common/ClinicalCombobox';
+import { DISPENSE_UNITS, convertUnits } from '../../utils/unitConverter';
 
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
@@ -56,8 +58,10 @@ interface DraftItem {
   presentation: string;
   strengthVolume?: string;
   dose?: string; // Veterinarian-approved numeric dose value (e.g. "1", "240")
-  quantity: number;
-  unit: string;
+  doseUnit?: string; // Clinical dose unit (e.g. "mg", "g", "mL", "mg/kg")
+  quantity: number; // Dispense quantity
+  unit: string; // Dispense unit (e.g. "tablet", "vial", "bottle")
+  dispenseUnit?: string;
   frequency: string;
   durationDays?: number;
   route?: string;
@@ -148,6 +152,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [diagnosis, setDiagnosis] = useState('');
   const [advice, setAdvice] = useState('');
   const [followUpDays, setFollowUpDays] = useState<number | undefined>(7);
+  const [recheckIntervalPreset, setRecheckIntervalPreset] = useState<string>('7 days');
+  const [recheckIntervalCustom, setRecheckIntervalCustom] = useState<string>('');
 
   // Step 3: Prescribed Medicines
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -201,11 +207,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     genericName: '',
     presentation: 'Tablet',
     dose: '1',
+    doseUnit: 'mg',
     route: 'PO (Oral)',
     frequency: 'BID (q12h)',
     durationDays: 5,
     quantity: 10,
     unit: 'tablet',
+    dispenseUnit: 'tablet',
     directions: 'Give after food with drinking water. Complete full course.',
   });
 
@@ -285,7 +293,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [isSaving, setIsSaving] = useState(false);
 
   const symptomsRef = useRef<HTMLTextAreaElement>(null);
-  const diagnosisRef = useRef<HTMLInputElement>(null);
   const medicinesRef = useRef<HTMLDivElement>(null);
 
   // Live medicine search filtering against Brand Name, Generic Name, Therapeutic Category, Presentation, Strength
@@ -404,30 +411,68 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     return ownersMap.get(selectedPatient.ownerId) || null;
   }, [selectedPatient, ownersMap]);
 
-  // Suggestions for Symptoms and Diagnoses from historical prescriptions
+  // Suggestions for Symptoms and Diagnoses from historical prescriptions + Curated Clinical Defaults
+  const DEFAULT_SYMPTOMS = [
+    'Anorexia / Loss of appetite',
+    'Vomiting',
+    'Diarrhoea',
+    'Pyrexia / Fever',
+    'Pruritus / Severe itching',
+    'Alopecia / Hair loss',
+    'Coughing',
+    'Dyspnoea / Respiratory distress',
+    'Lameness',
+    'Lethargy / Depression',
+    'Otitis / Ear scratching',
+    'Nasal discharge',
+    'Ocular discharge / Conjunctivitis',
+    'Haematuria',
+    'Polyuria / Polydipsia',
+  ];
+
+  const DEFAULT_DIAGNOSES = [
+    'Canine Parvoviral Enteritis',
+    'Acute Gastroenteritis',
+    'Atopic Dermatitis',
+    'Canine Acute Otitis Externa',
+    'Demodicosis',
+    'Sarcoptic Mange',
+    'Upper Respiratory Tract Infection (URTI)',
+    'Canine Infectious Respiratory Disease (Kennel Cough)',
+    'Feline Panleukopenia',
+    'Babesiosis / Tick-borne Haemo-parasitism',
+    'Trypanosomiasis / Surra',
+    'Bovine Mastitis',
+    'Bovine Ephemeral Fever',
+    'Haemorrhagic Septicaemia',
+    'Helminthiasis / Parasitic Gastroenteritis',
+  ];
+
   const suggestedSymptoms = useMemo(() => {
-    if (!allPastPrescriptions) return [];
-    const set = new Set<string>();
-    for (const rx of allPastPrescriptions) {
-      if (rx.symptoms) {
-        rx.symptoms.split(/[\n,;]+/).forEach((s) => {
-          const trimmed = s.trim();
-          if (trimmed.length > 2) set.add(trimmed);
-        });
+    const set = new Set<string>(DEFAULT_SYMPTOMS);
+    if (allPastPrescriptions) {
+      for (const rx of allPastPrescriptions) {
+        if (rx.symptoms) {
+          rx.symptoms.split(/[\n,;]+/).forEach((s) => {
+            const trimmed = s.trim();
+            if (trimmed.length > 2) set.add(trimmed);
+          });
+        }
       }
     }
-    return Array.from(set).slice(0, 10);
+    return Array.from(set);
   }, [allPastPrescriptions]);
 
   const suggestedDiagnoses = useMemo(() => {
-    if (!allPastPrescriptions) return [];
-    const set = new Set<string>();
-    for (const rx of allPastPrescriptions) {
-      if (rx.diagnosis && rx.diagnosis.trim().length > 2) {
-        set.add(rx.diagnosis.trim());
+    const set = new Set<string>(DEFAULT_DIAGNOSES);
+    if (allPastPrescriptions) {
+      for (const rx of allPastPrescriptions) {
+        if (rx.diagnosis && rx.diagnosis.trim().length > 2) {
+          set.add(rx.diagnosis.trim());
+        }
       }
     }
-    return Array.from(set).slice(0, 10);
+    return Array.from(set);
   }, [allPastPrescriptions]);
 
   // ── Populate State for Edit Mode ──────────────────────────────
@@ -442,6 +487,14 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       setDiagnosis(existingRx.diagnosis || '');
       setAdvice(existingRx.instructions || '');
       setFollowUpDays(existingRx.followUpDays);
+      if (existingRx.recheckIntervalPreset) {
+        setRecheckIntervalPreset(existingRx.recheckIntervalPreset);
+      } else if (existingRx.followUpDays === 0) {
+        setRecheckIntervalPreset('None');
+      } else if (existingRx.followUpDays) {
+        setRecheckIntervalPreset(`${existingRx.followUpDays} days`);
+      }
+      setRecheckIntervalCustom(existingRx.recheckIntervalCustom || '');
     }
   }, [mode, existingRx, navigate]);
 
@@ -456,8 +509,10 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           presentation: item.presentation,
           strengthVolume: item.strengthVolume,
           dose: item.dose || item.strengthVolume,
+          doseUnit: item.doseUnit || extractDoseUnit(item.dose) || 'mg',
           quantity: item.quantity,
           unit: item.unit,
+          dispenseUnit: item.dispenseUnit || item.unit,
           frequency: item.frequency,
           durationDays: item.durationDays,
           route: item.route,
@@ -475,6 +530,14 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       setDiagnosis(clonedRx.diagnosis || '');
       setAdvice(clonedRx.instructions || '');
       setFollowUpDays(clonedRx.followUpDays);
+      if (clonedRx.recheckIntervalPreset) {
+        setRecheckIntervalPreset(clonedRx.recheckIntervalPreset);
+      } else if (clonedRx.followUpDays === 0) {
+        setRecheckIntervalPreset('None');
+      } else if (clonedRx.followUpDays) {
+        setRecheckIntervalPreset(`${clonedRx.followUpDays} days`);
+      }
+      setRecheckIntervalCustom(clonedRx.recheckIntervalCustom || '');
     }
   }, [mode, clonedRx]);
 
@@ -488,8 +551,10 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           presentation: item.presentation,
           strengthVolume: item.strengthVolume,
           dose: item.dose || item.strengthVolume,
+          doseUnit: item.doseUnit || extractDoseUnit(item.dose) || 'mg',
           quantity: item.quantity,
           unit: item.unit,
+          dispenseUnit: item.dispenseUnit || item.unit,
           frequency: item.frequency,
           durationDays: item.durationDays,
           route: item.route,
@@ -788,7 +853,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     const str = parseFloat(calcStrength) || 0;
     const bVol = parseFloat(calcBaseVolume) || 1;
-    const calculatedVolume = str > 0 && calculatedDose > 0 ? Number(((calculatedDose / str) * bVol).toFixed(2)) : 0;
+    let calculatedVolume = 0;
+
+    if (str > 0 && calculatedDose > 0) {
+      let normalizedDose = calculatedDose;
+      if (calcDoseUnit.toLowerCase() !== calcStrengthUnit.toLowerCase()) {
+        const conv = convertUnits(calculatedDose, calcDoseUnit, calcStrengthUnit);
+        if (conv.isValid && conv.convertedValue !== undefined) {
+          normalizedDose = conv.convertedValue;
+        }
+      }
+      calculatedVolume = Number(((normalizedDose / str) * bVol).toFixed(2));
+    }
 
     const totalDispenseQty =
       calculatedVolume > 0 && calcDurationDays > 0
@@ -861,6 +937,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(calculatedVolume),
+          doseUnit: calcDoseVolumeUnit || 'mL',
+          dispenseUnit: calcDoseVolumeUnit || prev.dispenseUnit || 'mL',
           unit: calcDoseVolumeUnit || 'mL',
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -875,6 +953,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(adminVol),
+          doseUnit: calcReconAdminUnit || 'mL',
+          dispenseUnit: calcReconAdminUnit || prev.dispenseUnit || 'mL',
           unit: calcReconAdminUnit || 'mL',
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -889,6 +969,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(doseDrops),
+          doseUnit: 'drops',
+          dispenseUnit: 'drops',
           unit: 'drops',
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -903,6 +985,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(minVal),
+          doseUnit: calcDoseUnit || prev.doseUnit || 'mg',
+          dispenseUnit: prev.dispenseUnit || 'tablet',
           unit: calcDoseUnit || prev.unit,
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -917,6 +1001,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(calculatedDose),
+          doseUnit: bandUnit,
+          dispenseUnit: bandUnit,
           unit: bandUnit,
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -930,6 +1016,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(calculatedDose),
+          doseUnit: calcFixedDoseUnit || prev.doseUnit || 'tablet',
+          dispenseUnit: calcFixedDoseUnit || prev.dispenseUnit || 'tablet',
           unit: calcFixedDoseUnit || prev.unit,
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -953,6 +1041,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(roundedDose),
+          doseUnit: calcVolumeUnit || prev.doseUnit || 'mL',
+          dispenseUnit: calcVolumeUnit || prev.dispenseUnit || 'vial',
           unit: calcVolumeUnit || prev.unit,
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -965,6 +1055,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setMedForm((prev) => ({
           ...prev,
           dose: String(roundedDose),
+          doseUnit: calcDoseUnit || prev.doseUnit || 'mg',
+          dispenseUnit: prev.dispenseUnit || 'tablet',
           unit: calcDoseUnit || prev.unit,
           quantity: totalDispenseQty > 0 ? totalDispenseQty : prev.quantity,
           frequency: calcFrequency,
@@ -1031,11 +1123,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       genericName: '',
       presentation: 'Tablet',
       dose: '1',
+      doseUnit: 'mg',
+      dispenseUnit: 'tablet',
       route: 'PO (Oral)',
       frequency: 'BID (q12h)',
       durationDays: 5,
       quantity: 10,
-      unit: 'tablet',
+      unit: 'mg',
       directions: 'Give after food with drinking water. Complete full course.',
     });
     setModalOpen(true);
@@ -1056,7 +1150,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     setRangeValidationWarning(null);
 
     const numericDose = extractNumericDose(itm.dose);
-    const doseUnit = extractDoseUnit(itm.dose) || itm.unit || 'tablet';
+    const doseUnit = itm.doseUnit || extractDoseUnit(itm.dose) || itm.unit || 'tablet';
+    const dispUnit = itm.dispenseUnit || itm.unit || 'tablet';
     const initDuration = itm.durationDays || 5;
     const initQty = itm.quantity || 10;
     setDurationDaysStr(String(initDuration));
@@ -1091,7 +1186,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       setCalcMinDosePerKg(matched.minDosePerKg !== undefined ? String(matched.minDosePerKg) : (matched.dosePerKg ? String(matched.dosePerKg) : '10'));
       setCalcMaxDosePerKg(matched.maxDosePerKg !== undefined ? String(matched.maxDosePerKg) : (matched.dosePerKg ? String(matched.dosePerKg) : '20'));
       setCalcFixedDose(matched.fixedDose !== undefined ? String(matched.fixedDose) : '1');
-      setCalcFixedDoseUnit(itm.unit || matched.doseUnit || 'tablet');
+      setCalcFixedDoseUnit(itm.doseUnit || itm.unit || matched.doseUnit || 'tablet');
       setCalcWeightBands(matched.weightBands || []);
       setCalcBandMinWeight('0');
       setCalcBandMaxWeight('10');
@@ -1140,6 +1235,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       genericName: itm.genericName || '',
       presentation: itm.presentation || 'Tablet',
       dose: numericDose,
+      doseUnit: doseUnit,
+      dispenseUnit: dispUnit,
       route: itm.route || 'PO (Oral)',
       frequency: itm.frequency || 'BID (q12h)',
       durationDays: initDuration,
@@ -1204,7 +1301,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
     const calculatedDoseStr = res.formattedDoseString || med.strengthVolume || '1 tablet';
     const numericDose = extractNumericDose(calculatedDoseStr);
-    const doseUnit = extractDoseUnit(calculatedDoseStr) || res.quantityUnit || med.defaultUnit || 'tablet';
+    const doseUnit = extractDoseUnit(calculatedDoseStr) || med.doseUnit || res.quantityUnit || med.defaultUnit || 'mg';
+    const dispUnit = med.dispenseUnit || med.defaultUnit || res.quantityUnit || 'tablet';
 
     const chosenRoute = res.suggestedRoute || med.defaultRoute || 'PO (Oral)';
     const chosenFreq = res.suggestedFrequency || med.defaultFrequency || 'BID (q12h)';
@@ -1218,6 +1316,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       genericName: med.genericName || '',
       presentation: med.presentation,
       dose: numericDose,
+      doseUnit: doseUnit,
+      dispenseUnit: dispUnit,
       route: chosenRoute,
       frequency: chosenFreq,
       durationDays: chosenDur,
@@ -1329,7 +1429,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     }
 
     const numericApprovedDose = medForm.dose.trim() || '1';
-    const formattedStrengthVolume = selectedMedRef?.strengthVolume || `${numericApprovedDose} ${medForm.unit}`;
+    const doseUnitVal = medForm.doseUnit || 'mg';
+    const dispenseUnitVal = medForm.dispenseUnit || medForm.unit || 'tablet';
+    const formattedStrengthVolume = selectedMedRef?.strengthVolume || `${numericApprovedDose} ${doseUnitVal}`;
 
     const newItem: DraftItem = {
       medicineId: selectedMedRef?.id,
@@ -1337,9 +1439,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
       dose: numericApprovedDose,
+      doseUnit: doseUnitVal,
       strengthVolume: formattedStrengthVolume,
       quantity: Number(medForm.quantity) || 1,
-      unit: medForm.unit || 'tablet',
+      unit: dispenseUnitVal,
+      dispenseUnit: dispenseUnitVal,
       frequency: medForm.frequency,
       durationDays: Number(medForm.durationDays) || 5,
       route: medForm.route,
@@ -1604,6 +1708,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
           followUpDays: followUpDays,
+          recheckIntervalPreset: recheckIntervalPreset || undefined,
+          recheckIntervalCustom: recheckIntervalCustom.trim() || undefined,
           status: targetStatus,
           issuedAt: targetStatus === 'Issued' ? existingRx?.issuedAt || now : undefined,
           updatedAt: now,
@@ -1632,6 +1738,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
           followUpDays: followUpDays,
+          recheckIntervalPreset: recheckIntervalPreset || undefined,
+          recheckIntervalCustom: recheckIntervalCustom.trim() || undefined,
           status: targetStatus,
           issuedAt: targetStatus === 'Issued' ? now : undefined,
           createdAt: now,
@@ -1666,7 +1774,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 defaultRoute: itm.route || 'PO (Oral)',
                 defaultFrequency: itm.frequency || 'BID (q12h)',
                 defaultDurationDays: itm.durationDays || 5,
-                defaultUnit: itm.unit || 'tablet',
+                defaultUnit: itm.dispenseUnit || itm.unit || 'tablet',
                 defaultDirections: itm.directions?.trim() || undefined,
                 dosingMethod: 'none',
                 source: 'prescription',
@@ -1699,8 +1807,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             presentation: itm.presentation,
             strengthVolume: itm.strengthVolume,
             dose: itm.dose || itm.strengthVolume,
+            doseUnit: itm.doseUnit || extractDoseUnit(itm.dose) || 'mg',
             quantity: itm.quantity,
-            unit: itm.unit,
+            unit: itm.dispenseUnit || itm.unit || 'tablet',
+            dispenseQuantity: itm.quantity,
+            dispenseUnit: itm.dispenseUnit || itm.unit || 'tablet',
             frequency: itm.frequency,
             durationDays: itm.durationDays,
             route: itm.route,
@@ -2189,102 +2300,43 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             </div>
 
             <div className="form-group">
-              <label className="form-label">
-                Symptoms / Clinical Presentation <span className="text-error">*</span>
-              </label>
-              <textarea
-                ref={symptomsRef}
-                className={`rx-textarea ${errors.symptoms ? 'rx-input-error' : ''}`}
-                rows={3}
-                placeholder="Describe presenting symptoms, physical findings, and otoscopic/auscultatory observations..."
+              <ClinicalCombobox
+                label="Symptoms / Clinical Presentation"
                 value={symptoms}
-                aria-invalid={!!errors.symptoms}
-                aria-describedby={errors.symptoms ? 'symptoms-error' : undefined}
-                onChange={(e) => {
-                  setSymptoms(e.target.value);
+                onChange={(val) => {
+                  setSymptoms(val);
                   if (errors.symptoms) {
                     setErrors((prev) => ({ ...prev, symptoms: undefined, general: undefined }));
                     setErrorMsg(null);
                   }
                 }}
+                suggestions={suggestedSymptoms}
+                placeholder="Describe presenting symptoms, physical findings, and otoscopic/auscultatory observations..."
+                required={true}
+                isTextarea={true}
+                rows={3}
+                error={errors.symptoms}
               />
-              {suggestedSymptoms.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', alignSelf: 'center' }}>Suggestions:</span>
-                  {suggestedSymptoms.map((sym, idx) => (
-                    <button
-                      key={`sugg-sym-${idx}`}
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '11px', height: '24px', padding: '0 8px', borderRadius: 'var(--radius-full)' }}
-                      onClick={() => setSymptoms((prev) => (prev ? `${prev}, ${sym}` : sym))}
-                    >
-                      + {sym}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {errors.symptoms && (
-                <div className="rx-field-error" id="symptoms-error" role="alert">
-                  <Icon name="warning" size={14} />
-                  <span>{errors.symptoms}</span>
-                </div>
-              )}
             </div>
 
             <div className="form-group">
-              <label className="form-label">
-                Diagnosis <span className="text-error">*</span>
-              </label>
-              <div className="rx-diagnosis-input-wrap">
-                <div className="rx-diagnosis-icon">
-                  <Icon name="verified" size={18} />
-                </div>
-                <input
-                  ref={diagnosisRef}
-                  type="text"
-                  list="diagnosis-suggestions-list"
-                  className={`rx-diagnosis-input ${errors.diagnosis ? 'rx-input-error' : ''}`}
-                  placeholder="Enter confirmed or tentative diagnosis (e.g. Canine Acute Otitis Externa)..."
-                  value={diagnosis}
-                  aria-invalid={!!errors.diagnosis}
-                  aria-describedby={errors.diagnosis ? 'diagnosis-error' : undefined}
-                  onChange={(e) => {
-                    setDiagnosis(e.target.value);
-                    if (errors.diagnosis) {
-                      setErrors((prev) => ({ ...prev, diagnosis: undefined, general: undefined }));
-                      setErrorMsg(null);
-                    }
-                  }}
-                />
-                <datalist id="diagnosis-suggestions-list">
-                  {suggestedDiagnoses.map((diag, idx) => (
-                    <option key={`diag-opt-${idx}`} value={diag} />
-                  ))}
-                </datalist>
-              </div>
-              {suggestedDiagnoses.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', alignSelf: 'center' }}>Suggestions:</span>
-                  {suggestedDiagnoses.slice(0, 5).map((diag, idx) => (
-                    <button
-                      key={`sugg-diag-${idx}`}
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '11px', height: '24px', padding: '0 8px', borderRadius: 'var(--radius-full)' }}
-                      onClick={() => setDiagnosis(diag)}
-                    >
-                      {diag}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {errors.diagnosis && (
-                <div className="rx-field-error" id="diagnosis-error" role="alert">
-                  <Icon name="warning" size={14} />
-                  <span>{errors.diagnosis}</span>
-                </div>
-              )}
+              <ClinicalCombobox
+                label="Diagnosis"
+                value={diagnosis}
+                onChange={(val) => {
+                  setDiagnosis(val);
+                  if (errors.diagnosis) {
+                    setErrors((prev) => ({ ...prev, diagnosis: undefined, general: undefined }));
+                    setErrorMsg(null);
+                  }
+                }}
+                suggestions={suggestedDiagnoses}
+                placeholder="Enter confirmed or tentative diagnosis (e.g. Canine Acute Otitis Externa)..."
+                required={true}
+                isTextarea={false}
+                iconName="verified"
+                error={errors.diagnosis}
+              />
             </div>
 
           </div>
@@ -2453,18 +2505,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         <div className="rx-med-title-row">
                           <span className="rx-med-name">{itm.brandName}</span>
                           <span className="rx-med-qty-badge">
-                            Qty: {itm.quantity} {itm.unit}
+                            Dispense: {itm.quantity} {itm.dispenseUnit || itm.unit}
                           </span>
                         </div>
 
                         <div className="rx-med-regimen-pills">
                           {itm.dose && (
                             <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
-                              Dose: {itm.dose}
+                              Dose: {itm.dose} {itm.doseUnit || ''}
                             </span>
                           )}
-                          {itm.dose && <span>•</span>}
-                          <span>{itm.strengthVolume || itm.presentation}</span>
                           {itm.route && (
                             <>
                               <span>•</span>
@@ -2534,31 +2584,47 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               />
             </div>
 
-            <div className="rx-followup-row">
+            <div className="rx-followup-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
               <div>
                 <span className="text-xs font-bold uppercase text-on-surface block">
-                  Follow-up Recheck
+                  Recheck Recommended
                 </span>
-                <span className="text-xs text-outline">Recommended clinical re-evaluation interval</span>
+                <span className="text-xs text-outline">Clinical re-evaluation interval</span>
               </div>
 
-              <div className="rx-followup-chips">
-                {[
-                  { label: 'None', days: 0 },
-                  { label: '3 days', days: 3 },
-                  { label: '5 days', days: 5 },
-                  { label: '7 days', days: 7 },
-                  { label: '14 days', days: 14 },
-                ].map((chip, idx) => (
-                  <button
-                    key={`followup-chip-${chip.days}-${idx}`}
-                    type="button"
-                    className={`rx-followup-btn ${followUpDays === chip.days ? 'active' : ''}`}
-                    onClick={() => setFollowUpDays(chip.days)}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', width: '100%' }}>
+                <select
+                  className="form-select"
+                  style={{ maxWidth: '200px' }}
+                  value={recheckIntervalPreset}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRecheckIntervalPreset(val);
+                    if (val === 'None') setFollowUpDays(0);
+                    else if (val === '3 days') setFollowUpDays(3);
+                    else if (val === '5 days') setFollowUpDays(5);
+                    else if (val === '7 days') setFollowUpDays(7);
+                    else if (val === '14 days') setFollowUpDays(14);
+                  }}
+                >
+                  <option value="None">None</option>
+                  <option value="3 days">3 days</option>
+                  <option value="5 days">5 days</option>
+                  <option value="7 days">7 days</option>
+                  <option value="14 days">14 days</option>
+                  <option value="Custom">Custom</option>
+                </select>
+
+                {recheckIntervalPreset === 'Custom' && (
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ flex: 1, minWidth: '180px' }}
+                    placeholder="e.g. 10 days, after blood work, next Monday"
+                    value={recheckIntervalCustom}
+                    onChange={(e) => setRecheckIntervalCustom(e.target.value)}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -2592,9 +2658,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 </span>
               </div>
               <div className="rx-summary-stat-row">
-                <span className="rx-summary-stat-label">Protocol:</span>
+                <span className="rx-summary-stat-label">Recheck:</span>
                 <span className="rx-summary-stat-value primary">
-                  {followUpDays ? `${followUpDays} days duration` : 'Standard regimen'}
+                  {recheckIntervalPreset === 'Custom' && recheckIntervalCustom
+                    ? recheckIntervalCustom
+                    : recheckIntervalPreset !== 'None'
+                    ? recheckIntervalPreset
+                    : followUpDays
+                    ? `${followUpDays} days`
+                    : 'None'}
                 </span>
               </div>
               <div className="rx-summary-stat-row">
@@ -2613,7 +2685,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     <div key={`sched-item-${itm.medicineId || itm.brandName}-${i}`} className="rx-schedule-row">
                       <span className="rx-schedule-med">{itm.brandName}</span>
                       <span className="rx-schedule-freq">
-                        {itm.quantity} {itm.unit} • {itm.frequency}
+                        {itm.quantity} {itm.dispenseUnit || itm.unit} • {itm.frequency}
                       </span>
                     </div>
                   ))}
@@ -3317,18 +3389,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Unit</label>
+                  <label className="form-label">Dose Unit</label>
                   <select
                     className="form-select"
-                    value={medForm.unit}
-                    onChange={(e) => setMedForm({ ...medForm, unit: e.target.value })}
+                    value={medForm.doseUnit || medForm.unit}
+                    onChange={(e) => setMedForm({ ...medForm, doseUnit: e.target.value, unit: e.target.value })}
                   >
                     {availableUnits.map((u, idx) => (
                       <option key={`medform-unit-${u}-${idx}`} value={u}>{u}</option>
                     ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                    Dose &amp; dispense unit
+                    Clinical dose unit (e.g. mg, mL, mg/kg)
                   </span>
                 </div>
 
@@ -3399,6 +3471,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   />
                   <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
                     Total units to dispense
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Dispense Unit</label>
+                  <select
+                    className="form-select"
+                    value={medForm.dispenseUnit || 'tablet'}
+                    onChange={(e) => setMedForm({ ...medForm, dispenseUnit: e.target.value })}
+                  >
+                    {DISPENSE_UNITS.map((u, idx) => (
+                      <option key={`medform-dispenseunit-${u}-${idx}`} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                    Package form to dispense
                   </span>
                 </div>
 

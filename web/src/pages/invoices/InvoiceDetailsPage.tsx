@@ -13,6 +13,7 @@ import { formatINR, numberToWordsINR } from './invoiceUtils';
 import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
 import { generatePdfBlob, savePdfWithFilePicker, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
 import { ShareModal } from '../../components/ui/ShareModal';
+import { PractitionerHeader } from '../../components/common/PractitionerHeader';
 import './Invoices.css';
 
 export const InvoiceDetailsPage: React.FC = () => {
@@ -114,42 +115,6 @@ export const InvoiceDetailsPage: React.FC = () => {
   const doctorName = activePractitioner?.name?.trim() || '';
   const doctorQual = activePractitioner?.qualifications?.trim() || '';
   const rawReg = activePractitioner?.registrationNumber?.trim() || '';
-  const doctorReg = rawReg
-    ? (rawReg.startsWith('Reg') ? rawReg : `Reg: ${rawReg}`)
-    : '';
-  const doctorAddress = activePractitioner?.address?.trim() || '';
-  const doctorPhone = activePractitioner?.phone?.trim() || '';
-  const doctorEmail = activePractitioner?.email?.trim() || '';
-
-  const rawOrgName = activeOrganisation?.name?.trim();
-  const hasClinic = Boolean(
-    activeOrganisation &&
-    activeOrganisation.isActive !== false &&
-    rawOrgName &&
-    rawOrgName.length > 0 &&
-    rawOrgName.toLowerCase() !== 'independent practitioner'
-  );
-
-  const clinicName = hasClinic ? rawOrgName! : '';
-  const formattedClinicAddress = hasClinic
-    ? [
-        activeOrganisation?.address?.trim(),
-        activeOrganisation?.city?.trim(),
-        activeOrganisation?.state?.trim() && activeOrganisation?.pincode?.trim()
-          ? `${activeOrganisation.state.trim()} - ${activeOrganisation.pincode.trim()}`
-          : (activeOrganisation?.state?.trim() || activeOrganisation?.pincode?.trim()),
-      ].filter(Boolean).join(', ')
-    : '';
-  const clinicAddress = formattedClinicAddress || doctorAddress;
-  const clinicPhone = (hasClinic && activeOrganisation?.phone?.trim())
-    ? activeOrganisation.phone.trim()
-    : doctorPhone;
-  const clinicEmail = (hasClinic && activeOrganisation?.email?.trim())
-    ? activeOrganisation.email.trim()
-    : doctorEmail;
-  const clinicGstin = (hasClinic && activeOrganisation?.registrationNumber?.trim())
-    ? activeOrganisation.registrationNumber.trim()
-    : '';
 
   const handleCancelInvoice = async () => {
     if (!invoice?.id || invoice.status === 'Cancelled') return;
@@ -444,87 +409,12 @@ export const InvoiceDetailsPage: React.FC = () => {
           {/* Section 1: Clinic Header & Tax Invoice Block */}
           <div className="invoice-print-header">
             {/* Clinic / Practice Credentials (Left) */}
-            <div className="invoice-print-logo-col">
-              <div className="invoice-print-logo-box" style={{ overflow: 'hidden' }}>
-                {hasClinic && activeOrganisation?.logoDataUrl ? (
-                  <img
-                    src={activeOrganisation.logoDataUrl}
-                    alt="Clinic Logo"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                ) : activePractitioner?.photoDataUrl ? (
-                  <img
-                    src={activePractitioner.photoDataUrl}
-                    alt={doctorName}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Icon name="pets" size={26} />
-                )}
-              </div>
-              <div>
-                {hasClinic ? (
-                  <>
-                    <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, margin: '0 0 2px 0', letterSpacing: '-0.02em', color: 'var(--color-on-surface)' }}>
-                      {clinicName}
-                    </h1>
-                    {doctorName && (
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block' }}>
-                        {doctorName}{doctorQual ? ` · ${doctorQual}` : ''}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, margin: '0 0 2px 0', letterSpacing: '-0.02em', color: 'var(--color-on-surface)' }}>
-                      {doctorName || 'Independent Veterinary Practitioner'}
-                    </h1>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block' }}>
-                      Independent Veterinary Practitioner{doctorQual ? ` · ${doctorQual}` : ''}
-                    </span>
-                  </>
-                )}
-
-                {/* Address */}
-                {(clinicAddress || doctorAddress) && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                    {clinicAddress || doctorAddress}
-                  </p>
-                )}
-
-                {/* Phone & Email */}
-                {(clinicPhone || clinicEmail) && (
-                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                    {clinicPhone && (
-                      <>
-                        Phone: <strong>{clinicPhone}</strong>
-                      </>
-                    )}
-                    {clinicPhone && clinicEmail && ' • '}
-                    {clinicEmail && (
-                      <>
-                        Email: <strong>{clinicEmail}</strong>
-                      </>
-                    )}
-                  </p>
-                )}
-
-                {/* Professional Reg & GSTIN */}
-                <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
-                  {hasClinic && doctorName && doctorReg && (
-                    <span style={{ margin: '0 6px' }}>•</span>
-                  )}
-                  {doctorReg && (
-                    <span><strong>{doctorReg}</strong></span>
-                  )}
-                  {clinicGstin && (
-                    <>
-                      <span style={{ margin: '0 6px' }}>•</span>
-                      <span>GSTIN: <strong>{clinicGstin}</strong></span>
-                    </>
-                  )}
-                </div>
-              </div>
+            <div className="invoice-print-logo-col" style={{ flex: 1, minWidth: 0 }}>
+              <PractitionerHeader
+                practitioner={activePractitioner}
+                organisation={activeOrganisation}
+                showLogo={true}
+              />
             </div>
 
             {/* Document Meta Card (Right) */}

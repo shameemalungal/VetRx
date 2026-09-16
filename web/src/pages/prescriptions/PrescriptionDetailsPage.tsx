@@ -812,7 +812,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                             </td>
                             <td>
                               <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
-                                {item.brandName} {item.strengthVolume ? `• ${item.strengthVolume}` : ''}
+                                {item.brandName}
                               </div>
                               {item.genericName && (
                                 <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
@@ -826,7 +826,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                               )}
                             </td>
                             <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-primary)' }}>
-                              {item.dose || item.strengthVolume || '1 tab'}
+                              {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
                             </td>
                             <td>
                               <span
@@ -848,7 +848,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                               {item.durationDays ? `${item.durationDays} days` : '5 days'}
                             </td>
                             <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                              {item.quantity} {item.unit || 'Tabs'}
+                              {item.quantity} {item.dispenseUnit || item.unit || 'Tabs'}
                             </td>
                           </tr>
                         ))
@@ -882,11 +882,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <div>
                     <span className="stationery-box-label">Follow-Up Care Plan</span>
                     <p style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '4px' }}>
-                      Recommended Re-evaluation: {followUpDays} Days
+                      Recheck Recommended: {prescription.recheckIntervalCustom || prescription.recheckIntervalPreset || (followUpDays ? `${followUpDays} Days` : 'As needed')}
                     </p>
-                    <p style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '4px', lineHeight: 1.4 }}>
-                      Please schedule clinical recheck on or before <strong>{formattedFollowUpDate}</strong>.
-                    </p>
+                    {followUpDays > 0 && (
+                      <p style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '4px', lineHeight: 1.4 }}>
+                        Please schedule clinical recheck on or before <strong>{formattedFollowUpDate}</strong>.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

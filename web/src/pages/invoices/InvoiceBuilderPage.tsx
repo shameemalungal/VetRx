@@ -18,6 +18,7 @@ import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
 import { formatINR, getNextInvoiceNumber, formatLocalDateInput } from './invoiceUtils';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
+import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
 import './Invoices.css';
 
@@ -194,7 +195,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
               category: 'Prescription Medicine',
               description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
               quantity: rxi.quantity || 1,
-              unit: rxi.unit || 'tablets',
+              unit: rxi.dispenseUnit || rxi.unit || 'tablets',
               unitPricePaisa: 0, // Safe default rate of 0 (UAT Requirement 8)
               discountAmtPaisa: 0,
               rateControlled: false,
@@ -280,6 +281,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       'Per visit',
       'Per dose',
       'Per vial',
+      ...DISPENSE_UNITS,
       'tablets',
       'capsules',
       'ml',
@@ -389,7 +391,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       category: 'Prescription Medicine',
       description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
       quantity: rxi.quantity || 1,
-      unit: rxi.unit || 'tablets',
+      unit: rxi.dispenseUnit || rxi.unit || 'tablets',
       unitPricePaisa: 0, // Safe default rate 0
       discountAmtPaisa: 0,
       rateControlled: false,

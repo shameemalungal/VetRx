@@ -253,7 +253,7 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
           strengthVolume: itm.strengthVolume,
           description: desc,
           quantity: itm.quantity || 1,
-          unit: itm.unit || 'tablets',
+          unit: itm.dispenseUnit || itm.unit || 'tablets',
           directions: itm.directions,
         });
       }

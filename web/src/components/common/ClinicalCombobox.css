@@ -1,0 +1,97 @@
+/* ClinicalCombobox.css — Accessible Suggestion Combobox Styles */
+.clinical-combobox-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.clinical-combobox-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.clinical-combobox-icon {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  color: var(--color-primary, #00685f);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.clinical-combobox-field.with-icon {
+  padding-left: 38px;
+}
+
+.clinical-combobox-listbox {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0 0;
+  padding: 4px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-outline-variant, #cbd5e1);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.clinical-combobox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--color-on-surface, #0f172a);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.clinical-combobox-option:hover,
+.clinical-combobox-option.highlighted {
+  background: var(--color-primary-container-low, #f0fdf4);
+  color: var(--color-primary, #00685f);
+  font-weight: 500;
+}
+
+.clinical-combobox-opt-icon {
+  color: var(--color-primary, #00685f);
+  opacity: 0.7;
+}
+
+.clinical-combobox-quick-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.clinical-combobox-quick-label {
+  font-size: 11px;
+  color: var(--color-outline, #64748b);
+  margin-right: 2px;
+}
+
+.clinical-combobox-pill {
+  font-size: 11px !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  border-radius: var(--radius-full, 9999px) !important;
+  white-space: nowrap;
+}
+
+.clinical-combobox-hint {
+  font-size: 11px;
+  color: var(--color-outline, #64748b);
+  margin-top: 2px;
+}

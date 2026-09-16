@@ -1,4 +1,5 @@
 import type { Medicine, Species, WeightBandRule } from '../types';
+import { convertUnits } from './unitConverter';
 
 export interface DoseCalculationResult {
   status:
@@ -115,20 +116,30 @@ export function calculateDispenseQuantity(
   const volumeMultiplier = medicine.concentrationVolume || 1;
   const volumeUnit = medicine.concentrationVolumeUnit || (medicine as any).formulationPresentationUnit || medicine.defaultUnit || targetUnit;
 
-  if (
-    strengthVal &&
-    strengthVal > 0 &&
-    strengthUnit &&
-    strengthUnit.toLowerCase() === doseUnit.toLowerCase()
-  ) {
-    const unitsPerDose = (doseValue / strengthVal) * volumeMultiplier;
+  if (strengthVal && strengthVal > 0 && strengthUnit) {
+    let normalizedDoseValue = doseValue;
+    let convertedFormulaPart = `${doseValue} ${doseUnit}/dose`;
+
+    // Convert doseUnit to strengthUnit if compatible (e.g. 3 g -> 3000 mg)
+    if (strengthUnit.toLowerCase() !== doseUnit.toLowerCase()) {
+      const conv = convertUnits(doseValue, doseUnit, strengthUnit);
+      if (conv.isValid && conv.convertedValue !== undefined) {
+        normalizedDoseValue = conv.convertedValue;
+        convertedFormulaPart = `${doseValue} ${doseUnit} (${normalizedDoseValue} ${strengthUnit})/dose`;
+      } else {
+        // Incompatible units
+        return {};
+      }
+    }
+
+    const unitsPerDose = (normalizedDoseValue / strengthVal) * volumeMultiplier;
     const totalUnits = unitsPerDose * dosesPerDay * durationDays;
     const finalUnit = volumeUnit;
 
     return {
       quantity: Number(totalUnits.toFixed(2)),
       unit: finalUnit,
-      formulaDisplay: `${doseValue} ${doseUnit}/dose ÷ ${strengthVal} ${strengthUnit} × ${dosesPerDay} doses/day × ${durationDays} days = ${Number(totalUnits.toFixed(2))} ${finalUnit}`
+      formulaDisplay: `${convertedFormulaPart} ÷ ${strengthVal} ${strengthUnit} × ${dosesPerDay} doses/day × ${durationDays} days = ${Number(totalUnits.toFixed(2))} ${finalUnit}`
     };
   }
 
