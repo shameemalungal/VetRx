@@ -1,5 +1,6 @@
 // =============================================================
 // VetRx — Dexie (IndexedDB) schema
+// Multi-tenant isolated storage partitioned by practiceId.
 // =============================================================
 
 import Dexie, { type Table } from 'dexie';
@@ -35,8 +36,8 @@ export class VetRxDatabase extends Dexie {
   auditEvents!:           Table<AuditEvent, number>;
   masterDataItems!:       Table<MasterDataItem, number>;
 
-  constructor() {
-    super('VetRxDB');
+  constructor(dbName: string = 'VetRxDB_guest') {
+    super(dbName);
 
     this.version(1).stores({
       practitioners:         '++id, name, registrationNumber',
@@ -76,16 +77,69 @@ export class VetRxDatabase extends Dexie {
   }
 }
 
-export const db = new VetRxDatabase();
+// ── Multi-Tenant Partitioning ──────────────────────────────────
+function getInitialDbName(): string {
+  try {
+    const savedPracticeId = localStorage.getItem('vetrx_active_practice_id');
+    if (savedPracticeId && savedPracticeId.trim()) {
+      return `VetRxDB_${savedPracticeId.trim()}`;
+    }
+  } catch {}
+  return 'VetRxDB_guest';
+}
+
+let activeDbInstance: VetRxDatabase = new VetRxDatabase(getInitialDbName());
+
+export function getActiveDb(): VetRxDatabase {
+  return activeDbInstance;
+}
+
+export function switchTenantDb(practiceId?: string | null): VetRxDatabase {
+  const targetName = practiceId && practiceId.trim() ? `VetRxDB_${practiceId.trim()}` : 'VetRxDB_guest';
+
+  try {
+    if (practiceId && practiceId.trim()) {
+      localStorage.setItem('vetrx_active_practice_id', practiceId.trim());
+    } else {
+      localStorage.removeItem('vetrx_active_practice_id');
+    }
+  } catch {}
+
+  if (activeDbInstance.name !== targetName) {
+    try {
+      activeDbInstance.close();
+    } catch (e) {
+      console.warn('Error closing previous database instance:', e);
+    }
+    activeDbInstance = new VetRxDatabase(targetName);
+  }
+
+  return activeDbInstance;
+}
+
+// Dynamic Proxy forwarding all database accesses to the active tenant database
+export const db: VetRxDatabase = new Proxy({} as VetRxDatabase, {
+  get(_target, prop, receiver) {
+    const target = activeDbInstance as any;
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(target);
+    }
+    return value;
+  },
+  has(_target, prop) {
+    return Reflect.has(activeDbInstance, prop);
+  },
+});
 
 // ── Seed flag ─────────────────────────────────────────────────
 const SEED_KEY = 'vetrx_seeded_v1';
 
 export async function ensureSeeded(): Promise<void> {
-  // The localStorage flag is only an optimization. IndexedDB is the source of truth.
-  // If site storage was partially cleared and the flag remains, reseed the missing base data.
-  // Demo records are opt-in only. Production/local clinical data must never be
-  // populated with fictional practitioners, owners, patients, or medicines.
+  // Ensure Master Data is initialized for the active tenant database
+  await ensureMasterDataSeeded();
+
+  // Demo records are opt-in only via ?demo=1
   const demoMode = new URLSearchParams(window.location.search).get('demo') === '1'
     || localStorage.getItem('vetrx_demo_mode') === '1';
   const seedFlag = localStorage.getItem(SEED_KEY);
@@ -94,9 +148,6 @@ export async function ensureSeeded(): Promise<void> {
     await seed();
     localStorage.setItem(SEED_KEY, '1');
   }
-
-  // Ensure Master Data is initialized even for pre-existing databases
-  await ensureMasterDataSeeded();
 
   // Ensure deterministic formulary dosing rules exist on seeded medicines
   const { ensureMedicineDosingRulesSeeded } = await import('./seed');

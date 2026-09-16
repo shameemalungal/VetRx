@@ -10,6 +10,7 @@ import { errorHandler, AppError } from './middleware/errorHandler.js';
 import { authRouter } from './auth/auth.controller.js';
 import { practiceRouter } from './practice/practice.controller.js';
 import { healthRouter } from './health/health.controller.js';
+import { clinicalRouter } from './clinical/clinical.controller.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
 export function createApp() {
@@ -81,6 +82,7 @@ export function createApp() {
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/practice', practiceRouter);
+  app.use('/api', clinicalRouter);
 
   // 404 Catch-All
   app.use((req, res, next) => {

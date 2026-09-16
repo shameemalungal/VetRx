@@ -4,6 +4,8 @@
 // ==============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { switchTenantDb, ensureSeeded } from '../db/schema';
+import { useSettingsStore } from '../store/settingsStore';
 
 export interface AuthUser {
   id: string;
@@ -90,11 +92,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPractice(data.practice);
         setMembership(data.membership);
         setSettings(data.settings);
+        switchTenantDb(data.practice?.id);
+        await ensureSeeded();
+        void useSettingsStore.getState().loadSettings(data.settings, data.user);
       } else {
         setUser(null);
         setPractice(null);
         setMembership(null);
         setSettings(null);
+        switchTenantDb(null);
+        useSettingsStore.getState().reset();
       }
     } catch (err) {
       console.warn('Session check could not reach backend, starting in guest mode:', err);
@@ -102,6 +109,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPractice(null);
       setMembership(null);
       setSettings(null);
+      switchTenantDb(null);
+      useSettingsStore.getState().reset();
     } finally {
       setIsLoading(false);
     }
@@ -129,6 +138,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPractice(data.practice);
     setMembership(data.membership);
     setSettings(data.settings);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
   const register = async (name: string, email: string, password: string, practiceName?: string) => {
@@ -149,6 +161,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPractice(data.practice);
     setMembership(data.membership);
     setSettings(data.settings);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
   const logout = async () => {
@@ -163,6 +178,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPractice(null);
       setMembership(null);
       setSettings(null);
+      switchTenantDb(null);
+      useSettingsStore.getState().reset();
     }
   };
 

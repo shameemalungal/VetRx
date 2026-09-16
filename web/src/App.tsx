@@ -83,7 +83,7 @@ function PublicAuthRoutes() {
 }
 
 function MainContent() {
-  const { user, isLoading } = useAuth();
+  const { user, practice, settings, isLoading } = useAuth();
   const { loadSettings } = useSettingsStore();
   const [dbReady, setDbReady] = useState(false);
 
@@ -91,7 +91,7 @@ function MainContent() {
     async function initDb() {
       try {
         await ensureSeeded();
-        await loadSettings();
+        await loadSettings(settings, user);
       } catch (err) {
         console.error('VetRx IndexedDB init error:', err);
       } finally {
@@ -99,7 +99,7 @@ function MainContent() {
       }
     }
     void initDb();
-  }, [loadSettings]);
+  }, [practice?.id, user?.id, loadSettings, settings, user]);
 
   if (isLoading || !dbReady) {
     return (
@@ -120,9 +120,9 @@ function MainContent() {
     );
   }
 
-  // If user is authenticated, render protected clinical routes
-  if (user) {
-    return <AuthenticatedAppRoutes />;
+  // If user is authenticated, render protected clinical routes scoped by practice
+  if (user && practice) {
+    return <AuthenticatedAppRoutes key={practice.id} />;
   }
 
   // Otherwise render public login / registration routes
