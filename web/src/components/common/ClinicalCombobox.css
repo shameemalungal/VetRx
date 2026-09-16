@@ -1,9 +1,13 @@
-/* ClinicalCombobox.css — Accessible Suggestion Combobox Styles */
+/* =============================================================
+   VetRx — ClinicalCombobox.css
+   Accessible, compact combobox styling matching the VetRx design system
+   ============================================================= */
+
 .clinical-combobox-wrapper {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-xs, 4px);
   width: 100%;
 }
 
@@ -17,29 +21,101 @@
 .clinical-combobox-icon {
   position: absolute;
   left: 12px;
-  top: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-primary, #00685f);
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
+}
+
+/* ── Compact Symptoms Textarea (Approx 2–3 text lines, 64–76px) ── */
+.clinical-combobox-textarea {
+  min-height: 68px;
+  height: 72px;
+  max-height: 200px;
+  padding: 8px 12px;
+  font-family: var(--font-body, 'Inter', sans-serif);
+  font-size: var(--text-body-md, 14px);
+  line-height: 1.45;
+  color: var(--color-text, #131b2e);
+  background: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-border-input, #cbd5e1);
+  border-radius: var(--radius, 8px);
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast, 100ms ease), box-shadow var(--transition-fast, 100ms ease);
+}
+
+.clinical-combobox-textarea:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--color-primary, #00685f);
+  box-shadow: 0 0 0 3px var(--color-focus-ring, rgba(0, 104, 95, 0.18));
+}
+
+/* ── Diagnosis Input (42px height standard) ─────────────────── */
+.clinical-combobox-input {
+  height: 42px;
+  padding: 0 12px;
+  font-family: var(--font-body, 'Inter', sans-serif);
+  font-size: var(--text-body-md, 14px);
+  font-weight: 500;
+  color: var(--color-text, #131b2e);
+  background: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-border-input, #cbd5e1);
+  border-radius: var(--radius, 8px);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast, 100ms ease), box-shadow var(--transition-fast, 100ms ease);
+}
+
+.clinical-combobox-input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--color-primary, #00685f);
+  box-shadow: 0 0 0 3px var(--color-focus-ring, rgba(0, 104, 95, 0.18));
 }
 
 .clinical-combobox-field.with-icon {
   padding-left: 38px;
 }
 
+.clinical-combobox-field::placeholder {
+  color: var(--color-outline, #6d7a77);
+  font-weight: 400;
+  font-size: 13.5px;
+}
+
+/* ── Validation Error State ──────────────────────────────────── */
+.clinical-combobox-field.rx-input-error {
+  border-color: var(--color-error, #ba1a1a) !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(186, 26, 26, 0.15) !important;
+}
+
+.clinical-combobox-field.rx-input-error:focus {
+  border-color: var(--color-error, #ba1a1a) !important;
+  box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.25) !important;
+}
+
+/* ── Autocomplete Dropdown Listbox Overlay ───────────────────── */
 .clinical-combobox-listbox {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
-  margin: 4px 0 0 0;
+  margin: 0;
   padding: 4px;
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-outline-variant, #cbd5e1);
-  border-radius: var(--radius-md, 8px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  background: var(--color-surface-container-lowest, #ffffff);
+  border: 1px solid var(--color-border-input, #cbd5e1);
+  border-radius: var(--radius, 8px);
+  box-shadow: var(--shadow-2, 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.03));
   z-index: 100;
-  max-height: 220px;
+  max-height: 192px;
   overflow-y: auto;
   list-style: none;
 }
@@ -48,50 +124,54 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 10px;
+  min-height: 32px;
+  font-family: var(--font-body, 'Inter', sans-serif);
   font-size: 13px;
-  color: var(--color-on-surface, #0f172a);
+  font-weight: 500;
+  color: var(--color-text, #131b2e);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transition-fast, 100ms ease), color var(--transition-fast, 100ms ease);
 }
 
 .clinical-combobox-option:hover,
-.clinical-combobox-option.highlighted {
-  background: var(--color-primary-container-low, #f0fdf4);
+.clinical-combobox-option.highlighted,
+.clinical-combobox-option[aria-selected="true"] {
+  background: var(--color-surface-container, #eaedff);
   color: var(--color-primary, #00685f);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .clinical-combobox-opt-icon {
   color: var(--color-primary, #00685f);
-  opacity: 0.7;
-}
-
-.clinical-combobox-quick-pills {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.clinical-combobox-quick-label {
-  font-size: 11px;
-  color: var(--color-outline, #64748b);
-  margin-right: 2px;
-}
-
-.clinical-combobox-pill {
-  font-size: 11px !important;
-  height: 24px !important;
-  padding: 0 8px !important;
-  border-radius: var(--radius-full, 9999px) !important;
-  white-space: nowrap;
+  opacity: 0.85;
+  flex-shrink: 0;
 }
 
 .clinical-combobox-hint {
   font-size: 11px;
-  color: var(--color-outline, #64748b);
+  color: var(--color-outline, #6d7a77);
   margin-top: 2px;
+}
+
+/* ── Mobile Responsive Adjustments ───────────────────────────── */
+@media (max-width: 640px) {
+  .clinical-combobox-textarea {
+    min-height: 64px;
+    height: 68px;
+    font-size: 14px;
+    padding: 8px 10px;
+  }
+
+  .clinical-combobox-input {
+    height: 42px;
+    font-size: 14px;
+  }
+
+  .clinical-combobox-option {
+    padding: 8px 10px;
+    min-height: 36px;
+    font-size: 13.5px;
+  }
 }

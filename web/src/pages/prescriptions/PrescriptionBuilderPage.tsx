@@ -2311,7 +2311,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   }
                 }}
                 suggestions={suggestedSymptoms}
-                placeholder="Describe presenting symptoms, physical findings, and otoscopic/auscultatory observations..."
+                placeholder="Describe presenting symptoms, physical findings, and relevant clinical observations…"
                 required={true}
                 isTextarea={true}
                 rows={3}

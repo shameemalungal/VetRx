@@ -59,7 +59,17 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
   // Filter suggestions: prefix matches first, then contains matches
   const filteredSuggestions = React.useMemo(() => {
     if (!suggestions || suggestions.length === 0) return [];
-    const unique = Array.from(new Set(suggestions.map((s) => s.trim()))).filter(Boolean);
+    const map = new Map<string, string>();
+    for (const s of suggestions) {
+      const trimmed = s.trim();
+      if (trimmed) {
+        const key = trimmed.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, trimmed);
+        }
+      }
+    }
+    const unique = Array.from(map.values());
 
     if (!currentQuery) {
       return unique.slice(0, 8);
@@ -96,22 +106,27 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
 
   const handleSelectSuggestion = (suggestion: string) => {
     if (isTextarea) {
-      // Append or replace the last typed token
-      const parts = value.split(/([\n,;]+)/);
-      if (parts.length > 0) {
-        // replace the last text part
-        let lastTextIdx = parts.length - 1;
-        while (lastTextIdx >= 0 && /^[\n,;\s]+$/.test(parts[lastTextIdx])) {
-          lastTextIdx--;
-        }
-        if (lastTextIdx >= 0) {
-          parts[lastTextIdx] = suggestion;
-        } else {
-          parts.push(suggestion);
-        }
-        onChange(parts.join(''));
-      } else {
+      if (!value.trim()) {
         onChange(suggestion);
+      } else {
+        const trimmed = value.trimEnd();
+        if (trimmed.endsWith(',') || trimmed.endsWith(';') || value.endsWith('\n')) {
+          const glue = value.endsWith(' ') || value.endsWith('\n') ? '' : ' ';
+          onChange(value + glue + suggestion);
+        } else {
+          const lastSepIndex = Math.max(
+            value.lastIndexOf(','),
+            value.lastIndexOf(';'),
+            value.lastIndexOf('\n')
+          );
+          if (lastSepIndex >= 0) {
+            const prefix = value.slice(0, lastSepIndex + 1);
+            const glue = prefix.endsWith(' ') || prefix.endsWith('\n') ? '' : ' ';
+            onChange(prefix + glue + suggestion);
+          } else {
+            onChange(suggestion);
+          }
+        }
       }
     } else {
       onChange(suggestion);
@@ -148,6 +163,16 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
     }
   };
 
+  const handleBlur = () => {
+    // Delay slightly so click/touch events on listbox options trigger before dropdown closes
+    setTimeout(() => {
+      if (!containerRef.current?.contains(document.activeElement)) {
+        setIsOpen(false);
+        setHighlightedIndex(-1);
+      }
+    }, 150);
+  };
+
   return (
     <div className="clinical-combobox-wrapper" ref={containerRef}>
       <label className="form-label" htmlFor={inputId}>
@@ -166,13 +191,17 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
             id={inputId}
             ref={inputRef as React.RefObject<HTMLTextAreaElement>}
             rows={rows}
-            className={`form-input clinical-combobox-field ${iconName ? 'with-icon' : ''} ${error ? 'rx-input-error' : ''}`}
-            placeholder={placeholder}
-            value={value}
+            role="combobox"
             aria-autocomplete="list"
             aria-expanded={isOpen}
             aria-controls={isOpen ? listboxId : undefined}
             aria-haspopup="listbox"
+            aria-activedescendant={
+              isOpen && highlightedIndex >= 0 ? `${inputId}-opt-${highlightedIndex}` : undefined
+            }
+            className={`clinical-combobox-field clinical-combobox-textarea ${iconName ? 'with-icon' : ''} ${error ? 'rx-input-error' : ''}`}
+            placeholder={placeholder}
+            value={value}
             onChange={(e) => {
               onChange(e.target.value);
               setIsOpen(true);
@@ -180,6 +209,7 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
             onFocus={() => {
               if (filteredSuggestions.length > 0) setIsOpen(true);
             }}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
           />
         ) : (
@@ -187,13 +217,17 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
             id={inputId}
             ref={inputRef as React.RefObject<HTMLInputElement>}
             type="text"
-            className={`form-input clinical-combobox-field ${iconName ? 'with-icon' : ''} ${error ? 'rx-input-error' : ''}`}
-            placeholder={placeholder}
-            value={value}
+            role="combobox"
             aria-autocomplete="list"
             aria-expanded={isOpen}
             aria-controls={isOpen ? listboxId : undefined}
             aria-haspopup="listbox"
+            aria-activedescendant={
+              isOpen && highlightedIndex >= 0 ? `${inputId}-opt-${highlightedIndex}` : undefined
+            }
+            className={`clinical-combobox-field clinical-combobox-input ${iconName ? 'with-icon' : ''} ${error ? 'rx-input-error' : ''}`}
+            placeholder={placeholder}
+            value={value}
             onChange={(e) => {
               onChange(e.target.value);
               setIsOpen(true);
@@ -201,51 +235,43 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
             onFocus={() => {
               if (filteredSuggestions.length > 0) setIsOpen(true);
             }}
+            onBlur={handleBlur}
             onKeyDown={handleKeyDown}
           />
         )}
+
+        {/* Suggestion Listbox Overlay */}
+        {isOpen && filteredSuggestions.length > 0 && (
+          <ul
+            id={listboxId}
+            role="listbox"
+            aria-label={`${label} suggestions`}
+            className="clinical-combobox-listbox"
+          >
+            {filteredSuggestions.map((sugg, idx) => (
+              <li
+                key={`combobox-opt-${idx}-${sugg}`}
+                id={`${inputId}-opt-${idx}`}
+                role="option"
+                aria-selected={highlightedIndex === idx}
+                className={`clinical-combobox-option ${highlightedIndex === idx ? 'highlighted' : ''}`}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelectSuggestion(sugg);
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  handleSelectSuggestion(sugg);
+                }}
+              >
+                <Icon name="sparkles" size={13} className="clinical-combobox-opt-icon" />
+                <span>{sugg}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
-
-      {/* Suggestion Listbox */}
-      {isOpen && filteredSuggestions.length > 0 && (
-        <ul
-          id={listboxId}
-          role="listbox"
-          aria-label={`${label} suggestions`}
-          className="clinical-combobox-listbox"
-        >
-          {filteredSuggestions.map((sugg, idx) => (
-            <li
-              key={`combobox-opt-${idx}-${sugg}`}
-              role="option"
-              aria-selected={highlightedIndex === idx}
-              className={`clinical-combobox-option ${highlightedIndex === idx ? 'highlighted' : ''}`}
-              onMouseEnter={() => setHighlightedIndex(idx)}
-              onClick={() => handleSelectSuggestion(sugg)}
-            >
-              <Icon name="sparkles" size={13} className="clinical-combobox-opt-icon" />
-              <span>{sugg}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Quick click pills below input */}
-      {filteredSuggestions.length > 0 && !isOpen && (
-        <div className="clinical-combobox-quick-pills">
-          <span className="clinical-combobox-quick-label">Suggestions:</span>
-          {filteredSuggestions.slice(0, 5).map((sugg, idx) => (
-            <button
-              key={`quick-pill-${idx}-${sugg}`}
-              type="button"
-              className="btn btn-secondary btn-sm clinical-combobox-pill"
-              onClick={() => handleSelectSuggestion(sugg)}
-            >
-              + {sugg}
-            </button>
-          ))}
-        </div>
-      )}
 
       {helperText && !error && (
         <span className="clinical-combobox-hint">{helperText}</span>
