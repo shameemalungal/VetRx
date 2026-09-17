@@ -407,7 +407,7 @@ export const InvoiceDetailsPage: React.FC = () => {
                 Doc Ref: <strong>{invoice.invoiceNumber}</strong>
               </span>
               <span className="document-status-label">
-                {documentType === 'Payment Receipt' ? 'PAYMENT RECEIPT' : 'ORIGINAL FOR RECIPIENT'}
+                {documentType === 'Payment Receipt' ? 'OFFICIAL RECEIPT' : 'ORIGINAL FOR RECIPIENT'}
               </span>
             </div>
           </div>
@@ -453,7 +453,7 @@ export const InvoiceDetailsPage: React.FC = () => {
                 </div>
               )}
               <div style={{ fontSize: '11px', color: 'var(--color-tertiary)', fontWeight: 700, marginTop: '2px' }}>
-                STATUS: {invoice.status.toUpperCase()}
+                STATUS: {(invoice.status || 'ISSUED').toUpperCase()}
               </div>
             </div>
           </div>
@@ -511,185 +511,273 @@ export const InvoiceDetailsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 3: Itemized Charges Clinical Table */}
-          <table className="invoice-print-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>SL</th>
-                <th>Item / Clinical Description</th>
-                {(showHsnColumn || showSacColumn) && (
-                  <th style={{ width: '100px', textAlign: 'center' }}>
-                    {showHsnColumn && showSacColumn ? 'HSN / SAC' : showHsnColumn ? 'HSN Code' : 'SAC Code'}
-                  </th>
-                )}
-                <th style={{ width: '100px', textAlign: 'center' }}>Qty &amp; Unit</th>
-                <th style={{ width: '100px', textAlign: 'right' }}>Rate (₹)</th>
-                <th style={{ width: '120px', textAlign: 'right' }}>Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, idx) => {
-                const lineSubtotal = Math.round(it.quantity * it.unitPricePaisa);
-                const lineAmount = Math.max(0, lineSubtotal - (it.discountAmtPaisa || 0));
-                const sl = String(idx + 1).padStart(2, '0');
+          {/* Section 3: Itemized Charges Table (Differentiated for Tax Invoice vs. Payment Receipt) */}
+          {documentType === 'Payment Receipt' ? (
+            /* Dedicated Payment Receipt Table (No HSN/SAC or Rate noise) */
+            <table className="receipt-print-table">
+              <thead>
+                <tr>
+                  <th className="col-sl">SL</th>
+                  <th className="col-desc">Item / Clinical Description</th>
+                  <th className="col-amount">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, idx) => {
+                  const lineSubtotal = Math.round(it.quantity * it.unitPricePaisa);
+                  const lineAmount = Math.max(0, lineSubtotal - (it.discountAmtPaisa || 0));
+                  const sl = String(idx + 1).padStart(2, '0');
 
-                // Determine appropriate HSN/SAC code
-                let code = 'SAC 9983';
-                if (it.category === 'Medicine' || it.category === 'Prescription Medicine') code = 'HSN 3004';
-                else if (it.category === 'Procedure Fee') code = 'SAC 9993';
-                else if (it.category === 'Certificate' || it.category === 'Necropsy Report' || it.isGovPrescribed) code = 'SAC 9997';
-
-                return (
-                  <tr key={it.id || idx} className={`${it.isGovPrescribed ? 'gov-row' : ''} avoid-break`}>
-                    <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
-                      {sl}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
-                        <span className="invoice-category-chip">
-                          ({it.category})
-                        </span>
-                      </div>
-
-                      {/* Multi-Prescription / Cross-Patient Snapshot Sub-line */}
-                      {((it.patientName && it.patientName !== patient?.name) || (it.prescriptionNumber && linkedRxNumbers.length > 1)) && (
-                        <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant, #64748b)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {it.patientName && it.patientName !== patient?.name && (
-                            <span>
-                              Patient: <strong>{it.patientName}</strong>
-                              {it.ownerName ? ` (${it.ownerName})` : ''}
-                            </span>
-                          )}
-                          {it.prescriptionNumber && linkedRxNumbers.length > 1 && (
-                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-                              Rx #{it.prescriptionNumber}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* STATUTORY GOVERNMENT ORDER NOTE DIRECTLY BELOW THIS SPECIFIC ITEM */}
-                      {it.isGovPrescribed && (
-                        <span className="invoice-print-go-subnote">
-                          {it.govOrderNote ||
-                            `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}`}
-                        </span>
-                      )}
-                    </td>
-                    {(showHsnColumn || showSacColumn) && (
-                      <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                        {code}
+                  return (
+                    <tr key={it.id || idx} className={`${it.isGovPrescribed ? 'gov-row' : ''} avoid-break`}>
+                      <td className="col-sl">
+                        {sl}
                       </td>
-                    )}
-                    <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', fontSize: '12px' }}>
-                      {it.quantity} {it.unit || 'units'}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-data)', fontSize: '12px' }}>
-                      {((it.unitPricePaisa || 0) / 100).toFixed(2)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-data)', fontWeight: 700 }}>
-                      {((lineAmount || 0) / 100).toFixed(2)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <td className="col-desc">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
+                          <span className="invoice-category-chip">
+                            ({it.category})
+                          </span>
+                        </div>
+                        {it.isGovPrescribed && (
+                          <span className="invoice-print-go-subnote">
+                            {it.govOrderNote ||
+                              `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="col-amount">
+                        {((lineAmount || 0) / 100).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            /* Dedicated Tax Invoice Table with precise column proportions */
+            <table className="invoice-print-table">
+              <thead>
+                <tr>
+                  <th className="col-sl">SL</th>
+                  <th className="col-desc">Item / Clinical Description</th>
+                  {(showHsnColumn || showSacColumn) && (
+                    <th className="col-hsn">
+                      {showHsnColumn && showSacColumn ? 'HSN / SAC' : showHsnColumn ? 'HSN Code' : 'SAC Code'}
+                    </th>
+                  )}
+                  <th className="col-qty">Qty &amp; Unit</th>
+                  <th className="col-rate">Rate (₹)</th>
+                  <th className="col-amount">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, idx) => {
+                  const lineSubtotal = Math.round(it.quantity * it.unitPricePaisa);
+                  const lineAmount = Math.max(0, lineSubtotal - (it.discountAmtPaisa || 0));
+                  const sl = String(idx + 1).padStart(2, '0');
+
+                  // Determine appropriate HSN/SAC code
+                  let code = 'SAC 9983';
+                  if (it.category === 'Medicine' || it.category === 'Prescription Medicine') code = 'HSN 3004';
+                  else if (it.category === 'Procedure Fee') code = 'SAC 9993';
+                  else if (it.category === 'Certificate' || it.category === 'Necropsy Report' || it.isGovPrescribed) code = 'SAC 9997';
+
+                  return (
+                    <tr key={it.id || idx} className={`${it.isGovPrescribed ? 'gov-row' : ''} avoid-break`}>
+                      <td className="col-sl">
+                        {sl}
+                      </td>
+                      <td className="col-desc">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
+                          <span className="invoice-category-chip">
+                            ({it.category})
+                          </span>
+                        </div>
+
+                        {/* STATUTORY GOVERNMENT ORDER NOTE DIRECTLY BELOW THIS SPECIFIC ITEM */}
+                        {it.isGovPrescribed && (
+                          <span className="invoice-print-go-subnote">
+                            {it.govOrderNote ||
+                              `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}`}
+                          </span>
+                        )}
+                      </td>
+                      {(showHsnColumn || showSacColumn) && (
+                        <td className="col-hsn">
+                          {code}
+                        </td>
+                      )}
+                      <td className="col-qty">
+                        {it.quantity} {it.unit || 'units'}
+                      </td>
+                      <td className="col-rate">
+                        {((it.unitPricePaisa || 0) / 100).toFixed(2)}
+                      </td>
+                      <td className="col-amount">
+                        {((lineAmount || 0) / 100).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
 
           {/* Section 4 & 5: Unified Ledger & Signatory Block */}
           <div className="invoice-print-ledger-and-signoff avoid-break signature-block">
-            {/* Section 4: Dual Ledger Partition */}
-            <div className="invoice-print-ledger-grid avoid-break">
-              {/* Left Side: Amount in Words & Notes */}
-              <div className="invoice-print-words-box">
-                <div>
+            {/* Section 4: Dual Ledger Partition / Payment Summary */}
+            {documentType === 'Payment Receipt' ? (
+              <div className="receipt-print-summary-grid avoid-break">
+                {/* Left Side: Payment Info & Notes */}
+                <div className="receipt-payment-info-box">
                   <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                    Invoice Total in Words
+                    Payment Information
                   </span>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
-                    {numberToWordsINR(grandTotalPaisa)}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', fontSize: '11.5px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Payment Mode:</span>
+                      <strong style={{ color: 'var(--color-on-surface)' }}>{(invoice as any).paymentMethod || 'Not recorded'}</strong>
+                    </div>
+                    {(invoice as any).paymentReference && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--color-on-surface-variant)' }}>Reference No:</span>
+                        <span style={{ fontFamily: 'var(--font-data)' }}>{(invoice as any).paymentReference}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Payment Status:</span>
+                      <strong style={{ color: '#0f766e' }}>
+                        {((invoice as any).paymentStatus || invoice.status || 'ISSUED').toUpperCase()}
+                      </strong>
+                    </div>
                   </div>
-                </div>
 
-                {/* Statutory Exemption Box */}
-                <div className="invoice-print-statutory-gst">
-                  <strong>Statutory Exemption Notice:</strong> Healthcare services and diagnostic examinations provided by registered clinical veterinary professionals are fully exempt from Goods and Services Tax (GST) as per{' '}
-                  <strong>Notification No. 12/2017-Central Tax (Rate)</strong>.
-                </div>
-
-                {showSpecialInstructionsForOwner && invoice.notes && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
-                    <strong>Special Instructions / Remarks:</strong> {invoice.notes}
-                  </div>
-                )}
-              </div>
-
-              {/* Right Side: Ledger Totals */}
-              <div className="invoice-print-totals-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Gross Subtotal:</span>
-                  <span style={{ fontFamily: 'var(--font-data)', fontWeight: 600 }}>
-                    {formatINR(grossSubtotalPaisa)}
-                  </span>
-                </div>
-
-                {itemDiscountsPaisa > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-on-surface-variant)' }}>Item Discounts:</span>
-                    <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                      -{formatINR(itemDiscountsPaisa)}
+                  {/* Amount in words */}
+                  <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
+                      Amount in Words:
                     </span>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '1px' }}>
+                      {numberToWordsINR(grandTotalPaisa)}
+                    </div>
                   </div>
-                )}
 
-                {doctorDiscountPaisa > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                    <span style={{ color: 'var(--color-on-surface-variant)' }}>Doctor / Courtesy Discount:</span>
-                    <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                      -{formatINR(doctorDiscountPaisa)}
-                    </span>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>GST (0.0% Exempt):</span>
-                  <span style={{ fontFamily: 'var(--font-data)' }}>₹0.00</span>
+                  {showSpecialInstructionsForOwner && invoice.notes && (
+                    <div style={{ fontSize: '10.5px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
+                      <strong>Remarks:</strong> {invoice.notes}
+                    </div>
+                  )}
                 </div>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    paddingTop: '8px',
-                    borderTop: '2px solid #cbd5e1',
-                    marginTop: '4px',
-                  }}
-                >
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800 }}>
-                    Grand Total:
+                {/* Right Side: Prominent Amount Received Card */}
+                <div className="receipt-amount-card">
+                  <span style={{ fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                    Total Amount Received
                   </span>
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: 'var(--color-primary)' }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', fontWeight: 800, color: 'var(--color-primary)' }}>
                     {formatINR(grandTotalPaisa)}
-                  </span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--color-outline)', marginTop: '2px' }}>
+                    Official acknowledgement of payment
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              /* Tax Invoice Dual Ledger Partition */
+              <div className="invoice-print-ledger-grid avoid-break">
+                {/* Left Side: Amount in Words & Notes */}
+                <div className="invoice-print-words-box">
+                  <div>
+                    <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
+                      Invoice Total in Words
+                    </span>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '1px' }}>
+                      {numberToWordsINR(grandTotalPaisa)}
+                    </div>
+                  </div>
+
+                  {/* Statutory Exemption Box */}
+                  <div className="invoice-print-statutory-gst">
+                    <strong>Statutory Exemption Notice:</strong> Healthcare services and diagnostic examinations provided by registered clinical veterinary professionals are fully exempt from Goods and Services Tax (GST) as per{' '}
+                    <strong>Notification No. 12/2017-Central Tax (Rate)</strong>.
+                  </div>
+
+                  {showSpecialInstructionsForOwner && invoice.notes && (
+                    <div style={{ fontSize: '10.5px', color: 'var(--color-on-surface-variant)' }}>
+                      <strong>Special Instructions / Remarks:</strong> {invoice.notes}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Side: Ledger Totals */}
+                <div className="invoice-print-totals-box">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--color-on-surface-variant)' }}>Gross Subtotal:</span>
+                    <span style={{ fontFamily: 'var(--font-data)', fontWeight: 600 }}>
+                      {formatINR(grossSubtotalPaisa)}
+                    </span>
+                  </div>
+
+                  {itemDiscountsPaisa > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Item Discounts:</span>
+                      <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
+                        -{formatINR(itemDiscountsPaisa)}
+                      </span>
+                    </div>
+                  )}
+
+                  {doctorDiscountPaisa > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span style={{ color: 'var(--color-on-surface-variant)' }}>Doctor / Courtesy Discount:</span>
+                      <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
+                        -{formatINR(doctorDiscountPaisa)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--color-on-surface-variant)' }}>GST (0.0% Exempt):</span>
+                    <span style={{ fontFamily: 'var(--font-data)' }}>₹0.00</span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingTop: '6px',
+                      borderTop: '2px solid #cbd5e1',
+                      marginTop: '2px',
+                    }}
+                  >
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 800 }}>
+                      Grand Total:
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: '17px', fontWeight: 800, color: 'var(--color-primary)' }}>
+                      {formatINR(grandTotalPaisa)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
             <div className="invoice-print-footer-wrap signature-block avoid-break">
               <div className="invoice-print-signature-section">
                 <div className="invoice-sig-box">
-                  <div className="invoice-sig-img-container">
-                    {activePractitioner?.signatureDataUrl ? (
+                  {activePractitioner?.signatureDataUrl && (
+                    <div className="invoice-sig-img-container">
                       <img
                         src={activePractitioner.signatureDataUrl}
                         alt="Veterinarian Signature"
-                        style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                        style={{ maxHeight: '30px', maxWidth: '140px', objectFit: 'contain' }}
                       />
-                    ) : null}
-                  </div>
+                    </div>
+                  )}
                   <div className="invoice-sig-line" />
                   <div className="invoice-sig-credentials">
                     <div className="invoice-sig-name">{doctorName}</div>
@@ -708,7 +796,7 @@ export const InvoiceDetailsPage: React.FC = () => {
               </div>
 
               {/* Micro Audit Note */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9.5px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #e2e8f0' }}>
                 <span>Computer-generated official {documentType.toLowerCase()} • Valid without physical seal.</span>
                 <span>
                   Generated: {new Date().toLocaleDateString('en-IN')} {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST

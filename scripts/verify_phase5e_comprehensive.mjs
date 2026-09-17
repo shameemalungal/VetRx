@@ -550,6 +550,8 @@ async function main() {
   await testPrescriptionScenario('Rx-1', 'prescription-1-medicine', 1, { expectedPages: 1 });
   // 2. Two medicines
   await testPrescriptionScenario('Rx-2', 'prescription-2-medicines', 2, { expectedPages: 1 });
+  // 2b. Three medicines
+  await testPrescriptionScenario('Rx-2b', 'prescription-3-medicines', 3, { expectedPages: 1 });
   // 3. Five medicines
   await testPrescriptionScenario('Rx-3', 'prescription-5-medicines', 5, { expectedPages: 1 });
   // 4. Six medicines

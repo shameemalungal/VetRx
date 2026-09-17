@@ -585,7 +585,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                           />
                         ) : (
-                          <Icon name="stethoscope" size={24} color="#ffffff" />
+                          <Icon name="stethoscope" size={20} color="#ffffff" />
                         )}
                       </div>
                       <div>
@@ -601,9 +601,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Elegant vertical separator */}
-                  <div className="letterhead-vertical-divider" />
 
                   {/* Veterinarian Block */}
                   <div className="letterhead-block letterhead-veterinarian-block">
@@ -622,7 +619,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                         </div>
                       ) : (
                         <div className="letterhead-practitioner-avatar">
-                          <Icon name="stethoscope" size={24} color="#ffffff" />
+                          <Icon name="stethoscope" size={20} color="#ffffff" />
                         </div>
                       )}
                       <div className="letterhead-credentials-stack">
@@ -655,7 +652,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
-                          <Icon name="stethoscope" size={26} color="#ffffff" />
+                          <Icon name="stethoscope" size={20} color="#ffffff" />
                         )}
                       </div>
                       <div className="letterhead-credentials-stack">
@@ -671,23 +668,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Elegant vertical separator */}
-                  <div className="letterhead-vertical-divider" />
-
-                  {/* Practice Location & Direct Contact Block */}
-                  <div className="letterhead-block letterhead-practitioner-contact-block">
-                    <span className="letterhead-block-tag">Practice Location &amp; Contact</span>
-                    {doctorAddress && (
-                      <p className="letterhead-location" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
-                        {doctorAddress}
-                      </p>
-                    )}
-                    <div className="letterhead-contact-line" style={{ justifyContent: 'flex-end', marginTop: '2px' }}>
-                      {doctorPhone && <span>Ph: {doctorPhone}</span>}
-                      {doctorPhone && doctorEmail && <span>•</span>}
-                      {doctorEmail && <span>Email: {doctorEmail}</span>}
+                  {/* Practice Location & Direct Contact Block (omitted if no contact info) */}
+                  {(doctorAddress || doctorPhone || doctorEmail) && (
+                    <div className="letterhead-block letterhead-practitioner-contact-block">
+                      <span className="letterhead-block-tag">Practice Location &amp; Contact</span>
+                      {doctorAddress && (
+                        <p className="letterhead-location" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                          {doctorAddress}
+                        </p>
+                      )}
+                      <div className="letterhead-contact-line" style={{ justifyContent: 'flex-end', marginTop: '2px' }}>
+                        {doctorPhone && <span>Ph: {doctorPhone}</span>}
+                        {doctorPhone && doctorEmail && <span>•</span>}
+                        {doctorEmail && <span>Email: {doctorEmail}</span>}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -898,19 +894,18 @@ export const PrescriptionDetailsPage: React.FC = () => {
             {/* Document Footer / Professional Sign-Off Block */}
             <div className="stationery-signoff-row signature-block avoid-break">
               <div className="stationery-signoff-box">
-                <div className="stationery-sig-img-container">
-                  {activePractitioner?.signatureDataUrl ? (
+                {activePractitioner?.signatureDataUrl && (
+                  <div className="stationery-sig-img-container">
                     <img
                       src={activePractitioner.signatureDataUrl}
                       alt="Doctor Signature"
-                      style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
+                      style={{ maxHeight: '30px', maxWidth: '140px', objectFit: 'contain' }}
                     />
-                  ) : null}
-                </div>
+                  </div>
+                )}
                 <div className="stationery-sig-line" />
                 <div className="stationery-sig-credentials">
                   <div className="stationery-sig-name">{doctorName}</div>
-                  {doctorQual && <div className="stationery-sig-qual">{doctorQual}</div>}
                   <div className="stationery-sig-role">
                     Veterinarian in Charge
                   </div>

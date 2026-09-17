@@ -1782,11 +1782,7 @@
 
 /* Subtle clean vertical separator */
 .letterhead-vertical-divider {
-  width: 1px;
-  background: var(--color-surface-container-highest);
-  margin: 0 var(--space-md);
-  align-self: stretch;
-  flex-shrink: 0;
+  display: none;
 }
 
 /* Clinic side */
@@ -1797,16 +1793,16 @@
 }
 
 .letterhead-clinic-logo-box {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-primary, #00685f);
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 104, 95, 0.2);
+  border: 1px solid rgba(0, 104, 95, 0.2);
 }
 
 .letterhead-clinic-name {
@@ -1852,10 +1848,10 @@
 }
 
 .letterhead-practitioner-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-md);
-  background: var(--color-primary-container);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-primary, #00685f);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -1863,9 +1859,8 @@
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 12px;
-  box-shadow: 0 1px 3px rgba(0, 104, 95, 0.2);
   flex-shrink: 0;
-  border: 1.5px solid var(--color-primary);
+  border: 1px solid rgba(0, 104, 95, 0.2);
 }
 
 .letterhead-credentials-stack {
@@ -2010,7 +2005,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-outline);
+  color: #334155;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -2243,9 +2238,9 @@
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  padding-top: 10px;
-  margin-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 4px;
+  margin-top: 4px;
+  padding-bottom: 4px;
   box-sizing: border-box;
 }
 
@@ -2261,7 +2256,6 @@
 }
 
 .stationery-sig-img-container {
-  min-height: 34px;
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;

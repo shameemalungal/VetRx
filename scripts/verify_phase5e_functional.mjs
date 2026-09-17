@@ -284,8 +284,9 @@ async function main() {
     await page.goto(`${TARGET_URL}/invoices/1?type=Payment+Receipt`, { waitUntil: 'networkidle0' });
     await page.waitForSelector('#invoice-sheet', { timeout: 10000 });
     const receiptLabelText = await page.evaluate(() => {
+      const badge = document.querySelector('.invoice-print-badge');
       const label = document.querySelector('.document-status-label') || document.querySelector('.document-badge');
-      return label ? label.textContent.trim() : '';
+      return `${badge ? badge.textContent.trim() : ''} ${label ? label.textContent.trim() : ''}`.trim();
     });
     const receiptVerified = receiptLabelText.toUpperCase().includes('PAYMENT RECEIPT');
     record('Payment Receipt Route & Status Label Verification', receiptVerified, `Label: ${receiptLabelText}`);

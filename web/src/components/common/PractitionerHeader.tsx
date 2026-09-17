@@ -56,7 +56,7 @@ export const PractitionerHeader: React.FC<PractitionerHeaderProps> = ({
                   className="practitioner-header-img"
                 />
               ) : (
-                <Icon name="pets" size={26} />
+                <Icon name="stethoscope" size={20} color="#ffffff" />
               )}
             </div>
           )}
