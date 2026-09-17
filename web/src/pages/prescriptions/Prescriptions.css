@@ -1703,7 +1703,7 @@
   border-radius: var(--radius-2xl);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(188, 201, 198, 0.4);
-  padding: 14px 22px;
+  padding: 14px 22px 24px 22px;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1711,22 +1711,35 @@
   box-sizing: border-box;
 }
 
-/* ── Standard Reusable Document Badge ────────────────────────── */
+/* ── Standard Reusable Document Badge / Status Label ──────────── */
 .document-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 22px;
-  padding: 2px 8px;
-  font-family: var(--font-body);
+  vertical-align: middle;
+  box-sizing: border-box;
+  line-height: 1.2;
+  white-space: nowrap;
+  padding: 3px 10px;
+  font-family: var(--font-body, inherit);
   font-size: 11px;
   font-weight: 700;
-  line-height: 1.2;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-container-high);
-  color: var(--color-primary);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface-container-high, #e0f2fe);
+  color: var(--color-primary, #00685f);
+  letter-spacing: 0.02em;
+}
+
+.document-status-label {
+  display: inline-block;
+  font-family: var(--font-body, Arial, Helvetica, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  color: #0f766e;
   white-space: nowrap;
-  box-sizing: border-box;
+  vertical-align: baseline;
 }
 
 /* ── Polished Letterhead Header Band ─────────────────────────── */
@@ -1734,14 +1747,14 @@
   background: var(--color-surface-container-low);
   border: 1px solid var(--color-surface-container-highest);
   border-radius: var(--radius-lg);
-  padding: 5px 10px;
-  margin-bottom: 4px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: row;
   align-items: stretch;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   position: relative;
 }
 
@@ -1758,13 +1771,13 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-body);
+  font-family: var(--font-body, inherit);
   font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-outline);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
 /* Subtle clean vertical separator */
@@ -1780,12 +1793,12 @@
 .letterhead-clinic-brand-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
 }
 
 .letterhead-clinic-logo-box {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   background: var(--color-primary-container);
   color: #ffffff;
@@ -1798,10 +1811,10 @@
 
 .letterhead-clinic-name {
   font-family: var(--font-heading);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--color-on-surface);
-  line-height: 1.15;
+  line-height: 1.2;
   margin: 0 0 1px 0;
   letter-spacing: -0.01em;
 }
@@ -1811,7 +1824,7 @@
   font-size: 10.5px;
   color: var(--color-on-surface-variant);
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .letterhead-contact-line {
@@ -1822,61 +1835,25 @@
   flex-wrap: wrap;
   gap: 5px;
   align-items: center;
-  line-height: 1.2;
+  line-height: 1.25;
+  margin-top: 1px;
 }
 
 /* Veterinarian side (when clinic is active) */
 .letterhead-veterinarian-block {
-  text-align: right;
-  align-items: flex-end;
+  text-align: left;
+  align-items: flex-start;
 }
 
-.letterhead-doctor-name {
-  font-family: var(--font-heading);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-primary);
-  margin: 0;
-  line-height: 1.15;
-}
-
-.letterhead-doctor-qual {
-  font-family: var(--font-body);
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--color-on-surface);
-  margin: 0;
-  line-height: 1.15;
-}
-
-.letterhead-reg-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  color: var(--color-outline);
-  background: var(--color-surface-container-high);
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.02em;
-  line-height: 1.15;
-  min-height: 16px;
-  box-sizing: border-box;
-  margin-top: 1px;
-}
-
-/* Practitioner-Only State (Clinic OFF / Independent) */
 .letterhead-practitioner-hero-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .letterhead-practitioner-avatar {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-md);
   background: var(--color-primary-container);
   color: #ffffff;
@@ -1888,14 +1865,42 @@
   font-size: 12px;
   box-shadow: 0 1px 3px rgba(0, 104, 95, 0.2);
   flex-shrink: 0;
+  border: 1.5px solid var(--color-primary);
+}
+
+.letterhead-credentials-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.letterhead-doctor-name {
+  font-family: var(--font-heading);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.letterhead-doctor-qual {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--color-on-surface);
+  margin: 0;
+  line-height: 1.2;
 }
 
 .letterhead-doctor-name-hero {
   font-family: var(--font-heading);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--color-on-surface);
-  line-height: 1.15;
+  line-height: 1.2;
   margin: 0;
   letter-spacing: -0.01em;
 }
@@ -1906,7 +1911,28 @@
   font-weight: 600;
   color: var(--color-primary);
   margin: 0;
-  line-height: 1.15;
+  line-height: 1.2;
+}
+
+.letterhead-credentials-stack .registration-line {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-body, Arial, Helvetica, sans-serif);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: #52616b;
+}
+
+.letterhead-credentials-stack .registration-label {
+  font-weight: 700;
+  color: #475569;
+}
+
+.letterhead-credentials-stack .registration-value {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #0f766e;
 }
 
 .letterhead-practitioner-contact-block {
@@ -1935,12 +1961,12 @@
 
 .stationery-title-ribbon {
   background: var(--color-surface-container-low);
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .stationery-doc-title {
@@ -1966,15 +1992,15 @@
 .stationery-signalment-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .stationery-signalment-box {
   background: var(--color-surface-container-lowest);
   border: 1px solid var(--color-surface-container);
   border-radius: var(--radius-md);
-  padding: 4px 8px;
+  padding: 5px 9px;
   box-sizing: border-box;
 }
 
@@ -1988,7 +2014,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  margin-bottom: 1px;
+  margin-bottom: 2px;
 }
 
 .stationery-primary-name {
@@ -2008,74 +2034,82 @@
 
 .stationery-findings-box {
   background: var(--color-surface-container-low);
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: var(--radius-md);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   display: grid;
   grid-template-columns: 1fr 2fr;
-  gap: 6px;
+  gap: 8px;
   box-sizing: border-box;
 }
 
+/* ── Medication Schedule Table ───────────────────────────────── */
 .stationery-meds-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 10.5px;
+  font-size: 11px;
   margin-bottom: 0;
   table-layout: fixed;
 }
 
 .stationery-meds-table th {
-  background: var(--color-surface-container);
-  color: var(--color-on-surface-variant);
-  font-family: var(--font-body);
+  background: var(--color-surface-container, #f1f5f9);
+  color: var(--color-on-surface-variant, #475569);
+  font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 700;
-  padding: 3px 5px;
-  border-bottom: 1px solid var(--color-surface-container-high);
+  padding: 6px 6px;
+  border-bottom: 1.5px solid var(--color-surface-container-high, #e2e8f0);
+  box-sizing: border-box;
 }
 
 .stationery-meds-table th:nth-child(1),
-.stationery-meds-table td:nth-child(1) {
-  width: 24px;
+.stationery-meds-table td.med-col-num {
+  width: 4%;
   text-align: center;
 }
 
 .stationery-meds-table th:nth-child(2),
-.stationery-meds-table td:nth-child(2) {
-  width: 44%;
+.stationery-meds-table td.med-col-name {
+  width: 36%;
+  text-align: left;
 }
 
 .stationery-meds-table th:nth-child(3),
-.stationery-meds-table td:nth-child(3) {
-  width: 10%;
+.stationery-meds-table td.med-col-dose {
+  width: 11%;
+  text-align: center;
 }
 
 .stationery-meds-table th:nth-child(4),
-.stationery-meds-table td:nth-child(4) {
-  width: 11%;
+.stationery-meds-table td.med-col-route {
+  width: 16%;
+  text-align: center;
 }
 
 .stationery-meds-table th:nth-child(5),
-.stationery-meds-table td:nth-child(5) {
-  width: 11%;
+.stationery-meds-table td.med-col-freq {
+  width: 12%;
+  text-align: center;
 }
 
 .stationery-meds-table th:nth-child(6),
-.stationery-meds-table td:nth-child(6) {
-  width: 10%;
+.stationery-meds-table td.med-col-dur {
+  width: 9%;
+  text-align: center;
 }
 
 .stationery-meds-table th:nth-child(7),
-.stationery-meds-table td:nth-child(7) {
+.stationery-meds-table td.med-col-qty {
   width: 12%;
   text-align: right;
+  padding-right: 12px !important;
 }
 
 .stationery-meds-table td {
-  padding: 2.5px 5px;
-  border-bottom: 1px solid var(--color-surface-container);
-  vertical-align: middle;
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--color-surface-container, #e2e8f0);
+  vertical-align: top;
   box-sizing: border-box;
 }
 
@@ -2083,59 +2117,142 @@
   background: rgba(242, 243, 255, 0.35);
 }
 
-.stationery-route-box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 4px;
-  background: var(--color-surface-container);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  line-height: 1.2;
+.medication-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
   box-sizing: border-box;
+}
+
+.medication-name {
+  font-family: var(--font-heading, inherit);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--color-on-surface, #0f172a);
   overflow-wrap: anywhere;
   word-break: normal;
-  white-space: normal;
-  text-align: center;
-  max-width: 100%;
+}
+
+.medication-generic {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--color-on-surface-variant, #475569);
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .stationery-sig-box {
   display: block;
-  margin-top: 1px;
-  background: var(--color-surface-container-low);
-  padding: 1px 4px;
-  border-radius: var(--radius-sm);
-  font-size: 9.5px;
-  line-height: 1.2;
-  color: var(--color-primary);
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 0 0 0 6px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  background: transparent;
+  border: 0;
+  border-left: 2.5px solid var(--color-primary, #00685f);
+  font-size: 10px;
+}
+
+.stationery-sig-box .sig-label {
+  font-weight: 700;
+  color: var(--color-primary, #00685f);
+}
+
+.stationery-sig-box .sig-text {
+  color: var(--color-on-surface, #0f172a);
+}
+
+.med-col-num {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-outline, #64748b);
+  padding-top: 8px !important;
+}
+
+.med-col-dose {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-primary, #00685f);
+  padding-top: 7px !important;
+  text-align: center;
+}
+
+.med-col-route {
+  padding-top: 6px !important;
+  text-align: center;
+}
+
+.stationery-route-box {
+  display: block;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
   box-sizing: border-box;
   overflow-wrap: anywhere;
-  word-break: normal;
   white-space: normal;
-  border-left: 2px solid var(--color-primary);
+  text-align: center;
+  color: var(--color-on-surface, #0f172a);
+}
+
+.med-col-freq {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  font-size: 10.5px;
+  padding-top: 7px !important;
+  text-align: center;
+}
+
+.med-col-dur {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  padding-top: 7px !important;
+  text-align: center;
+}
+
+.med-col-qty {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-on-surface, #0f172a);
+  text-align: right;
+  padding-right: 12px !important;
+  padding-top: 7px !important;
 }
 
 .stationery-advice-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  margin-top: 4px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 6px;
 }
 
+/* ── Professional Sign-Off / Signature Block ─────────────────── */
 .stationery-signoff-row {
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  padding-top: 3px;
-  margin-top: 3px;
+  padding-top: 10px;
+  margin-top: 8px;
+  padding-bottom: 8px;
   box-sizing: border-box;
 }
 
 .stationery-signoff-box {
-  width: 180px;
+  width: 260px;
+  min-width: 260px;
+  max-width: 280px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2144,40 +2261,70 @@
 }
 
 .stationery-sig-img-container {
-  min-height: 20px;
+  min-height: 34px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-end;
-  margin-bottom: 1px;
+  margin-bottom: 4px;
 }
 
 .stationery-sig-line {
   width: 100%;
   height: 1px;
-  background: var(--color-outline-variant);
-  margin-bottom: 2px;
+  background: var(--color-outline-variant, #cbd5e1);
+  margin-bottom: 4px;
+}
+
+.stationery-sig-credentials {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  width: 100%;
 }
 
 .stationery-sig-name {
-  font-family: var(--font-heading);
-  font-size: 12px;
+  font-family: var(--font-heading, inherit);
+  font-size: 13px;
   font-weight: 700;
-  color: var(--color-on-surface);
-  line-height: 1.15;
+  color: var(--color-on-surface, #0f172a);
+  line-height: 1.2;
+}
+
+.stationery-sig-qual {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-primary, #00685f);
+  line-height: 1.25;
 }
 
 .stationery-sig-role {
-  font-size: 10.5px;
-  color: var(--color-on-surface-variant);
-  line-height: 1.15;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-on-surface-variant, #475569);
+  line-height: 1.2;
 }
 
-.stationery-sig-reg {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--color-outline);
-  margin-top: 1px;
-  line-height: 1.15;
+.stationery-sig-credentials .registration-line {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-body, Arial, Helvetica, sans-serif);
+  font-size: 10.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: #52616b;
+  text-align: right;
+}
+
+.stationery-sig-credentials .registration-label {
+  font-weight: 700;
+  color: #475569;
+}
+
+.stationery-sig-credentials .registration-value {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #0f766e;
 }
 
 /* ── Indivisible Print Block Rules ───────────────────────────── */

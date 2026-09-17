@@ -30,74 +30,72 @@ export const PractitionerHeader: React.FC<PractitionerHeaderProps> = ({
 
   return (
     <div className={`practitioner-header-container ${className}`.trim()}>
-      <div className="practitioner-header-branding">
-        {showLogo && (
-          <div className="practitioner-header-logo-box">
-            {hasClinic && organisation?.logoDataUrl ? (
-              <img
-                src={organisation.logoDataUrl}
-                alt="Clinic Logo"
-                className="practitioner-header-img"
-              />
-            ) : practitioner?.photoDataUrl ? (
-              <img
-                src={practitioner.photoDataUrl}
-                alt={lines.name}
-                className="practitioner-header-img cover"
-              />
-            ) : (
-              <Icon name="pets" size={28} />
-            )}
-          </div>
+      <div className="practitioner-header-wrapper">
+        <span className="practitioner-header-tag">
+          {designation || 'Veterinary Practitioner'}
+        </span>
+        {hasClinic && lines.clinicName && (
+          <h2 className="practitioner-header-clinic-name">
+            {lines.clinicName}
+          </h2>
         )}
 
-        <div className="practitioner-header-details">
-          {/* Clinic Name if clinic mode is enabled */}
-          {hasClinic && (
-            <h2 className="practitioner-header-clinic-name">
-              {lines.clinicName}
-            </h2>
-          )}
-
-          {/* Line 1. Practitioner Name */}
-          <h1 className="practitioner-header-doctor-name">
-            {lines.name}
-          </h1>
-
-          {/* Line 2. Qualifications on their own line */}
-          {lines.qualifications && (
-            <div className="practitioner-header-qualifications">
-              {lines.qualifications}
+        <div className="practitioner-header-branding">
+          {showLogo && (
+            <div className="practitioner-header-logo-box">
+              {practitioner?.photoDataUrl ? (
+                <img
+                  src={practitioner.photoDataUrl}
+                  alt={lines.name}
+                  className="practitioner-header-img cover"
+                />
+              ) : hasClinic && organisation?.logoDataUrl ? (
+                <img
+                  src={organisation.logoDataUrl}
+                  alt="Clinic Logo"
+                  className="practitioner-header-img"
+                />
+              ) : (
+                <Icon name="pets" size={26} />
+              )}
             </div>
           )}
 
-          {/* Line 3. Professional Designation on its own line */}
-          <div className="practitioner-header-designation">
-            {designation}
+          <div className="practitioner-header-details">
+            {/* Line 1. Practitioner Name */}
+            <h1 className="practitioner-header-doctor-name">
+              {lines.name}
+            </h1>
+
+            {/* Line 2. Qualifications */}
+            {lines.qualifications && (
+              <div className="practitioner-header-qualifications">
+                {lines.qualifications}
+              </div>
+            )}
+
+            {/* Line 3. Registration Line */}
+            {lines.cleanRegNumber && (
+              <div className="registration-line">
+                <span className="registration-label">Reg. No.:</span>{' '}
+                <span className="registration-value">{lines.cleanRegNumber}</span>
+              </div>
+            )}
+
+            {/* Line 4. Contact Details */}
+            {lines.contact && (
+              <div className="practitioner-header-contact">
+                {lines.contact}
+              </div>
+            )}
+
+            {/* Line 5. Address */}
+            {lines.address && (
+              <div className="practitioner-header-address">
+                Address: {lines.address}
+              </div>
+            )}
           </div>
-
-          {/* Line 4. Registration Number */}
-          {lines.regNumber && (
-            <div className="practitioner-header-reg-wrap">
-              <span className="practitioner-header-reg-chip">
-                {lines.regNumber}
-              </span>
-            </div>
-          )}
-
-          {/* Line 5. Phone and Email on a dedicated line */}
-          {lines.contact && (
-            <div className="practitioner-header-contact">
-              {lines.contact}
-            </div>
-          )}
-
-          {/* Line 6. Address on its own line */}
-          {lines.address && (
-            <div className="practitioner-header-address">
-              Address: {lines.address}
-            </div>
-          )}
         </div>
       </div>
     </div>

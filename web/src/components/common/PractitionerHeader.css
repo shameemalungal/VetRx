@@ -2,19 +2,39 @@
 .practitioner-header-container {
   display: flex;
   align-items: flex-start;
-  justifyContent: space-between;
+  justify-content: space-between;
   width: 100%;
+}
+
+.practitioner-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+}
+
+.practitioner-header-tag {
+  font-family: var(--font-body, inherit);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-outline, #64748b);
+  line-height: 1.2;
+  margin: 0 0 2px 0;
+  display: block;
 }
 
 .practitioner-header-branding {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 12px;
 }
 
 .practitioner-header-logo-box {
-  width: 58px;
-  height: 58px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-md, 8px);
   background: var(--color-surface-container-high, #f1f5f9);
   display: flex;
@@ -39,63 +59,64 @@
 .practitioner-header-details {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 3px;
 }
 
 .practitioner-header-clinic-name {
   font-family: var(--font-heading, inherit);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
-  margin: 0;
+  margin: 0 0 2px 0;
   color: var(--color-primary, #00685f);
   line-height: 1.2;
 }
 
 .practitioner-header-doctor-name {
   font-family: var(--font-heading, inherit);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 800;
   margin: 0;
   color: var(--color-on-surface, #0f172a);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
 .practitioner-header-qualifications {
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--color-primary, #00685f);
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .practitioner-header-designation {
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--color-on-surface-variant, #475569);
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
-.practitioner-header-reg-wrap {
-  display: flex;
-  margin-top: 2px;
+.registration-line {
+  display: block;
+  margin-top: 3px;
   margin-bottom: 2px;
+  font-family: var(--font-body, Arial, Helvetica, sans-serif);
+  font-size: 11.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--color-on-surface-variant, #52616b);
 }
 
-.practitioner-header-reg-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
+.registration-label {
+  font-weight: 700;
+  color: var(--color-on-surface-variant, #475569);
+}
+
+.registration-value {
   font-weight: 600;
-  color: var(--color-primary, #00685f);
-  background: var(--color-surface-container-high, #f1f5f9);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm, 4px);
   letter-spacing: 0.02em;
-  line-height: 1.2;
-  min-height: 20px;
-  box-sizing: border-box;
+  color: var(--color-primary, #00685f);
 }
 
 .practitioner-header-contact {

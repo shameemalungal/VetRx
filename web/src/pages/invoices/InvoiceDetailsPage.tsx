@@ -14,6 +14,7 @@ import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } fro
 import { generatePdfBlob, savePdfWithFilePicker, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { PractitionerHeader } from '../../components/common/PractitionerHeader';
+import { cleanRegistrationNumber } from '../../utils/practitionerFormat';
 import './Invoices.css';
 
 export const InvoiceDetailsPage: React.FC = () => {
@@ -22,7 +23,21 @@ export const InvoiceDetailsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const shouldAutoPrint = searchParams.get('print') === 'true';
 
-  const [documentType, setDocumentType] = useState<'Tax Invoice' | 'Payment Receipt'>('Tax Invoice');
+  const typeParam = searchParams.get('type')?.toLowerCase();
+  const initialType = (typeParam === 'receipt' || typeParam === 'payment receipt' || searchParams.get('documentType')?.toLowerCase() === 'receipt')
+    ? 'Payment Receipt'
+    : 'Tax Invoice';
+  const [documentType, setDocumentType] = useState<'Tax Invoice' | 'Payment Receipt'>(initialType);
+
+  useEffect(() => {
+    const tp = searchParams.get('type')?.toLowerCase();
+    if (tp === 'receipt' || tp === 'payment receipt') {
+      setDocumentType('Payment Receipt');
+    } else if (tp === 'invoice' || tp === 'tax invoice') {
+      setDocumentType('Tax Invoice');
+    }
+  }, [searchParams]);
+
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareBlob, setShareBlob] = useState<Blob | undefined>();
@@ -115,6 +130,7 @@ export const InvoiceDetailsPage: React.FC = () => {
   const doctorName = activePractitioner?.name?.trim() || '';
   const doctorQual = activePractitioner?.qualifications?.trim() || '';
   const rawReg = activePractitioner?.registrationNumber?.trim() || '';
+  const cleanReg = cleanRegistrationNumber(rawReg);
 
   const handleCancelInvoice = async () => {
     if (!invoice?.id || invoice.status === 'Cancelled') return;
@@ -362,7 +378,6 @@ export const InvoiceDetailsPage: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexShrink: 0 }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
               <span
                 style={{
                   fontFamily: 'var(--font-data)',
@@ -391,8 +406,8 @@ export const InvoiceDetailsPage: React.FC = () => {
               <span style={{ color: 'var(--color-outline)', whiteSpace: 'nowrap' }}>
                 Doc Ref: <strong>{invoice.invoiceNumber}</strong>
               </span>
-              <span className="document-badge">
-                Original for Recipient
+              <span className="document-status-label">
+                {documentType === 'Payment Receipt' ? 'PAYMENT RECEIPT' : 'ORIGINAL FOR RECIPIENT'}
               </span>
             </div>
           </div>
@@ -414,7 +429,7 @@ export const InvoiceDetailsPage: React.FC = () => {
                 {documentType.toUpperCase()}
               </div>
               <div style={{ fontSize: '13px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <span style={{ color: 'var(--color-outline)' }}>Invoice No:</span>
+                <span style={{ color: 'var(--color-outline)' }}>{documentType === 'Payment Receipt' ? 'Receipt No:' : 'Invoice No:'}</span>
                 <strong style={{ fontFamily: 'var(--font-data)' }}>{invoice.invoiceNumber}</strong>
               </div>
               <div style={{ fontSize: '12px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -533,7 +548,7 @@ export const InvoiceDetailsPage: React.FC = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
                         <span className="invoice-category-chip">
-                          {it.category}
+                          ({it.category})
                         </span>
                       </div>
 
@@ -665,25 +680,29 @@ export const InvoiceDetailsPage: React.FC = () => {
             {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
             <div className="invoice-print-footer-wrap signature-block avoid-break">
               <div className="invoice-print-signature-section">
-                {/* Signature Block aligned bottom-right with exact labels */}
-                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginLeft: 'auto' }}>
-                  <div style={{ height: '36px', display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                    {activePractitioner?.signatureDataUrl && (
+                <div className="invoice-sig-box">
+                  <div className="invoice-sig-img-container">
+                    {activePractitioner?.signatureDataUrl ? (
                       <img
                         src={activePractitioner.signatureDataUrl}
                         alt="Veterinarian Signature"
-                        style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
+                        style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
                       />
+                    ) : null}
+                  </div>
+                  <div className="invoice-sig-line" />
+                  <div className="invoice-sig-credentials">
+                    <div className="invoice-sig-name">{doctorName}</div>
+                    {doctorQual && <div className="invoice-sig-qual">{doctorQual}</div>}
+                    <div className="invoice-sig-role">
+                      Authorized Signatory
+                    </div>
+                    {cleanReg && (
+                      <div className="registration-line">
+                        <span className="registration-label">Reg. No.:</span>{' '}
+                        <span className="registration-value">{cleanReg}</span>
+                      </div>
                     )}
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--color-on-surface)' }}>
-                    <strong>Name:</strong> {doctorName}{doctorQual ? ` (${doctorQual})` : ''}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                    <strong>Registration Number:</strong> {rawReg || 'N/A'}
-                  </div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>
-                    Authorized Signatory
                   </div>
                 </div>
               </div>

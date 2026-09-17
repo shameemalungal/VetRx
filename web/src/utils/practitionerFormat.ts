@@ -6,8 +6,17 @@ export interface FormattedPractitionerLines {
   qualifications?: string;
   designation?: string;
   regNumber?: string;
+  cleanRegNumber?: string;
   contact?: string;
   address?: string;
+}
+
+/**
+ * Strips prefixes like 'Reg: ', 'Reg. No.: ', etc. to yield the bare registration code.
+ */
+export function cleanRegistrationNumber(raw?: string | null): string {
+  if (!raw) return '';
+  return raw.trim().replace(/^(reg\.?\s*(no\.?)?:?\s*)/i, '').trim();
 }
 
 /**
@@ -33,10 +42,9 @@ export function formatPractitionerHeaderLines(
   const qualifications = practitioner?.qualifications?.trim() || undefined;
   const designation = practitioner?.designation?.trim() || undefined;
 
-  let regNumber = practitioner?.registrationNumber?.trim();
-  if (regNumber && !regNumber.toLowerCase().startsWith('reg')) {
-    regNumber = `Reg. No: ${regNumber}`;
-  }
+  const rawReg = practitioner?.registrationNumber?.trim();
+  const cleanReg = cleanRegistrationNumber(rawReg);
+  const regNumber = cleanReg ? `Reg. No.: ${cleanReg}` : undefined;
 
   const phone = practitioner?.phone?.trim() || organisation?.phone?.trim();
   const email = practitioner?.email?.trim() || organisation?.email?.trim();
@@ -57,7 +65,9 @@ export function formatPractitionerHeaderLines(
     qualifications,
     designation,
     regNumber: regNumber || undefined,
+    cleanRegNumber: cleanReg || undefined,
     contact,
     address,
   };
 }
+

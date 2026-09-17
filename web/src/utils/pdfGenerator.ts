@@ -204,6 +204,22 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
             sliceHeightPx = adjustedSlice;
           }
         }
+
+        // Guard against orphan signature fragment on trailing page:
+        // If remaining content after cut is very small (< 130px at 2x scale),
+        // pull the cut earlier so preceding card (advice/ledger/item) moves together with sign-off
+        const remainingAfterCut = imgHeightPx - (renderedHeightPx + sliceHeightPx);
+        if (remainingAfterCut > 0 && remainingAfterCut < 130 * 2) {
+          const prevBoxes = avoidBoxes
+            .filter((b) => b.bottomPx <= (renderedHeightPx + sliceHeightPx) && b.topPx > renderedHeightPx + pageHeightPx * 0.3)
+            .sort((a, b) => b.topPx - a.topPx);
+          if (prevBoxes.length > 0) {
+            const pullBackSlice = Math.floor(prevBoxes[0].topPx - renderedHeightPx);
+            if (pullBackSlice > pageHeightPx * 0.25) {
+              sliceHeightPx = pullBackSlice;
+            }
+          }
+        }
       }
 
       const pageCanvas = document.createElement('canvas');

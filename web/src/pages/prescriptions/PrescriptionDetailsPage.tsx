@@ -14,6 +14,7 @@ import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } fro
 import { CreatePackageFromPrescriptionModal } from './CreatePackageFromPrescriptionModal';
 import { generatePdfBlob, savePdfWithFilePicker, buildPrescriptionFilename } from '../../utils/pdfGenerator';
 import { ShareModal } from '../../components/ui/ShareModal';
+import { cleanRegistrationNumber } from '../../utils/practitionerFormat';
 import './Prescriptions.css';
 
 export const PrescriptionDetailsPage: React.FC = () => {
@@ -263,11 +264,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
   // Doctor credentials
   const doctorName = activePractitioner?.name?.trim() || 'Veterinarian';
   const doctorQual = activePractitioner?.qualifications?.trim() || '';
-  const doctorReg = activePractitioner?.registrationNumber?.trim()
-    ? (activePractitioner.registrationNumber.trim().startsWith('Reg')
-        ? activePractitioner.registrationNumber.trim()
-        : `Reg: ${activePractitioner.registrationNumber.trim()}`)
-    : '';
+  const cleanDoctorReg = cleanRegistrationNumber(activePractitioner?.registrationNumber);
 
   const doctorAddress = activePractitioner?.address?.trim() || '';
   const doctorPhone = activePractitioner?.phone?.trim() || '';
@@ -533,7 +530,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 }}
               >
                 <div className="prescription-doc-top-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
                   <span
                     className="prescription-doc-top-badge"
                     style={{
@@ -564,8 +560,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <span style={{ color: 'var(--color-outline)' }}>
                     Doc Ref: <strong>{prescription.rxNumber}</strong>
                   </span>
-                  <span className="document-badge">
-                    Original Prescription
+                  <span className="document-status-label">
+                    ORIGINAL PRESCRIPTION
                   </span>
                 </div>
               </div>
@@ -611,18 +607,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
 
                   {/* Veterinarian Block */}
                   <div className="letterhead-block letterhead-veterinarian-block">
-                    <span className="letterhead-block-tag">Veterinarian</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                      {activePractitioner?.photoDataUrl && (
+                    <span className="letterhead-block-tag">Veterinary Practitioner</span>
+                    <div className="letterhead-practitioner-hero-row">
+                      {activePractitioner?.photoDataUrl ? (
                         <div
-                          style={{
-                            width: '34px',
-                            height: '34px',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            border: '1.5px solid var(--color-primary)',
-                            flexShrink: 0,
-                          }}
+                          className="letterhead-practitioner-avatar"
+                          style={{ overflow: 'hidden' }}
                         >
                           <img
                             src={activePractitioner.photoDataUrl}
@@ -630,13 +620,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         </div>
+                      ) : (
+                        <div className="letterhead-practitioner-avatar">
+                          <Icon name="stethoscope" size={24} color="#ffffff" />
+                        </div>
                       )}
-                      <div>
+                      <div className="letterhead-credentials-stack">
                         <h3 className="letterhead-doctor-name">{doctorName}</h3>
-                        <p className="letterhead-doctor-qual">{doctorQual}</p>
+                        {doctorQual && <p className="letterhead-doctor-qual">{doctorQual}</p>}
+                        {cleanDoctorReg && (
+                          <div className="registration-line">
+                            <span className="registration-label">Reg. No.:</span>{' '}
+                            <span className="registration-value">{cleanDoctorReg}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    {doctorReg && <span className="letterhead-reg-chip">{doctorReg}</span>}
                   </div>
                 </div>
               ) : (
@@ -659,10 +658,15 @@ export const PrescriptionDetailsPage: React.FC = () => {
                           <Icon name="stethoscope" size={26} color="#ffffff" />
                         )}
                       </div>
-                      <div>
+                      <div className="letterhead-credentials-stack">
                         <h2 className="letterhead-doctor-name-hero">{doctorName}</h2>
-                        <p className="letterhead-doctor-qual-hero">{doctorQual}</p>
-                        {doctorReg && <span className="letterhead-reg-chip">{doctorReg}</span>}
+                        {doctorQual && <p className="letterhead-doctor-qual-hero">{doctorQual}</p>}
+                        {cleanDoctorReg && (
+                          <div className="registration-line">
+                            <span className="registration-label">Reg. No.:</span>{' '}
+                            <span className="registration-value">{cleanDoctorReg}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -789,11 +793,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <thead>
                       <tr>
                         <th style={{ width: '28px', textAlign: 'center' }}>#</th>
-                        <th>Medicine &amp; Formulation</th>
-                        <th>Dose</th>
-                        <th>Route</th>
-                        <th>Frequency</th>
-                        <th>Duration</th>
+                        <th style={{ textAlign: 'left' }}>Medicine &amp; Formulation</th>
+                        <th style={{ textAlign: 'center' }}>Dose</th>
+                        <th style={{ textAlign: 'center' }}>Route</th>
+                        <th style={{ textAlign: 'center' }}>Frequency</th>
+                        <th style={{ textAlign: 'center' }}>Duration</th>
                         <th style={{ textAlign: 'right' }}>Quantity</th>
                       </tr>
                     </thead>
@@ -801,40 +805,51 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       {items && items.length > 0 ? (
                         items.map((item, idx) => (
                           <tr key={item.id || idx} className="medication-row avoid-break">
-                            <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--color-outline)' }}>
+                            <td className="med-col-num">
                               {idx + 1}
                             </td>
-                            <td>
-                              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '12px', lineHeight: 1.25, color: 'var(--color-on-surface)' }}>
-                                {item.brandName}
+                            <td className="med-col-name">
+                              <div className="medication-cell">
+                                <div className="medication-name">
+                                  {item.brandName}
+                                </div>
+                                {item.genericName && (
+                                  <div className="medication-generic">
+                                    {item.presentation ? `${item.presentation} ` : ''}({item.genericName})
+                                  </div>
+                                )}
+                                {item.directions && (
+                                  <div className="stationery-sig-box">
+                                    <span className="sig-label">Sig:</span>{' '}
+                                    <span className="sig-text">{item.directions.replace(/^Sig:\s*/i, '')}</span>
+                                  </div>
+                                )}
                               </div>
-                              {item.genericName && (
-                                <div style={{ fontSize: '10.5px', lineHeight: 1.2, color: 'var(--color-on-surface-variant)' }}>
-                                  {item.presentation} ({item.genericName})
-                                </div>
-                              )}
-                              {item.directions && (
-                                <div className="stationery-sig-box">
-                                  <strong>Sig:</strong> {item.directions.replace(/^Sig:\s*/i, '')}
-                                </div>
-                              )}
                             </td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-primary)' }}>
-                              {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
+                            <td className="med-col-dose">
+                              <span className="dose-val">
+                                {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
+                              </span>
                             </td>
-                            <td>
+                            <td className="med-col-route">
                               <span className="stationery-route-box">
                                 {item.route || 'PO (Oral)'}
                               </span>
                             </td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                              {item.frequency || 'BID (q12h)'}
+                            <td className="med-col-freq">
+                              <span className="freq-val">
+                                {item.frequency || 'BID (q12h)'}
+                              </span>
                             </td>
-                            <td style={{ fontFamily: 'var(--font-mono)' }}>
-                              {item.durationDays ? `${item.durationDays} days` : '5 days'}
+                            <td className="med-col-dur">
+                              <span className="dur-val">
+                                {item.durationDays ? `${item.durationDays} days` : '5 days'}
+                              </span>
                             </td>
-                            <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                              {item.quantity} {item.dispenseUnit || item.unit || 'Tabs'}
+                            <td className="med-col-qty">
+                              <span className="qty-val">
+                                {item.quantity} {item.dispenseUnit || item.unit || 'Tabs'}
+                              </span>
                             </td>
                           </tr>
                         ))
@@ -888,22 +903,24 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <img
                       src={activePractitioner.signatureDataUrl}
                       alt="Doctor Signature"
-                      style={{ maxHeight: '28px', maxWidth: '130px', objectFit: 'contain' }}
+                      style={{ maxHeight: '34px', maxWidth: '140px', objectFit: 'contain' }}
                     />
                   ) : null}
                 </div>
-                <div className="stationery-sig-line"></div>
-                <span className="stationery-sig-name">
-                  {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
-                </span>
-                <span className="stationery-sig-role">
-                  Veterinarian in Charge
-                </span>
-                {doctorReg && (
-                  <span className="stationery-sig-reg">
-                    {doctorReg}
-                  </span>
-                )}
+                <div className="stationery-sig-line" />
+                <div className="stationery-sig-credentials">
+                  <div className="stationery-sig-name">{doctorName}</div>
+                  {doctorQual && <div className="stationery-sig-qual">{doctorQual}</div>}
+                  <div className="stationery-sig-role">
+                    Veterinarian in Charge
+                  </div>
+                  {cleanDoctorReg && (
+                    <div className="registration-line">
+                      <span className="registration-label">Reg. No.:</span>{' '}
+                      <span className="registration-value">{cleanDoctorReg}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
