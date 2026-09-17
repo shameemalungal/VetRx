@@ -132,6 +132,12 @@ export const db: VetRxDatabase = new Proxy({} as VetRxDatabase, {
   },
 });
 
+if (typeof window !== 'undefined') {
+  (window as any).db = db;
+  (window as any).switchTenantDb = switchTenantDb;
+  (window as any).getActiveDb = getActiveDb;
+}
+
 // ── Seed flag ─────────────────────────────────────────────────
 const SEED_KEY = 'vetrx_seeded_v1';
 

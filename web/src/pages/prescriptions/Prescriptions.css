@@ -1703,28 +1703,45 @@
   border-radius: var(--radius-2xl);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(188, 201, 198, 0.4);
-  padding: 36px 44px;
+  padding: 14px 22px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 980px;
   position: relative;
   color: #131b2e;
+  box-sizing: border-box;
+}
+
+/* ── Standard Reusable Document Badge ────────────────────────── */
+.document-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-high);
+  color: var(--color-primary);
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 /* ── Polished Letterhead Header Band ─────────────────────────── */
 .prescription-letterhead-band {
   background: var(--color-surface-container-low);
   border: 1px solid var(--color-surface-container-highest);
-  border-radius: var(--radius-xl);
-  padding: 18px 24px;
-  margin-bottom: var(--space-lg);
+  border-radius: var(--radius-lg);
+  padding: 5px 10px;
+  margin-bottom: 4px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: row;
   align-items: stretch;
   justify-content: space-between;
-  gap: var(--space-md);
+  gap: 8px;
   position: relative;
 }
 
@@ -1740,14 +1757,14 @@
 .letterhead-block-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-outline);
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 /* Subtle clean vertical separator */
@@ -1763,13 +1780,13 @@
 .letterhead-clinic-brand-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
 
 .letterhead-clinic-logo-box {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-lg);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   background: var(--color-primary-container);
   color: #ffffff;
   display: flex;
@@ -1781,31 +1798,31 @@
 
 .letterhead-clinic-name {
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--color-on-surface);
-  line-height: 1.25;
-  margin: 0 0 3px 0;
+  line-height: 1.15;
+  margin: 0 0 1px 0;
   letter-spacing: -0.01em;
 }
 
 .letterhead-location {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 10.5px;
   color: var(--color-on-surface-variant);
-  margin: 0 0 4px 0;
-  line-height: 1.35;
+  margin: 0;
+  line-height: 1.2;
 }
 
 .letterhead-contact-line {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9.5px;
   color: var(--color-on-surface-variant);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 5px;
   align-items: center;
-  line-height: 1.4;
+  line-height: 1.2;
 }
 
 /* Veterinarian side (when clinic is active) */
@@ -1816,45 +1833,51 @@
 
 .letterhead-doctor-name {
   font-family: var(--font-heading);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-primary);
-  margin: 0 0 3px 0;
-  line-height: 1.25;
+  margin: 0;
+  line-height: 1.15;
 }
 
 .letterhead-doctor-qual {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 500;
   color: var(--color-on-surface);
-  margin: 0 0 4px 0;
+  margin: 0;
+  line-height: 1.15;
 }
 
 .letterhead-reg-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 600;
   color: var(--color-outline);
   background: var(--color-surface-container-high);
-  padding: 2px 8px;
+  padding: 1px 5px;
   border-radius: var(--radius-sm);
   letter-spacing: 0.02em;
+  line-height: 1.15;
+  min-height: 16px;
+  box-sizing: border-box;
+  margin-top: 1px;
 }
 
 /* Practitioner-Only State (Clinic OFF / Independent) */
 .letterhead-practitioner-hero-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .letterhead-practitioner-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   background: var(--color-primary-container);
   color: #ffffff;
   display: flex;
@@ -1862,27 +1885,28 @@
   justify-content: center;
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 16px;
-  box-shadow: 0 1px 4px rgba(0, 104, 95, 0.25);
+  font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 104, 95, 0.2);
   flex-shrink: 0;
 }
 
 .letterhead-doctor-name-hero {
   font-family: var(--font-heading);
-  font-size: 18px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--color-on-surface);
-  line-height: 1.2;
-  margin: 0 0 2px 0;
+  line-height: 1.15;
+  margin: 0;
   letter-spacing: -0.01em;
 }
 
 .letterhead-doctor-qual-hero {
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--color-primary);
-  margin: 0 0 4px 0;
+  margin: 0;
+  line-height: 1.15;
 }
 
 .letterhead-practitioner-contact-block {
@@ -1892,161 +1916,277 @@
 
 .stationery-doctor-name {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-primary);
 }
 
 .stationery-doctor-qual {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-on-surface-variant);
 }
 
 .stationery-reg-no {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--color-outline);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .stationery-title-ribbon {
   background: var(--color-surface-container-low);
-  padding: 10px 16px;
-  border-radius: var(--radius-lg);
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-lg);
+  margin-bottom: 4px;
 }
 
 .stationery-doc-title {
   font-family: var(--font-heading);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--color-on-surface);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .stationery-meta-right {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 10px;
   color: var(--color-on-surface-variant);
 }
 
 .stationery-signalment-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  gap: 5px;
+  margin-bottom: 4px;
 }
 
 .stationery-signalment-box {
   background: var(--color-surface-container-lowest);
   border: 1px solid var(--color-surface-container);
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  box-sizing: border-box;
 }
 
 .stationery-box-label {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-outline);
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: 3px;
+  margin-bottom: 1px;
 }
 
 .stationery-primary-name {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-on-surface);
+  line-height: 1.2;
+}
+
+.stationery-sub-text {
+  margin: 0;
+  font-size: 10px;
+  color: var(--color-on-surface-variant);
+  line-height: 1.25;
 }
 
 .stationery-findings-box {
   background: var(--color-surface-container-low);
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-lg);
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  margin-bottom: 4px;
   display: grid;
   grid-template-columns: 1fr 2fr;
-  gap: var(--space-md);
+  gap: 6px;
+  box-sizing: border-box;
 }
 
 .stationery-meds-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  margin-bottom: var(--space-lg);
+  font-size: 10.5px;
+  margin-bottom: 0;
+  table-layout: fixed;
 }
 
 .stationery-meds-table th {
   background: var(--color-surface-container);
   color: var(--color-on-surface-variant);
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 10px 12px;
+  padding: 3px 5px;
   border-bottom: 1px solid var(--color-surface-container-high);
 }
 
+.stationery-meds-table th:nth-child(1),
+.stationery-meds-table td:nth-child(1) {
+  width: 24px;
+  text-align: center;
+}
+
+.stationery-meds-table th:nth-child(2),
+.stationery-meds-table td:nth-child(2) {
+  width: 44%;
+}
+
+.stationery-meds-table th:nth-child(3),
+.stationery-meds-table td:nth-child(3) {
+  width: 10%;
+}
+
+.stationery-meds-table th:nth-child(4),
+.stationery-meds-table td:nth-child(4) {
+  width: 11%;
+}
+
+.stationery-meds-table th:nth-child(5),
+.stationery-meds-table td:nth-child(5) {
+  width: 11%;
+}
+
+.stationery-meds-table th:nth-child(6),
+.stationery-meds-table td:nth-child(6) {
+  width: 10%;
+}
+
+.stationery-meds-table th:nth-child(7),
+.stationery-meds-table td:nth-child(7) {
+  width: 12%;
+  text-align: right;
+}
+
 .stationery-meds-table td {
-  padding: 12px;
+  padding: 2.5px 5px;
   border-bottom: 1px solid var(--color-surface-container);
-  vertical-align: top;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 .stationery-meds-table tr:nth-child(even) {
   background: rgba(242, 243, 255, 0.35);
 }
 
-.stationery-sig-box {
-  display: inline-block;
-  margin-top: 6px;
-  background: var(--color-surface-container-low);
-  padding: 4px 8px;
+.stationery-route-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 4px;
+  background: var(--color-surface-container);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+  text-align: center;
+  max-width: 100%;
+}
+
+.stationery-sig-box {
+  display: block;
+  margin-top: 1px;
+  background: var(--color-surface-container-low);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 9.5px;
+  line-height: 1.2;
   color: var(--color-primary);
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+  border-left: 2px solid var(--color-primary);
 }
 
 .stationery-advice-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  gap: 5px;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .stationery-signoff-row {
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  padding-top: var(--space-xl);
+  padding-top: 3px;
+  margin-top: 3px;
+  box-sizing: border-box;
 }
 
 .stationery-signoff-box {
-  width: 220px;
+  width: 180px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
+  box-sizing: border-box;
+}
+
+.stationery-sig-img-container {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 1px;
 }
 
 .stationery-sig-line {
   width: 100%;
   height: 1px;
   background: var(--color-outline-variant);
-  margin-bottom: 8px;
+  margin-bottom: 2px;
+}
+
+.stationery-sig-name {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  line-height: 1.15;
+}
+
+.stationery-sig-role {
+  font-size: 10.5px;
+  color: var(--color-on-surface-variant);
+  line-height: 1.15;
+}
+
+.stationery-sig-reg {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--color-outline);
+  margin-top: 1px;
+  line-height: 1.15;
+}
+
+/* ── Indivisible Print Block Rules ───────────────────────────── */
+.signature-block,
+.avoid-break,
+.medication-row,
+tr {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
 }
 
 /* ── Print Media Query & A4 Page Rules ─────────────────────── */

@@ -354,9 +354,9 @@ export const InvoiceDetailsPage: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              paddingBottom: '10px',
+              paddingBottom: '5px',
               borderBottom: '1px solid #e2e8f0',
-              marginBottom: '14px',
+              marginBottom: '6px',
               gap: '12px',
               flexWrap: 'nowrap',
             }}
@@ -391,23 +391,14 @@ export const InvoiceDetailsPage: React.FC = () => {
               <span style={{ color: 'var(--color-outline)', whiteSpace: 'nowrap' }}>
                 Doc Ref: <strong>{invoice.invoiceNumber}</strong>
               </span>
-              <span
-                style={{
-                  background: 'var(--color-surface-container-high)',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontWeight: 600,
-                  color: 'var(--color-primary)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <span className="document-badge">
                 Original for Recipient
               </span>
             </div>
           </div>
 
           {/* Section 1: Clinic Header & Tax Invoice Block */}
-          <div className="invoice-print-header">
+          <div className="invoice-print-header avoid-break">
             {/* Clinic / Practice Credentials (Left) */}
             <div className="invoice-print-logo-col" style={{ flex: 1, minWidth: 0 }}>
               <PractitionerHeader
@@ -453,7 +444,7 @@ export const InvoiceDetailsPage: React.FC = () => {
           </div>
 
           {/* Section 2: Patient & Client Signalment Panel */}
-          <div className="invoice-print-grid-dossier">
+          <div className="invoice-print-grid-dossier avoid-break">
             {/* Client Dossier */}
             <div className="invoice-print-dossier-box">
               <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
@@ -534,28 +525,28 @@ export const InvoiceDetailsPage: React.FC = () => {
                 else if (it.category === 'Certificate' || it.category === 'Necropsy Report' || it.isGovPrescribed) code = 'SAC 9997';
 
                 return (
-                  <tr key={it.id || idx} className={it.isGovPrescribed ? 'gov-row' : ''}>
+                  <tr key={it.id || idx} className={`${it.isGovPrescribed ? 'gov-row' : ''} avoid-break`}>
                     <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
                       {sl}
                     </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
-                        <span style={{ fontSize: '10px', fontWeight: 600, background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', color: '#475569' }}>
+                        <span className="invoice-category-chip">
                           {it.category}
                         </span>
                       </div>
 
-                      {/* Multi-Prescription / Patient Snapshot Sub-line */}
-                      {(it.prescriptionNumber || it.patientName) && (
+                      {/* Multi-Prescription / Cross-Patient Snapshot Sub-line */}
+                      {((it.patientName && it.patientName !== patient?.name) || (it.prescriptionNumber && linkedRxNumbers.length > 1)) && (
                         <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant, #64748b)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {it.patientName && (
+                          {it.patientName && it.patientName !== patient?.name && (
                             <span>
                               Patient: <strong>{it.patientName}</strong>
                               {it.ownerName ? ` (${it.ownerName})` : ''}
                             </span>
                           )}
-                          {it.prescriptionNumber && (
+                          {it.prescriptionNumber && linkedRxNumbers.length > 1 && (
                             <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
                               Rx #{it.prescriptionNumber}
                             </span>
@@ -591,117 +582,120 @@ export const InvoiceDetailsPage: React.FC = () => {
             </tbody>
           </table>
 
-          {/* Section 4: Dual Ledger Partition */}
-          <div className="invoice-print-ledger-grid">
-            {/* Left Side: Amount in Words & Notes */}
-            <div className="invoice-print-words-box">
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                  Invoice Total in Words
-                </span>
-                <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
-                  {numberToWordsINR(grandTotalPaisa)}
-                </div>
-              </div>
-
-              {/* Statutory Exemption Box */}
-              <div className="invoice-print-statutory-gst">
-                <strong>Statutory Exemption Notice:</strong> Healthcare services and diagnostic examinations provided by registered clinical veterinary professionals are fully exempt from Goods and Services Tax (GST) as per{' '}
-                <strong>Notification No. 12/2017-Central Tax (Rate)</strong>.
-              </div>
-
-              {showSpecialInstructionsForOwner && invoice.notes && (
-                <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
-                  <strong>Special Instructions / Remarks:</strong> {invoice.notes}
-                </div>
-              )}
-            </div>
-
-            {/* Right Side: Ledger Totals */}
-            <div className="invoice-print-totals-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>Gross Subtotal:</span>
-                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 600 }}>
-                  {formatINR(grossSubtotalPaisa)}
-                </span>
-              </div>
-
-              {itemDiscountsPaisa > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Item Discounts:</span>
-                  <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                    -{formatINR(itemDiscountsPaisa)}
+          {/* Section 4 & 5: Unified Ledger & Signatory Block */}
+          <div className="invoice-print-ledger-and-signoff avoid-break signature-block">
+            {/* Section 4: Dual Ledger Partition */}
+            <div className="invoice-print-ledger-grid avoid-break">
+              {/* Left Side: Amount in Words & Notes */}
+              <div className="invoice-print-words-box">
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
+                    Invoice Total in Words
                   </span>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
+                    {numberToWordsINR(grandTotalPaisa)}
+                  </div>
                 </div>
-              )}
 
-              {doctorDiscountPaisa > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Doctor / Courtesy Discount:</span>
-                  <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                    -{formatINR(doctorDiscountPaisa)}
-                  </span>
+                {/* Statutory Exemption Box */}
+                <div className="invoice-print-statutory-gst">
+                  <strong>Statutory Exemption Notice:</strong> Healthcare services and diagnostic examinations provided by registered clinical veterinary professionals are fully exempt from Goods and Services Tax (GST) as per{' '}
+                  <strong>Notification No. 12/2017-Central Tax (Rate)</strong>.
                 </div>
-              )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>GST (0.0% Exempt):</span>
-                <span style={{ fontFamily: 'var(--font-data)' }}>₹0.00</span>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingTop: '8px',
-                  borderTop: '2px solid #cbd5e1',
-                  marginTop: '4px',
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800 }}>
-                  Grand Total:
-                </span>
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: 'var(--color-primary)' }}>
-                  {formatINR(grandTotalPaisa)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
-        <div>
-          <div className="invoice-print-signature-section">
-            {/* Signature Block aligned bottom-right with exact labels */}
-            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginLeft: 'auto' }}>
-              <div style={{ height: '36px', display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                {activePractitioner?.signatureDataUrl && (
-                  <img
-                    src={activePractitioner.signatureDataUrl}
-                    alt="Veterinarian Signature"
-                    style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
-                  />
+                {showSpecialInstructionsForOwner && invoice.notes && (
+                  <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
+                    <strong>Special Instructions / Remarks:</strong> {invoice.notes}
+                  </div>
                 )}
               </div>
-              <div style={{ fontSize: '13px', color: 'var(--color-on-surface)' }}>
-                <strong>Name:</strong> {doctorName}{doctorQual ? ` (${doctorQual})` : ''}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                <strong>Registration Number:</strong> {rawReg || 'N/A'}
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>
-                Authorized Signatory
+
+              {/* Right Side: Ledger Totals */}
+              <div className="invoice-print-totals-box">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Gross Subtotal:</span>
+                  <span style={{ fontFamily: 'var(--font-data)', fontWeight: 600 }}>
+                    {formatINR(grossSubtotalPaisa)}
+                  </span>
+                </div>
+
+                {itemDiscountsPaisa > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--color-on-surface-variant)' }}>Item Discounts:</span>
+                    <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
+                      -{formatINR(itemDiscountsPaisa)}
+                    </span>
+                  </div>
+                )}
+
+                {doctorDiscountPaisa > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                    <span style={{ color: 'var(--color-on-surface-variant)' }}>Doctor / Courtesy Discount:</span>
+                    <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
+                      -{formatINR(doctorDiscountPaisa)}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>GST (0.0% Exempt):</span>
+                  <span style={{ fontFamily: 'var(--font-data)' }}>₹0.00</span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: '8px',
+                    borderTop: '2px solid #cbd5e1',
+                    marginTop: '4px',
+                  }}
+                >
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800 }}>
+                    Grand Total:
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: 'var(--color-primary)' }}>
+                    {formatINR(grandTotalPaisa)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Micro Audit Note */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
-            <span>Computer-generated official {documentType.toLowerCase()} • Valid without physical seal.</span>
-            <span>
-              Generated: {new Date().toLocaleDateString('en-IN')} {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST
-            </span>
+            {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
+            <div className="invoice-print-footer-wrap signature-block avoid-break">
+              <div className="invoice-print-signature-section">
+                {/* Signature Block aligned bottom-right with exact labels */}
+                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginLeft: 'auto' }}>
+                  <div style={{ height: '36px', display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
+                    {activePractitioner?.signatureDataUrl && (
+                      <img
+                        src={activePractitioner.signatureDataUrl}
+                        alt="Veterinarian Signature"
+                        style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
+                      />
+                    )}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-on-surface)' }}>
+                    <strong>Name:</strong> {doctorName}{doctorQual ? ` (${doctorQual})` : ''}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                    <strong>Registration Number:</strong> {rawReg || 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>
+                    Authorized Signatory
+                  </div>
+                </div>
+              </div>
+
+              {/* Micro Audit Note */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+                <span>Computer-generated official {documentType.toLowerCase()} • Valid without physical seal.</span>
+                <span>
+                  Generated: {new Date().toLocaleDateString('en-IN')} {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -85,13 +85,67 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
     throw new Error(`Target printable element "${String(elementOrId)}" not found in DOM.`);
   }
 
+  const atomicSelectors = [
+    '.avoid-break',
+    '.signature-block',
+    'tr',
+    '.medication-row',
+    '.stationery-signalment-grid',
+    '.stationery-findings-box',
+    '.stationery-advice-grid',
+    '.invoice-print-ledger-and-signoff',
+    '.invoice-print-ledger-grid',
+    '.invoice-print-footer-wrap',
+    '.invoice-print-signature-section',
+  ];
+
+  interface AvoidBreakBox {
+    topPx: number;
+    bottomPx: number;
+  }
+
+  const avoidBoxes: AvoidBreakBox[] = [];
+
   // Render element canvas at 2x resolution for print-grade clarity
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
-    windowWidth: element.scrollWidth || 794,
+    windowWidth: 1200,
+    onclone: (clonedDoc) => {
+      const target = (typeof elementOrId === 'string'
+        ? clonedDoc.getElementById(elementOrId)
+        : clonedDoc.getElementById(element.id)) ||
+        (element.className ? clonedDoc.querySelector(`.${element.className.split(' ')[0]}`) : null);
+
+      if (target) {
+        // Expand any narrow flex/grid workspace parents in the cloned document so sheet has true 794px width
+        let parent = target.parentElement;
+        while (parent && parent !== clonedDoc.body) {
+          parent.style.width = '1200px';
+          parent.style.maxWidth = 'none';
+          parent.style.display = 'block';
+          parent = parent.parentElement;
+        }
+
+        (target as HTMLElement).style.width = '794px';
+        (target as HTMLElement).style.maxWidth = '794px';
+        (target as HTMLElement).style.minWidth = '794px';
+        (target as HTMLElement).style.boxSizing = 'border-box';
+
+        // Measure avoidBoxes in the EXACT cloned target that html2canvas renders
+        const targetRect = target.getBoundingClientRect();
+        target.querySelectorAll(atomicSelectors.join(',')).forEach((el) => {
+          const rect = (el as HTMLElement).getBoundingClientRect();
+          const topPx = Math.round((rect.top - targetRect.top) * 2);
+          const bottomPx = Math.round((rect.bottom - targetRect.top) * 2);
+          if (bottomPx > topPx) {
+            avoidBoxes.push({ topPx, bottomPx });
+          }
+        });
+      }
+    },
   });
 
   const pdf = new jsPDF({
@@ -111,14 +165,17 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   const imgHeightPx = canvas.height;
   const totalHeightMm = (imgHeightPx * contentWidthMm) / imgWidthPx;
 
-  if (totalHeightMm <= contentHeightMm) {
+  // If height fits within page height (allowing 3mm tolerance for subpixel margins)
+  if (totalHeightMm <= contentHeightMm + 3) {
     // Fits comfortably on a single A4 page
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidthMm, totalHeightMm);
+    const renderHeightMm = Math.min(contentHeightMm, totalHeightMm);
+    pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidthMm, renderHeightMm);
   } else {
-    // Multi-page document: slice canvas page-by-page
+    // Multi-page document: smart boundary-aware canvas slicing
     const pxPerMm = imgWidthPx / contentWidthMm;
     const pageHeightPx = Math.floor(contentHeightMm * pxPerMm);
+
     let renderedHeightPx = 0;
     let pageIndex = 0;
 
@@ -127,7 +184,28 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
         pdf.addPage('a4', 'portrait');
       }
 
-      const sliceHeightPx = Math.min(pageHeightPx, imgHeightPx - renderedHeightPx);
+      let sliceHeightPx = Math.min(pageHeightPx, imgHeightPx - renderedHeightPx);
+      const tentativeCutPx = renderedHeightPx + sliceHeightPx;
+
+      // If this slice doesn't reach the end, verify if cut line intersects an indivisible block
+      if (tentativeCutPx < imgHeightPx) {
+        const intersectingBoxes = avoidBoxes.filter(
+          (b) =>
+            b.topPx < tentativeCutPx &&
+            b.bottomPx > tentativeCutPx &&
+            b.topPx > renderedHeightPx + pageHeightPx * 0.25
+        );
+
+        if (intersectingBoxes.length > 0) {
+          // Adjust cut line to just above the earliest intersecting element
+          const earliestTop = Math.min(...intersectingBoxes.map((b) => b.topPx));
+          const adjustedSlice = Math.floor(earliestTop - renderedHeightPx);
+          if (adjustedSlice > 0) {
+            sliceHeightPx = adjustedSlice;
+          }
+        }
+      }
+
       const pageCanvas = document.createElement('canvas');
       pageCanvas.width = imgWidthPx;
       pageCanvas.height = sliceHeightPx;
@@ -159,6 +237,10 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   }
 
   return pdf.output('blob');
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).generatePdfBlob = generatePdfBlob;
 }
 
 /**

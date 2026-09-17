@@ -78,8 +78,10 @@ export const PractitionerHeader: React.FC<PractitionerHeaderProps> = ({
 
           {/* Line 4. Registration Number */}
           {lines.regNumber && (
-            <div className="practitioner-header-reg">
-              {lines.regNumber}
+            <div className="practitioner-header-reg-wrap">
+              <span className="practitioner-header-reg-chip">
+                {lines.regNumber}
+              </span>
             </div>
           )}
 

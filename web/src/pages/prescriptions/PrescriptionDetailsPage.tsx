@@ -227,7 +227,9 @@ export const PrescriptionDetailsPage: React.FC = () => {
   });
 
   // Instruction points
-  const instructionList = prescription.instructions
+  const instructionList = Array.isArray(prescription.instructions)
+    ? prescription.instructions
+    : typeof prescription.instructions === 'string' && prescription.instructions.trim()
     ? prescription.instructions
         .split('\n')
         .map((s) => s.trim())
@@ -523,11 +525,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  paddingBottom: '10px',
+                  paddingBottom: '3px',
                   borderBottom: '1px solid #e2e8f0',
-                  marginBottom: '14px',
-                  gap: '12px',
-                  flexWrap: 'wrap',
+                  marginBottom: '4px',
+                  gap: '8px',
+                  flexWrap: 'nowrap',
                 }}
               >
                 <div className="prescription-doc-top-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
@@ -536,11 +538,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     className="prescription-doc-top-badge"
                     style={{
                       fontFamily: 'var(--font-data)',
-                      fontSize: '11px',
+                      fontSize: '10px',
                       fontWeight: 700,
                       letterSpacing: '0.05em',
                       textTransform: 'uppercase',
                       color: 'var(--color-outline)',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
@@ -552,24 +555,16 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    fontSize: '11px',
+                    fontSize: '10.5px',
                     fontFamily: 'var(--font-data)',
-                    flexWrap: 'wrap',
+                    flexWrap: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
                   <span style={{ color: 'var(--color-outline)' }}>
                     Doc Ref: <strong>{prescription.rxNumber}</strong>
                   </span>
-                  <span
-                    style={{
-                      background: 'var(--color-surface-container-high)',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontWeight: 600,
-                      color: 'var(--color-primary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <span className="document-badge">
                     Original Prescription
                   </span>
                 </div>
@@ -578,7 +573,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
               {/* ── Polished Letterhead Header Band ──────────────────── */}
               {hasClinic ? (
                 /* State A: CLINIC ACTIVE */
-                <div className="prescription-letterhead-band">
+                <div className="prescription-letterhead-band avoid-break">
                   {/* Clinic / Practice Block */}
                   <div className="letterhead-block">
                     <span className="letterhead-block-tag">
@@ -646,11 +641,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 </div>
               ) : (
                 /* State B: CLINIC OFF / INDEPENDENT PRACTITIONER */
-                <div className="prescription-letterhead-band">
+                <div className="prescription-letterhead-band avoid-break">
                   {/* Veterinarian Identity Hero Block */}
                   <div className="letterhead-block">
                     <span className="letterhead-block-tag">
-                      <Icon name="stethoscope" size={13} color="var(--color-primary)" />
                       Veterinary Practitioner
                     </span>
                     <div className="letterhead-practitioner-hero-row">
@@ -694,7 +688,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
               )}
 
               {/* Document Title & Meta Ribbon */}
-              <div className="stationery-title-ribbon">
+              <div className="stationery-title-ribbon avoid-break">
                 <div className="stationery-doc-title">
                   <Icon name="prescription" size={18} color="var(--color-primary)" />
                   <span>VETERINARY PRESCRIPTION</span>
@@ -710,7 +704,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
 
               {/* Owner & Patient Signalment Grid */}
-              <div className="stationery-signalment-grid">
+              <div className="stationery-signalment-grid avoid-break">
                 {/* Owner Block */}
                 <div className="stationery-signalment-box">
                   <div className="stationery-box-label">
@@ -751,27 +745,27 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
 
               {/* Clinical Symptoms & Diagnosis Findings */}
-              <div className="stationery-findings-box">
+              <div className="stationery-findings-box avoid-break">
                 <div>
                   <span className="stationery-box-label">Clinical Presentation</span>
-                  <p style={{ fontSize: '13px', color: 'var(--color-on-surface)', lineHeight: 1.4 }}>
+                  <p style={{ fontSize: '11.5px', color: 'var(--color-on-surface)', lineHeight: 1.25, margin: 0 }}>
                     {prescription.symptoms || 'None recorded'}
                   </p>
                 </div>
                 <div>
                   <span className="stationery-box-label">Confirmed Diagnosis</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
                     <span
                       style={{
-                        width: '8px',
-                        height: '8px',
+                        width: '7px',
+                        height: '7px',
                         borderRadius: '50%',
                         background: 'var(--color-error)',
                         display: 'inline-block',
                         flexShrink: 0,
                       }}
                     />
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0 }}>
                       {prescription.diagnosis || 'Clinical Examination / Prescribed Treatment'}
                     </p>
                   </div>
@@ -780,12 +774,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
 
               {/* Structured Medications Table */}
               <div className="rx-meds-table-container">
-                <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Icon name="pill" size={18} color="var(--color-primary)" />
+                <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '3px', marginBottom: '3px' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Icon name="pill" size={16} color="var(--color-primary)" />
                     Prescribed Medication Schedule
                   </span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
                     {items?.length || 0} Line Items
                   </span>
                 </div>
@@ -794,7 +788,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <table className="stationery-meds-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '36px', textAlign: 'center' }}>#</th>
+                        <th style={{ width: '28px', textAlign: 'center' }}>#</th>
                         <th>Medicine &amp; Formulation</th>
                         <th>Dose</th>
                         <th>Route</th>
@@ -806,22 +800,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <tbody>
                       {items && items.length > 0 ? (
                         items.map((item, idx) => (
-                          <tr key={item.id || idx}>
+                          <tr key={item.id || idx} className="medication-row avoid-break">
                             <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--color-outline)' }}>
                               {idx + 1}
                             </td>
                             <td>
-                              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '12px', lineHeight: 1.25, color: 'var(--color-on-surface)' }}>
                                 {item.brandName}
                               </div>
                               {item.genericName && (
-                                <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                                <div style={{ fontSize: '10.5px', lineHeight: 1.2, color: 'var(--color-on-surface-variant)' }}>
                                   {item.presentation} ({item.genericName})
                                 </div>
                               )}
                               {item.directions && (
                                 <div className="stationery-sig-box">
-                                  <strong>Sig:</strong> {item.directions}
+                                  <strong>Sig:</strong> {item.directions.replace(/^Sig:\s*/i, '')}
                                 </div>
                               )}
                             </td>
@@ -829,15 +823,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                               {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
                             </td>
                             <td>
-                              <span
-                                style={{
-                                  padding: '2px 8px',
-                                  background: 'var(--color-surface-container)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontFamily: 'var(--font-mono)',
-                                  fontSize: '11px',
-                                }}
-                              >
+                              <span className="stationery-route-box">
                                 {item.route || 'PO (Oral)'}
                               </span>
                             </td>
@@ -865,12 +851,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
 
               {/* Instructions & Clinical Advice for Owner */}
-              <div className="stationery-advice-grid">
+              <div className="stationery-advice-grid avoid-break">
                 <div className="stationery-signalment-box">
                   <span className="stationery-box-label">Special Instructions for Owner</span>
-                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: '13px', color: 'var(--color-on-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: '11px', color: 'var(--color-on-surface)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     {instructionList.map((inst, i) => (
-                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
                         <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>•</span>
                         <span>{inst}</span>
                       </li>
@@ -881,11 +867,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <div className="stationery-signalment-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <span className="stationery-box-label">Follow-Up Care Plan</span>
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '4px' }}>
+                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '12px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '2px', margin: 0 }}>
                       Recheck Recommended: {prescription.recheckIntervalCustom || prescription.recheckIntervalPreset || (followUpDays ? `${followUpDays} Days` : 'As needed')}
                     </p>
                     {followUpDays > 0 && (
-                      <p style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '4px', lineHeight: 1.4 }}>
+                      <p style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '2px', lineHeight: 1.25, margin: 0 }}>
                         Please schedule clinical recheck on or before <strong>{formattedFollowUpDate}</strong>.
                       </p>
                     )}
@@ -895,27 +881,29 @@ export const PrescriptionDetailsPage: React.FC = () => {
             </div>
 
             {/* Document Footer / Professional Sign-Off Block */}
-            <div className="stationery-signoff-row">
+            <div className="stationery-signoff-row signature-block avoid-break">
               <div className="stationery-signoff-box">
-                <div style={{ width: '160px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '8px' }}>
+                <div className="stationery-sig-img-container">
                   {activePractitioner?.signatureDataUrl ? (
                     <img
                       src={activePractitioner.signatureDataUrl}
                       alt="Doctor Signature"
-                      style={{ maxHeight: '44px', maxWidth: '150px', objectFit: 'contain' }}
+                      style={{ maxHeight: '28px', maxWidth: '130px', objectFit: 'contain' }}
                     />
                   ) : null}
                 </div>
                 <div className="stationery-sig-line"></div>
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                  {doctorName}, {doctorQual}
+                <span className="stationery-sig-name">
+                  {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
                 </span>
-                <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                <span className="stationery-sig-role">
                   Veterinarian in Charge
                 </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
-                  {doctorReg}
-                </span>
+                {doctorReg && (
+                  <span className="stationery-sig-reg">
+                    {doctorReg}
+                  </span>
+                )}
               </div>
             </div>
           </div>
