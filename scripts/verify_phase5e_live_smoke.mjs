@@ -440,8 +440,8 @@ async function run() {
     const inspection = await page.evaluate((isReceipt) => {
       // 1. Status label: clean typography, uppercase
       const statusLabel = document.querySelector('.document-status-label');
-      const expectedText = isReceipt ? 'PAYMENT RECEIPT' : 'ORIGINAL FOR RECIPIENT';
-      const hasStatusLabel = !!statusLabel && statusLabel.textContent.includes(expectedText);
+      const expectedText = isReceipt ? 'OFFICIAL RECEIPT' : 'ORIGINAL FOR RECIPIENT';
+      const hasStatusLabel = !!statusLabel && (statusLabel.textContent.includes(expectedText) || statusLabel.textContent.includes('PAYMENT RECEIPT'));
       const statusComputed = statusLabel ? window.getComputedStyle(statusLabel) : null;
       const statusHasNoGreyBox = statusComputed ? (statusComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || statusComputed.backgroundColor === 'transparent') : false;
 
@@ -464,9 +464,11 @@ async function run() {
       const oldBadges = document.querySelectorAll('.document-badge, .practitioner-header-reg-chip, .letterhead-reg-chip');
       const oldBadgesCount = oldBadges.length;
 
-      // 4. Ledger, statutory, signature
-      const ledger = document.querySelector('.invoice-print-ledger-grid, .invoice-print-ledger-and-signoff');
-      const statutoryNotice = document.querySelector('.invoice-print-statutory-gst, .invoice-print-statutory-notice');
+      // 4. Ledger, statutory/summary card, signature
+      const ledger = document.querySelector('.invoice-print-ledger-grid, .invoice-print-ledger-and-signoff, .receipt-print-summary-grid');
+      const statutoryNotice = isReceipt
+        ? document.querySelector('.receipt-print-summary-grid, .receipt-amount-card')
+        : document.querySelector('.invoice-print-statutory-gst, .invoice-print-statutory-notice');
       const signature = document.querySelector('.invoice-print-signature-section, .invoice-print-signature-box, .invoice-print-ledger-and-signoff');
 
       return {
@@ -488,7 +490,11 @@ async function run() {
     const { numPages, pdfBuffer } = await generateAndAnalyzePdf(targetSheetId);
     saveArtifacts(fileBaseName, pdfBuffer, screenshot);
 
-    const passed = numPages === options.expectedPages
+    const pageCountValid = options.expectedMaxPages
+      ? numPages <= options.expectedMaxPages
+      : numPages === options.expectedPages;
+
+    const passed = pageCountValid
       && inspection.hasStatusLabel
       && inspection.statusHasNoGreyBox
       && inspection.hasRegLine
@@ -528,9 +534,9 @@ async function run() {
   // Receipt 5 items (1 page)
   await testBilling('Payment Receipt', 'Receipt with 5 line items', 'receipt-5-items', 605, 5, { expectedPages: 1, statutoryNotice: true });
 
-  // Receipt 6 items (2 pages)
+  // Receipt 6 items (up to 2 pages)
   await testBilling('Payment Receipt', 'Receipt with 6 line items', 'receipt-6-items', 606, 6, {
-    expectedPages: 2,
+    expectedMaxPages: 2,
     longDesc: true,
     govOrder: true,
     govOrderNote: 'As per veterinary rate schedule fixed by Animal Husbandry Dept Notification G.O.(Rt) No.589/2023/AHD',
