@@ -48,7 +48,7 @@ describe('Clinical Fixes & Formatting Verification', () => {
       assert.equal(lines.name, 'Dr. Shameem Alungal');
       assert.equal(lines.qualifications, 'BVSc & AH, MVSc (Surgery)');
       assert.equal(lines.designation, 'Veterinary Surgeon & Consultant');
-      assert.equal(lines.regNumber, 'Reg. No: KVC 12345');
+      assert.equal(lines.regNumber, 'Reg. No.: KVC 12345');
       assert.equal(lines.contact, 'Mob: +91 98470 12345 • Email: drshameem@vetrx.in');
       assert.equal(lines.address, 'Malappuram Veterinary Clinic, Kerala');
     });
@@ -58,13 +58,16 @@ describe('Clinical Fixes & Formatting Verification', () => {
         id: 2,
         name: 'Dr. Fiza Sha',
         qualifications: 'BVSc & AH',
-        designation: 'Veterinary Physician',
         registrationNumber: '112233',
-        phone: '9876543210',
-        email: 'fiza@vetrx.in',
-        address: 'Calicut, Kerala',
         isActive: true,
       };
+
+      const lines = formatPractitionerHeaderLines(practitioner);
+
+      assert.equal(lines.clinicName, undefined);
+      assert.equal(lines.name, 'Dr. Fiza Sha');
+      assert.equal(lines.qualifications, 'BVSc & AH');
+      assert.equal(lines.regNumber, 'Reg. No.: 112233');
 
       const organisation: Organisation = {
         id: 1,
@@ -72,10 +75,10 @@ describe('Clinical Fixes & Formatting Verification', () => {
         isActive: false,
       };
 
-      const lines = formatPractitionerHeaderLines(practitioner, organisation);
-      assert.equal(lines.clinicName, undefined);
-      assert.equal(lines.name, 'Dr. Fiza Sha');
-      assert.equal(lines.regNumber, 'Reg. No: 112233');
+      const linesWithOrg = formatPractitionerHeaderLines(practitioner, organisation);
+      assert.equal(linesWithOrg.clinicName, undefined);
+      assert.equal(linesWithOrg.name, 'Dr. Fiza Sha');
+      assert.equal(linesWithOrg.regNumber, 'Reg. No.: 112233');
     });
   });
 

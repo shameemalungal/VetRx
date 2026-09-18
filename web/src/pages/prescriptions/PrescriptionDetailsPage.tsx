@@ -303,6 +303,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
     ? activeOrganisation.email.trim()
     : doctorEmail;
 
+  const effectiveDesignation = hasClinic
+    ? (activePractitioner?.designation?.trim() || (activeOrganisation as any)?.designation?.trim() || 'Veterinarian in Charge')
+    : (activePractitioner?.designation?.trim() || 'Independent Veterinary Practitioner');
+
   const isIssued = prescription.status === 'Issued';
   const isCancelled = prescription.status === 'Cancelled';
 
@@ -516,52 +520,19 @@ export const PrescriptionDetailsPage: React.FC = () => {
               )}
 
               {/* Shared Document Top Bar */}
-              <div
-                className="prescription-doc-top-bar"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingBottom: '3px',
-                  borderBottom: '1px solid #e2e8f0',
-                  marginBottom: '4px',
-                  gap: '8px',
-                  flexWrap: 'nowrap',
-                }}
-              >
-                <div className="prescription-doc-top-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                  <span
-                    className="prescription-doc-top-badge"
-                    style={{
-                      fontFamily: 'var(--font-data)',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      textTransform: 'uppercase',
-                      color: 'var(--color-outline)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+              <div className="prescription-doc-top-bar avoid-break">
+                <div className="prescription-doc-top-left">
+                  <span className="prescription-official-dot" />
+                  <span className="prescription-doc-top-badge">
                     OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
                   </span>
                 </div>
-                <div
-                  className="prescription-doc-top-right"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '10.5px',
-                    fontFamily: 'var(--font-data)',
-                    flexWrap: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  <span style={{ color: 'var(--color-outline)' }}>
+                <div className="prescription-doc-top-right">
+                  <span className="prescription-doc-ref">
                     Doc Ref: <strong>{prescription.rxNumber}</strong>
                   </span>
-                  <span className="document-status-label">
-                    ORIGINAL PRESCRIPTION
+                  <span className="document-badge-prescription">
+                    Original Prescription
                   </span>
                 </div>
               </div>
@@ -571,13 +542,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 /* State A: CLINIC ACTIVE */
                 <div className="prescription-letterhead-band avoid-break">
                   {/* Clinic / Practice Block */}
-                  <div className="letterhead-block">
+                  <div className="letterhead-block letterhead-clinic-block">
                     <span className="letterhead-block-tag">
                       <Icon name="hospital" size={13} color="var(--color-outline)" />
                       Clinic / Practice
                     </span>
                     <div className="letterhead-clinic-brand-row">
-                      <div className="letterhead-clinic-logo-box" style={{ overflow: 'hidden' }}>
+                      <div className="letterhead-clinic-logo-box">
                         {activeOrganisation?.logoDataUrl ? (
                           <img
                             src={activeOrganisation.logoDataUrl}
@@ -606,29 +577,23 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <div className="letterhead-block letterhead-veterinarian-block">
                     <span className="letterhead-block-tag">Veterinary Practitioner</span>
                     <div className="letterhead-practitioner-hero-row">
-                      {activePractitioner?.photoDataUrl ? (
-                        <div
-                          className="letterhead-practitioner-avatar"
-                          style={{ overflow: 'hidden' }}
-                        >
+                      <div className="letterhead-practitioner-avatar">
+                        {activePractitioner?.photoDataUrl ? (
                           <img
                             src={activePractitioner.photoDataUrl}
                             alt={doctorName}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
-                        </div>
-                      ) : (
-                        <div className="letterhead-practitioner-avatar">
+                        ) : (
                           <Icon name="stethoscope" size={20} color="#ffffff" />
-                        </div>
-                      )}
+                        )}
+                      </div>
                       <div className="letterhead-credentials-stack">
                         <h3 className="letterhead-doctor-name">{doctorName}</h3>
                         {doctorQual && <p className="letterhead-doctor-qual">{doctorQual}</p>}
                         {cleanDoctorReg && (
-                          <div className="registration-line">
-                            <span className="registration-label">Reg. No.:</span>{' '}
-                            <span className="registration-value">{cleanDoctorReg}</span>
+                          <div className="registration-pill">
+                            Reg. No.: {cleanDoctorReg}
                           </div>
                         )}
                       </div>
@@ -644,7 +609,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       Veterinary Practitioner
                     </span>
                     <div className="letterhead-practitioner-hero-row">
-                      <div className="letterhead-practitioner-avatar" style={{ overflow: 'hidden' }}>
+                      <div className="letterhead-practitioner-avatar">
                         {activePractitioner?.photoDataUrl ? (
                           <img
                             src={activePractitioner.photoDataUrl}
@@ -659,9 +624,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
                         <h2 className="letterhead-doctor-name-hero">{doctorName}</h2>
                         {doctorQual && <p className="letterhead-doctor-qual-hero">{doctorQual}</p>}
                         {cleanDoctorReg && (
-                          <div className="registration-line">
-                            <span className="registration-label">Reg. No.:</span>{' '}
-                            <span className="registration-value">{cleanDoctorReg}</span>
+                          <div className="registration-pill">
+                            Reg. No.: {cleanDoctorReg}
                           </div>
                         )}
                       </div>
@@ -673,11 +637,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <div className="letterhead-block letterhead-practitioner-contact-block">
                       <span className="letterhead-block-tag">Practice Location &amp; Contact</span>
                       {doctorAddress && (
-                        <p className="letterhead-location" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                        <p className="letterhead-location">
                           {doctorAddress}
                         </p>
                       )}
-                      <div className="letterhead-contact-line" style={{ justifyContent: 'flex-end', marginTop: '2px' }}>
+                      <div className="letterhead-contact-line">
                         {doctorPhone && <span>Ph: {doctorPhone}</span>}
                         {doctorPhone && doctorEmail && <span>•</span>}
                         {doctorEmail && <span>Email: {doctorEmail}</span>}
@@ -690,15 +654,15 @@ export const PrescriptionDetailsPage: React.FC = () => {
               {/* Document Title & Meta Ribbon */}
               <div className="stationery-title-ribbon avoid-break">
                 <div className="stationery-doc-title">
-                  <Icon name="prescription" size={18} color="var(--color-primary)" />
+                  <Icon name="prescription" size={17} color="var(--color-primary)" />
                   <span>VETERINARY PRESCRIPTION</span>
                 </div>
                 <div className="stationery-meta-right">
-                  <span>
+                  <span className="meta-pill">
                     Date: <strong>{formattedDate}</strong>
                   </span>
-                  <span>
-                    Rx No: <strong style={{ color: 'var(--color-primary)' }}>{prescription.rxNumber}</strong>
+                  <span className="meta-pill meta-pill-primary">
+                    Rx No: <strong>{prescription.rxNumber}</strong>
                   </span>
                 </div>
               </div>
@@ -823,12 +787,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
                               </div>
                             </td>
                             <td className="med-col-dose">
-                              <span className="dose-val">
+                              <span className="dose-badge">
                                 {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
                               </span>
                             </td>
                             <td className="med-col-route">
-                              <span className="stationery-route-box">
+                              <span className="route-badge">
                                 {item.route || 'PO (Oral)'}
                               </span>
                             </td>
@@ -879,7 +843,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <div>
                     <span className="stationery-box-label">Follow-Up Care Plan</span>
                     <p style={{ fontFamily: 'var(--font-heading)', fontSize: '12px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '2px', margin: 0 }}>
-                      Recheck Recommended: {prescription.recheckIntervalCustom || prescription.recheckIntervalPreset || (followUpDays ? `${followUpDays} Days` : 'As needed')}
+                      Recommended Re-evaluation: {prescription.recheckIntervalCustom || prescription.recheckIntervalPreset || (followUpDays ? `${followUpDays} Days` : 'As needed')}
                     </p>
                     {followUpDays > 0 && (
                       <p style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '2px', lineHeight: 1.25, margin: 0 }}>
@@ -899,22 +863,23 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     <img
                       src={activePractitioner.signatureDataUrl}
                       alt="Doctor Signature"
-                      style={{ maxHeight: '30px', maxWidth: '140px', objectFit: 'contain' }}
+                      style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
                     />
                   </div>
                 )}
                 <div className="stationery-sig-line" />
                 <div className="stationery-sig-credentials">
-                  <div className="stationery-sig-name">{doctorName}</div>
-                  <div className="stationery-sig-role">
-                    Veterinarian in Charge
+                  <div className="stationery-sig-name">
+                    {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
                   </div>
                   {cleanDoctorReg && (
-                    <div className="registration-line">
-                      <span className="registration-label">Reg. No.:</span>{' '}
-                      <span className="registration-value">{cleanDoctorReg}</span>
+                    <div className="stationery-sig-reg">
+                      Reg. No.: {cleanDoctorReg}
                     </div>
                   )}
+                  <div className="stationery-sig-role">
+                    {effectiveDesignation}
+                  </div>
                 </div>
               </div>
             </div>

@@ -132,6 +132,19 @@ export const InvoiceDetailsPage: React.FC = () => {
   const rawReg = activePractitioner?.registrationNumber?.trim() || '';
   const cleanReg = cleanRegistrationNumber(rawReg);
 
+  const rawOrgName = activeOrganisation?.name?.trim();
+  const hasClinic = Boolean(
+    activeOrganisation &&
+    activeOrganisation.isActive !== false &&
+    rawOrgName &&
+    rawOrgName.length > 0 &&
+    rawOrgName.toLowerCase() !== 'independent practitioner'
+  );
+
+  const effectiveDesignation = hasClinic
+    ? (activePractitioner?.designation?.trim() || (activeOrganisation as any)?.designation?.trim() || 'Veterinarian in Charge')
+    : (activePractitioner?.designation?.trim() || 'Independent Veterinary Practitioner');
+
   const handleCancelInvoice = async () => {
     if (!invoice?.id || invoice.status === 'Cancelled') return;
     const reason = window.prompt('Enter cancellation reason:');
@@ -780,10 +793,8 @@ export const InvoiceDetailsPage: React.FC = () => {
                   )}
                   <div className="invoice-sig-line" />
                   <div className="invoice-sig-credentials">
-                    <div className="invoice-sig-name">{doctorName}</div>
-                    {doctorQual && <div className="invoice-sig-qual">{doctorQual}</div>}
-                    <div className="invoice-sig-role">
-                      Authorized Signatory
+                    <div className="invoice-sig-name">
+                      {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
                     </div>
                     {cleanReg && (
                       <div className="registration-line">
@@ -791,6 +802,9 @@ export const InvoiceDetailsPage: React.FC = () => {
                         <span className="registration-value">{cleanReg}</span>
                       </div>
                     )}
+                    <div className="invoice-sig-role">
+                      {effectiveDesignation}
+                    </div>
                   </div>
                 </div>
               </div>
