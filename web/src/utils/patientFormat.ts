@@ -29,9 +29,13 @@ export function isArtificialOrBlankName(name?: string | null): boolean {
  *
  * Never outputs artificial placeholder names like "Unnamed", "Animal", or "Patient".
  */
-export function formatAnimalSubtitle(patient?: Partial<Patient> | null): string {
+export function formatAnimalSubtitle(
+  patient?: Partial<Patient> | null,
+  options?: { includeWeight?: boolean }
+): string {
   if (!patient) return '';
 
+  const includeWeight = options?.includeWeight ?? true;
   const parts: string[] = [];
 
   // 1. Name (only if real and non-artificial)
@@ -58,8 +62,8 @@ export function formatAnimalSubtitle(patient?: Partial<Patient> | null): string 
     }
   }
 
-  // 5. Weight
-  if (patient.weightKg !== undefined && patient.weightKg !== null && patient.weightKg > 0) {
+  // 5. Weight (omitted if caller explicitly sets includeWeight: false)
+  if (includeWeight && patient.weightKg !== undefined && patient.weightKg !== null && patient.weightKg > 0) {
     const formattedWeight = Number.isInteger(patient.weightKg)
       ? `${patient.weightKg} kg`
       : `${patient.weightKg.toFixed(1)} kg`;

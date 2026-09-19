@@ -165,8 +165,8 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   const imgHeightPx = canvas.height;
   const totalHeightMm = (imgHeightPx * contentWidthMm) / imgWidthPx;
 
-  // If height fits within page height (allowing 3mm tolerance for subpixel margins)
-  if (totalHeightMm <= contentHeightMm + 3) {
+  // If height fits within page height (allowing 8mm tolerance for subpixel margins/padding variations)
+  if (totalHeightMm <= contentHeightMm + 8) {
     // Fits comfortably on a single A4 page
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const renderHeightMm = Math.min(contentHeightMm, totalHeightMm);

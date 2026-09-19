@@ -693,7 +693,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
                     <div className="stationery-primary-name">
-                      {!isArtificialOrBlankName(patient?.name) ? patient?.name : (patient ? formatAnimalSubtitle(patient) : '')}
+                      {!isArtificialOrBlankName(patient?.name) ? patient?.name : (patient ? formatAnimalSubtitle(patient, { includeWeight: false }) : '')}
                     </div>
                     <span className="stationery-weight-badge">{effectiveWeight}</span>
                   </div>
@@ -752,13 +752,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
                   <table className="stationery-meds-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '28px', textAlign: 'center' }}>#</th>
-                        <th style={{ textAlign: 'left' }}>Medicine &amp; Formulation</th>
-                        <th style={{ textAlign: 'center' }}>Dose</th>
-                        <th style={{ textAlign: 'center' }}>Route</th>
-                        <th style={{ textAlign: 'center' }}>Frequency</th>
-                        <th style={{ textAlign: 'center' }}>Duration</th>
-                        <th style={{ textAlign: 'right' }}>Quantity</th>
+                        <th className="col-num" style={{ width: '28px', textAlign: 'center' }}>#</th>
+                        <th className="col-name" style={{ textAlign: 'left' }}>Medicine &amp; Formulation</th>
+                        <th className="col-dose" style={{ textAlign: 'center' }}>Dose</th>
+                        <th className="col-route" style={{ textAlign: 'center' }}>Route</th>
+                        <th className="col-freq" style={{ textAlign: 'center' }}>Frequency</th>
+                        <th className="col-dur" style={{ textAlign: 'center' }}>Duration</th>
+                        <th className="col-qty" style={{ textAlign: 'right' }}>Quantity</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -858,7 +858,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             {/* Document Footer / Professional Sign-Off Block */}
             <div className="stationery-signoff-row signature-block avoid-break">
               <div className="stationery-signoff-box">
-                {activePractitioner?.signatureDataUrl && (
+                {activePractitioner?.signatureDataUrl ? (
                   <div className="stationery-sig-img-container">
                     <img
                       src={activePractitioner.signatureDataUrl}
@@ -866,8 +866,9 @@ export const PrescriptionDetailsPage: React.FC = () => {
                       style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
                     />
                   </div>
+                ) : (
+                  <div className="stationery-sig-line" />
                 )}
-                <div className="stationery-sig-line" />
                 <div className="stationery-sig-credentials">
                   <div className="stationery-sig-name">
                     {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
