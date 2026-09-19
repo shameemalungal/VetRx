@@ -336,6 +336,10 @@
   flex: 1;
   padding: var(--space-lg) var(--space-xl);
   overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* ── Bottom Navigation (mobile floating capsule) ─────────────── */
@@ -917,7 +921,7 @@
 
 @media (max-width: 767px) {
   .page-content {
-    padding: var(--space-sm) var(--space-sm);
+    padding: 12px 10px;
     padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-xl));
   }
 }
