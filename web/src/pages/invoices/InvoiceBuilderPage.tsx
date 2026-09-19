@@ -20,6 +20,7 @@ import { formatINR, getNextInvoiceNumber, formatLocalDateInput } from './invoice
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
+import { formatInvoiceItemDescription } from '../../utils/documentFormat';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -419,12 +420,12 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     if (!importedList.length) return;
 
     const newDrafts: ItemDraft[] = importedList.map((imp, idx) => {
-      const dirStr = imp.directions ? ` (${imp.directions})` : '';
       const strVolStr = imp.strengthVolume ? ` ${imp.strengthVolume}` : '';
+      const cleanDesc = formatInvoiceItemDescription(imp.description) || `${imp.brandName}${strVolStr}`.trim();
       return {
         tempId: `imported_rx_${imp.prescriptionItemId || idx}_${Date.now()}_${idx}`,
         category: 'Prescription Medicine',
-        description: imp.description || `${imp.brandName}${strVolStr}${dirStr}`.trim(),
+        description: cleanDesc,
         quantity: Math.max(1, imp.quantity || 1),
         unit: imp.unit || 'tablets',
         unitPricePaisa: 0, // Safe default rate of 0

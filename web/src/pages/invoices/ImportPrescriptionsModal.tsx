@@ -234,9 +234,7 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
         const patSub = patient ? formatAnimalSubtitle(patient) : undefined;
         const ownName = formatOwnerPrimary(owner, 'Client');
 
-        const desc = `${itm.brandName}${itm.strengthVolume ? ' ' + itm.strengthVolume : ''}${
-          itm.directions ? ' (' + itm.directions + ')' : ''
-        }`;
+        const desc = `${itm.brandName}${itm.strengthVolume ? ' ' + itm.strengthVolume : ''}`.trim();
 
         selectedImports.push({
           prescriptionId: rx.id!,
