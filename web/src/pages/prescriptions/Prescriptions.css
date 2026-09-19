@@ -2173,17 +2173,17 @@
 }
 
 .stationery-meds-table th.col-num { width: 5%; text-align: center; }
-.stationery-meds-table th.col-name { width: 37%; text-align: left; }
-.stationery-meds-table th.col-dose { width: 11%; text-align: center; }
+.stationery-meds-table th.col-name { width: 34%; text-align: left; }
+.stationery-meds-table th.col-dose { width: 14%; text-align: center; }
 .stationery-meds-table th.col-route { width: 14%; text-align: center; }
 .stationery-meds-table th.col-freq { width: 13%; text-align: center; }
 .stationery-meds-table th.col-dur { width: 9%; text-align: center; }
 .stationery-meds-table th.col-qty { width: 11%; text-align: right; }
 
 .stationery-meds-table td {
-  padding: 5px 6px;
+  padding: 6px 6px;
   border-bottom: 1px solid #e2e8f0;
-  vertical-align: top;
+  vertical-align: middle;
   box-sizing: border-box;
 }
 
@@ -2246,12 +2246,14 @@
   font-size: 10.5px;
   color: #64748b;
   text-align: center;
-  padding-top: 6px !important;
+  vertical-align: middle !important;
+  padding: 6px 4px !important;
 }
 
 .med-col-dose {
   text-align: center;
-  padding-top: 5px !important;
+  vertical-align: middle !important;
+  padding: 6px 4px !important;
 }
 
 .dose-badge {
@@ -2260,19 +2262,24 @@
   justify-content: center;
   background: #e6fffa;
   color: #0f766e;
-  border-radius: 9999px;
-  padding: 2px 7px;
+  border-radius: 4px;
+  padding: 3px 8px 4px 8px;
   font-family: var(--font-body, inherit);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
   box-sizing: border-box;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .med-col-route {
   text-align: center;
-  padding-top: 5px !important;
+  vertical-align: middle !important;
+  padding: 6px 4px !important;
 }
 
 .route-badge {
@@ -2281,30 +2288,36 @@
   justify-content: center;
   background: #f1f5f9;
   color: #334155;
-  border-radius: 9999px;
-  padding: 2px 7px;
+  border-radius: 4px;
+  padding: 3px 8px 4px 8px;
   font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
   box-sizing: border-box;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .med-col-freq {
   font-family: var(--font-body, inherit);
   font-weight: 600;
   font-size: 10.5px;
-  padding-top: 6px !important;
   text-align: center;
+  vertical-align: middle !important;
+  padding: 6px 4px !important;
   color: #334155;
 }
 
 .med-col-dur {
   font-family: var(--font-body, inherit);
   font-size: 10.5px;
-  padding-top: 6px !important;
   text-align: center;
+  vertical-align: middle !important;
+  padding: 6px 4px !important;
   color: #334155;
 }
 
@@ -2314,8 +2327,8 @@
   font-size: 11px;
   color: #0f172a;
   text-align: right;
-  padding-right: 8px !important;
-  padding-top: 6px !important;
+  vertical-align: middle !important;
+  padding: 6px 8px 6px 4px !important;
 }
 
 /* ── Instructions & Clinical Advice ─────────────────────────── */

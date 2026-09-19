@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { Icon } from '../ui/Icon';
-import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
+import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName, formatPatientAge } from '../../utils/patientFormat';
 import type { Prescription, PrescriptionItem, Patient, Owner, Practitioner, Organisation } from '../../types';
 import './DocumentStyles.css';
 
@@ -282,7 +282,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
           </p>
           <p className="stationery-sub-text">
             {patient?.sex && patient.sex !== 'Unknown' ? `${patient.sex}` : ''}
-            {patient?.ageNote ? ` • ${patient.ageNote}` : ''}
+            {formatPatientAge(patient) ? ` • ${formatPatientAge(patient)}` : ''}
             {patient?.identificationRef ? ` • Ear Tag: ${patient.identificationRef}` : ''}
           </p>
         </div>
@@ -298,7 +298,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
         </div>
         <div>
           <span className="stationery-box-label">Confirmed Diagnosis</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
             <span
               style={{
                 width: '7px',
@@ -309,7 +309,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
                 flexShrink: 0,
               }}
             />
-            <p style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0 }}>
+            <p style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0, lineHeight: 1.25 }}>
               {prescription.diagnosis || 'Clinical Examination / Prescribed Treatment'}
             </p>
           </div>

@@ -98,3 +98,86 @@ export function formatOwnerPrimary(owner?: Partial<Owner> | null, fallback = 'Cl
   }
   return owner.name.trim();
 }
+
+/**
+ * Formats patient age with clear units (e.g. "2 years", "6 months", "1 year 3 months").
+ * Handles raw numeric inputs ("2", "1.5"), abbreviated strings ("2y", "6m"),
+ * existing descriptive notes ("2 years", "Adult"), and dates of birth.
+ */
+export function formatPatientAge(patient?: Partial<Patient> | null): string {
+  if (!patient) return '';
+
+  const raw = patient.ageNote?.trim();
+  if (raw) {
+    // Check if it's already a full human phrase with units like "years", "months", "weeks", "days"
+    if (/\b(year|yr|month|mo|week|wk|day)\b/i.test(raw)) {
+      return raw;
+    }
+
+    // Check if it's a pure number or decimal e.g. "2", "2.5", "1", "0.5"
+    const numeric = parseFloat(raw);
+    if (!isNaN(numeric) && /^\d+(\.\d+)?$/.test(raw)) {
+      if (numeric === 1) return '1 year';
+      if (numeric > 0 && numeric < 1) {
+        const mos = Math.round(numeric * 12);
+        return mos === 1 ? '1 month' : `${mos} months`;
+      }
+      if (numeric >= 1) {
+        return Number.isInteger(numeric) ? `${numeric} years` : `${numeric} years`;
+      }
+    }
+
+    // Check abbreviated strings like "2y", "2 y", "6m", "6 m", "3w", "4d"
+    const matchY = raw.match(/^(\d+(?:\.\d+)?)\s*y(?:ears?|rs?)?$/i);
+    if (matchY) {
+      const val = parseFloat(matchY[1]);
+      return val === 1 ? '1 year' : `${val} years`;
+    }
+
+    const matchM = raw.match(/^(\d+(?:\.\d+)?)\s*m(?:onths?|os?)?$/i);
+    if (matchM) {
+      const val = parseFloat(matchM[1]);
+      return val === 1 ? '1 month' : `${val} months`;
+    }
+
+    const matchW = raw.match(/^(\d+)\s*w(?:eeks?|ks?)?$/i);
+    if (matchW) {
+      const val = parseInt(matchW[1], 10);
+      return val === 1 ? '1 week' : `${val} weeks`;
+    }
+
+    const matchD = raw.match(/^(\d+)\s*d(?:ays?)?$/i);
+    if (matchD) {
+      const val = parseInt(matchD[1], 10);
+      return val === 1 ? '1 day' : `${val} days`;
+    }
+
+    // If it's a qualitative note like "Adult", "Senior", "Puppy", preserve it
+    return raw;
+  }
+
+  // Fallback to dateOfBirth if ageNote is not provided
+  if (patient.dateOfBirth) {
+    const now = new Date();
+    const dob = new Date(patient.dateOfBirth);
+    if (!isNaN(dob.getTime())) {
+      const months = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+      if (months <= 0) {
+        const diffDays = Math.max(1, Math.floor((now.getTime() - dob.getTime()) / (1000 * 60 * 60 * 24)));
+        return diffDays === 1 ? '1 day' : `${diffDays} days`;
+      }
+      if (months < 12) {
+        return months === 1 ? '1 month' : `${months} months`;
+      }
+      const years = Math.floor(months / 12);
+      const remMonths = months % 12;
+      if (remMonths > 0) {
+        return `${years} ${years === 1 ? 'year' : 'years'} ${remMonths} ${remMonths === 1 ? 'month' : 'months'}`;
+      }
+      return years === 1 ? '1 year' : `${years} years`;
+    }
+  }
+
+  return '';
+}
+
