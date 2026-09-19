@@ -97,6 +97,10 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
     '.invoice-print-ledger-grid',
     '.invoice-print-footer-wrap',
     '.invoice-print-signature-section',
+    '.prescription-sig-box',
+    '.invoice-sig-box',
+    '.receipt-sig-box',
+    '.prescription-legal-footer',
   ];
 
   interface AvoidBreakBox {
@@ -114,25 +118,50 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
     backgroundColor: '#ffffff',
     windowWidth: 1200,
     onclone: (clonedDoc) => {
+      clonedDoc.body.classList.add('generating-pdf');
+
       const target = (typeof elementOrId === 'string'
         ? clonedDoc.getElementById(elementOrId)
         : clonedDoc.getElementById(element.id)) ||
         (element.className ? clonedDoc.querySelector(`.${element.className.split(' ')[0]}`) : null);
 
       if (target) {
-        // Expand any narrow flex/grid workspace parents in the cloned document so sheet has true 794px width
+        // Strip any screen container styles from parents up to body so sheet has true 794px width
         let parent = target.parentElement;
         while (parent && parent !== clonedDoc.body) {
           parent.style.width = '1200px';
           parent.style.maxWidth = 'none';
           parent.style.display = 'block';
+          parent.style.border = 'none';
+          parent.style.borderRadius = '0';
+          parent.style.boxShadow = 'none';
+          parent.style.padding = '0';
+          parent.style.margin = '0';
+          parent.style.background = 'transparent';
           parent = parent.parentElement;
         }
 
-        (target as HTMLElement).style.width = '794px';
-        (target as HTMLElement).style.maxWidth = '794px';
-        (target as HTMLElement).style.minWidth = '794px';
-        (target as HTMLElement).style.boxSizing = 'border-box';
+        const targetEl = target as HTMLElement;
+        targetEl.style.width = '794px';
+        targetEl.style.maxWidth = '794px';
+        targetEl.style.minWidth = '794px';
+        targetEl.style.boxSizing = 'border-box';
+        targetEl.style.border = 'none';
+        targetEl.style.borderRadius = '0';
+        targetEl.style.boxShadow = 'none';
+        targetEl.style.padding = '0';
+        targetEl.style.margin = '0';
+        targetEl.style.background = '#ffffff';
+
+        // Strip any screen preview borders/paddings from inner wrappers
+        target.querySelectorAll('.invoice-a4-sheet, .rx-a4-sheet, .prescription-sheet-wrapper, .invoice-sheet-container').forEach((wrapper) => {
+          const w = wrapper as HTMLElement;
+          w.style.border = 'none';
+          w.style.borderRadius = '0';
+          w.style.boxShadow = 'none';
+          w.style.padding = '0';
+          w.style.margin = '0';
+        });
 
         // Measure avoidBoxes in the EXACT cloned target that html2canvas renders
         const targetRect = target.getBoundingClientRect();
@@ -165,12 +194,16 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   const imgHeightPx = canvas.height;
   const totalHeightMm = (imgHeightPx * contentWidthMm) / imgWidthPx;
 
-  // If height fits within page height (allowing 8mm tolerance for subpixel margins/padding variations)
-  if (totalHeightMm <= contentHeightMm + 8) {
-    // Fits comfortably on a single A4 page
+  // If height fits within page height (allowing 12mm tolerance for subpixel font/table variations)
+  if (totalHeightMm <= contentHeightMm + 12) {
+    // Fits comfortably on a single A4 page with preserved aspect ratio
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    const renderHeightMm = Math.min(contentHeightMm, totalHeightMm);
-    pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidthMm, renderHeightMm);
+    const scaleFactor = Math.min(1, contentHeightMm / totalHeightMm);
+    const renderWidthMm = contentWidthMm * scaleFactor;
+    const renderHeightMm = totalHeightMm * scaleFactor;
+    const offsetX = (pageWidthMm - renderWidthMm) / 2;
+    const offsetY = marginMm;
+    pdf.addImage(imgData, 'JPEG', offsetX, offsetY, renderWidthMm, renderHeightMm);
   } else {
     // Multi-page document: smart boundary-aware canvas slicing
     const pxPerMm = imgWidthPx / contentWidthMm;

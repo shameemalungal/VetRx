@@ -10,11 +10,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
-import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import { CreatePackageFromPrescriptionModal } from './CreatePackageFromPrescriptionModal';
 import { generatePdfBlob, savePdfWithFilePicker, buildPrescriptionFilename } from '../../utils/pdfGenerator';
 import { ShareModal } from '../../components/ui/ShareModal';
-import { cleanRegistrationNumber } from '../../utils/practitionerFormat';
+import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
 import './Prescriptions.css';
 
 export const PrescriptionDetailsPage: React.FC = () => {
@@ -219,30 +219,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
     year: 'numeric',
   });
 
-  const followUpDays = prescription.followUpDays || 7;
-  const followUpDate = new Date(createdDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
-  const formattedFollowUpDate = followUpDate.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-
-  // Instruction points
-  const instructionList = Array.isArray(prescription.instructions)
-    ? prescription.instructions
-    : typeof prescription.instructions === 'string' && prescription.instructions.trim()
-    ? prescription.instructions
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [
-        'Give oral medicines strictly following a meal.',
-        'Keep treated area clean and dry during recovery.',
-        'Fit protective Elizabethan collar if persistent licking or scratching resumes.',
-        'Complete entire antimicrobial regimen even if clinical signs resolve earlier.',
-      ];
-
-  const effectiveWeight = patient?.weightKg ? `${patient.weightKg.toFixed(1)} kg` : 'Weight N/A';
 
   // ── Resolve Active Practitioner & Organisation ───────────────
   // Preference order:
@@ -261,51 +237,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const activeOrganisation =
     storeOrganisation && storeOrganisation.isActive !== false ? storeOrganisation : null;
 
-  // Doctor credentials
   const doctorName = activePractitioner?.name?.trim() || 'Veterinarian';
   const doctorQual = activePractitioner?.qualifications?.trim() || '';
-  const cleanDoctorReg = cleanRegistrationNumber(activePractitioner?.registrationNumber);
-
-  const doctorAddress = activePractitioner?.address?.trim() || '';
-  const doctorPhone = activePractitioner?.phone?.trim() || '';
-  const doctorEmail = activePractitioner?.email?.trim() || '';
-
-  // ── Practice / Clinic Identity State ───────────────────────────
-  // CRITICAL REQUIREMENT:
-  // - RULE 1: CLINIC ACTIVE -> Show Clinic/Practice info + Veterinarian info
-  // - RULE 2: CLINIC OFF / INDEPENDENT PRACTITIONER -> DO NOT display clinic name.
-  //   Never display "Dr. Shameem Alungal's Vet Clinic" or "— Veterinary Practice" or any fake clinic.
-  //   Show ONLY veterinarian identity and contact.
-  const rawOrgName = activeOrganisation?.name?.trim();
-  const hasClinic = Boolean(
-    activeOrganisation &&
-    activeOrganisation.isActive !== false &&
-    rawOrgName &&
-    rawOrgName.length > 0 &&
-    rawOrgName.toLowerCase() !== 'independent practitioner'
-  );
-
-  const clinicName = hasClinic ? rawOrgName! : '';
-  const formattedClinicAddress = hasClinic
-    ? [
-        activeOrganisation?.address?.trim(),
-        activeOrganisation?.city?.trim(),
-        activeOrganisation?.state?.trim() && activeOrganisation?.pincode?.trim()
-          ? `${activeOrganisation.state.trim()} - ${activeOrganisation.pincode.trim()}`
-          : (activeOrganisation?.state?.trim() || activeOrganisation?.pincode?.trim()),
-      ].filter(Boolean).join(', ')
-    : '';
-  const clinicAddress = formattedClinicAddress || doctorAddress;
-  const clinicPhone = (hasClinic && activeOrganisation?.phone?.trim())
-    ? activeOrganisation.phone.trim()
-    : doctorPhone;
-  const clinicEmail = (hasClinic && activeOrganisation?.email?.trim())
-    ? activeOrganisation.email.trim()
-    : doctorEmail;
-
-  const effectiveDesignation = hasClinic
-    ? (activePractitioner?.designation?.trim() || (activeOrganisation as any)?.designation?.trim() || 'Veterinarian in Charge')
-    : (activePractitioner?.designation?.trim() || 'Independent Veterinary Practitioner');
 
   const isIssued = prescription.status === 'Issued';
   const isCancelled = prescription.status === 'Cancelled';
@@ -488,403 +421,45 @@ export const PrescriptionDetailsPage: React.FC = () => {
       <div className="rx-preview-workspace">
         {/* Left Column: Dominant A4 Realistic Medical Stationery */}
         <div className="prescription-sheet-wrapper" id="printable-prescription-wrapper">
-          <div id="prescription-sheet">
-            <div>
-              {/* Prominent Cancellation Banner if Cancelled */}
-              {isCancelled && (
-                <div
-                  style={{
-                    background: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    color: '#991b1b',
-                  }}
-                >
-                  <Icon name="warning" size={20} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
-                    <strong>CANCELLED PRESCRIPTION:</strong> This prescription was cancelled
-                    {prescription.cancelledAt ? ` on ${new Date(prescription.cancelledAt).toLocaleDateString('en-GB')}` : ''}.
-                    {prescription.cancellationReason && (
-                      <span> Reason: <em>{prescription.cancellationReason}</em></span>
-                    )}
-                    <span style={{ display: 'block', fontSize: '11px', color: '#b91c1c', marginTop: '2px' }}>
-                      Preserved for clinical history. Use "Clone Prescription" to create a new editable version.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Shared Document Top Bar */}
-              <div className="prescription-doc-top-bar avoid-break">
-                <div className="prescription-doc-top-left">
-                  <span className="prescription-official-dot" />
-                  <span className="prescription-doc-top-badge">
-                    OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
-                  </span>
-                </div>
-                <div className="prescription-doc-top-right">
-                  <span className="prescription-doc-ref">
-                    Doc Ref: <strong>{prescription.rxNumber}</strong>
-                  </span>
-                  <span className="document-badge-prescription">
-                    Original Prescription
-                  </span>
-                </div>
-              </div>
-
-              {/* ── Polished Letterhead Header Band ──────────────────── */}
-              {hasClinic ? (
-                /* State A: CLINIC ACTIVE */
-                <div className="prescription-letterhead-band avoid-break">
-                  {/* Clinic / Practice Block */}
-                  <div className="letterhead-block letterhead-clinic-block">
-                    <span className="letterhead-block-tag">
-                      <Icon name="hospital" size={13} color="var(--color-outline)" />
-                      Clinic / Practice
-                    </span>
-                    <div className="letterhead-clinic-brand-row">
-                      <div className="letterhead-clinic-logo-box">
-                        {activeOrganisation?.logoDataUrl ? (
-                          <img
-                            src={activeOrganisation.logoDataUrl}
-                            alt="Clinic Logo"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <Icon name="stethoscope" size={20} color="#ffffff" />
-                        )}
-                      </div>
-                      <div>
-                        <h2 className="letterhead-clinic-name">{clinicName}</h2>
-                        {clinicAddress && <p className="letterhead-location">{clinicAddress}</p>}
-                        {(clinicPhone || clinicEmail) && (
-                          <div className="letterhead-contact-line">
-                            {clinicPhone && <span>Ph: {clinicPhone}</span>}
-                            {clinicPhone && clinicEmail && <span>•</span>}
-                            {clinicEmail && <span>Email: {clinicEmail}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Veterinarian Block */}
-                  <div className="letterhead-block letterhead-veterinarian-block">
-                    <span className="letterhead-block-tag">Veterinary Practitioner</span>
-                    <div className="letterhead-practitioner-hero-row">
-                      <div className="letterhead-practitioner-avatar">
-                        {activePractitioner?.photoDataUrl ? (
-                          <img
-                            src={activePractitioner.photoDataUrl}
-                            alt={doctorName}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Icon name="stethoscope" size={20} color="#ffffff" />
-                        )}
-                      </div>
-                      <div className="letterhead-credentials-stack">
-                        <h3 className="letterhead-doctor-name">{doctorName}</h3>
-                        {doctorQual && <p className="letterhead-doctor-qual">{doctorQual}</p>}
-                        {cleanDoctorReg && (
-                          <div className="registration-pill">
-                            Reg. No.: {cleanDoctorReg}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* State B: CLINIC OFF / INDEPENDENT PRACTITIONER */
-                <div className="prescription-letterhead-band avoid-break">
-                  {/* Veterinarian Identity Hero Block */}
-                  <div className="letterhead-block">
-                    <span className="letterhead-block-tag">
-                      Veterinary Practitioner
-                    </span>
-                    <div className="letterhead-practitioner-hero-row">
-                      <div className="letterhead-practitioner-avatar">
-                        {activePractitioner?.photoDataUrl ? (
-                          <img
-                            src={activePractitioner.photoDataUrl}
-                            alt={doctorName}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Icon name="stethoscope" size={20} color="#ffffff" />
-                        )}
-                      </div>
-                      <div className="letterhead-credentials-stack">
-                        <h2 className="letterhead-doctor-name-hero">{doctorName}</h2>
-                        {doctorQual && <p className="letterhead-doctor-qual-hero">{doctorQual}</p>}
-                        {cleanDoctorReg && (
-                          <div className="registration-pill">
-                            Reg. No.: {cleanDoctorReg}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Practice Location & Direct Contact Block (omitted if no contact info) */}
-                  {(doctorAddress || doctorPhone || doctorEmail) && (
-                    <div className="letterhead-block letterhead-practitioner-contact-block">
-                      <span className="letterhead-block-tag">Practice Location &amp; Contact</span>
-                      {doctorAddress && (
-                        <p className="letterhead-location">
-                          {doctorAddress}
-                        </p>
-                      )}
-                      <div className="letterhead-contact-line">
-                        {doctorPhone && <span>Ph: {doctorPhone}</span>}
-                        {doctorPhone && doctorEmail && <span>•</span>}
-                        {doctorEmail && <span>Email: {doctorEmail}</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Document Title & Meta Ribbon */}
-              <div className="stationery-title-ribbon avoid-break">
-                <div className="stationery-doc-title">
-                  <Icon name="prescription" size={17} color="var(--color-primary)" />
-                  <span>VETERINARY PRESCRIPTION</span>
-                </div>
-                <div className="stationery-meta-right">
-                  <span className="meta-pill">
-                    Date: <strong>{formattedDate}</strong>
-                  </span>
-                  <span className="meta-pill meta-pill-primary">
-                    Rx No: <strong>{prescription.rxNumber}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* Owner & Patient Signalment Grid */}
-              <div className="stationery-signalment-grid avoid-break">
-                {/* Owner Block */}
-                <div className="stationery-signalment-box">
-                  <div className="stationery-box-label">
-                    <Icon name="owner" size={14} />
-                    <span>Owner Details</span>
-                  </div>
-                  <div className="stationery-primary-name">{formatOwnerPrimary(owner, 'Client')}</div>
-                  {owner?.phone && <p className="stationery-sub-text">Ph: {owner.phone}</p>}
-                  {owner?.address && <p className="stationery-sub-text">{owner.address}</p>}
-                </div>
-
-                {/* Patient Animal Block */}
-                <div className="stationery-signalment-box">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div className="stationery-box-label" style={{ marginBottom: 0 }}>
-                      <Icon name="paw" size={14} />
-                      <span>Animal Details</span>
-                    </div>
-                    <span className="stationery-id-code">
-                      ID: {patient?.identificationRef || (patient?.id ? `PT-2026-${patient.id.toString().padStart(4, '0')}` : 'PT-RECORD')}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                    <div className="stationery-primary-name">
-                      {!isArtificialOrBlankName(patient?.name) ? patient?.name : (patient ? formatAnimalSubtitle(patient, { includeWeight: false }) : '')}
-                    </div>
-                    <span className="stationery-weight-badge">{effectiveWeight}</span>
-                  </div>
-                  <p className="stationery-sub-text">
-                    {patient?.species} {patient?.breed ? `• ${patient.breed}` : ''}
-                  </p>
-                  <p className="stationery-sub-text">
-                    {patient?.sex && patient.sex !== 'Unknown' ? `${patient.sex}` : ''}
-                    {patient?.ageNote ? ` • ${patient.ageNote}` : ''}
-                    {patient?.identificationRef ? ` • Ear Tag: ${patient.identificationRef}` : ''}
-                  </p>
-                </div>
-              </div>
-
-              {/* Clinical Symptoms & Diagnosis Findings */}
-              <div className="stationery-findings-box avoid-break">
-                <div>
-                  <span className="stationery-box-label">Clinical Presentation</span>
-                  <p style={{ fontSize: '11.5px', color: 'var(--color-on-surface)', lineHeight: 1.25, margin: 0 }}>
-                    {prescription.symptoms || 'None recorded'}
-                  </p>
-                </div>
-                <div>
-                  <span className="stationery-box-label">Confirmed Diagnosis</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
-                    <span
-                      style={{
-                        width: '7px',
-                        height: '7px',
-                        borderRadius: '50%',
-                        background: 'var(--color-error)',
-                        display: 'inline-block',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0 }}>
-                      {prescription.diagnosis || 'Clinical Examination / Prescribed Treatment'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Structured Medications Table */}
-              <div className="rx-meds-table-container">
-                <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '3px', marginBottom: '3px' }}>
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Icon name="pill" size={16} color="var(--color-primary)" />
-                    Prescribed Medication Schedule
-                  </span>
-                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
-                    {items?.length || 0} Line Items
-                  </span>
-                </div>
-
-                <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-surface-container)' }}>
-                  <table className="stationery-meds-table">
-                    <thead>
-                      <tr>
-                        <th className="col-num" style={{ width: '28px', textAlign: 'center' }}>#</th>
-                        <th className="col-name" style={{ textAlign: 'left' }}>Medicine &amp; Formulation</th>
-                        <th className="col-dose" style={{ textAlign: 'center' }}>Dose</th>
-                        <th className="col-route" style={{ textAlign: 'center' }}>Route</th>
-                        <th className="col-freq" style={{ textAlign: 'center' }}>Frequency</th>
-                        <th className="col-dur" style={{ textAlign: 'center' }}>Duration</th>
-                        <th className="col-qty" style={{ textAlign: 'right' }}>Quantity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items && items.length > 0 ? (
-                        items.map((item, idx) => (
-                          <tr key={item.id || idx} className="medication-row avoid-break">
-                            <td className="med-col-num">
-                              {idx + 1}
-                            </td>
-                            <td className="med-col-name">
-                              <div className="medication-cell">
-                                <div className="medication-name">
-                                  {item.brandName}
-                                </div>
-                                {item.genericName && (
-                                  <div className="medication-generic">
-                                    {item.presentation ? `${item.presentation} ` : ''}({item.genericName})
-                                  </div>
-                                )}
-                                {item.directions && (
-                                  <div className="stationery-sig-box">
-                                    <span className="sig-label">Sig:</span>{' '}
-                                    <span className="sig-text">{item.directions.replace(/^Sig:\s*/i, '')}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="med-col-dose">
-                              <span className="dose-badge">
-                                {item.dose ? `${item.dose} ${item.doseUnit || ''}`.trim() : item.strengthVolume || '1 tab'}
-                              </span>
-                            </td>
-                            <td className="med-col-route">
-                              <span className="route-badge">
-                                {item.route || 'PO (Oral)'}
-                              </span>
-                            </td>
-                            <td className="med-col-freq">
-                              <span className="freq-val">
-                                {item.frequency || 'BID (q12h)'}
-                              </span>
-                            </td>
-                            <td className="med-col-dur">
-                              <span className="dur-val">
-                                {item.durationDays ? `${item.durationDays} days` : '5 days'}
-                              </span>
-                            </td>
-                            <td className="med-col-qty">
-                              <span className="qty-val">
-                                {item.quantity} {item.dispenseUnit || item.unit || 'Tabs'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-on-surface-variant)' }}>
-                            No medicines attached to this prescription.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Instructions & Clinical Advice for Owner */}
-              <div className="stationery-advice-grid avoid-break">
-                <div className="stationery-signalment-box">
-                  <span className="stationery-box-label">Special Instructions for Owner</span>
-                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: '11px', color: 'var(--color-on-surface)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {instructionList.map((inst, i) => (
-                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>•</span>
-                        <span>{inst}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="stationery-signalment-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <span className="stationery-box-label">Follow-Up Care Plan</span>
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '12px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '2px', margin: 0 }}>
-                      Recommended Re-evaluation: {prescription.recheckIntervalCustom || prescription.recheckIntervalPreset || (followUpDays ? `${followUpDays} Days` : 'As needed')}
-                    </p>
-                    {followUpDays > 0 && (
-                      <p style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)', marginTop: '2px', lineHeight: 1.25, margin: 0 }}>
-                        Please schedule clinical recheck on or before <strong>{formattedFollowUpDate}</strong>.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Document Footer / Professional Sign-Off Block */}
-            <div className="stationery-signoff-row signature-block avoid-break">
-              <div className="stationery-signoff-box">
-                {activePractitioner?.signatureDataUrl ? (
-                  <div className="stationery-sig-img-container">
-                    <img
-                      src={activePractitioner.signatureDataUrl}
-                      alt="Doctor Signature"
-                      style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
-                    />
-                  </div>
-                ) : (
-                  <div className="stationery-sig-line" />
+          {/* Prominent Cancellation Banner if Cancelled */}
+          {isCancelled && (
+            <div
+              className="no-print"
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                color: '#991b1b',
+              }}
+            >
+              <Icon name="warning" size={20} color="#dc2626" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
+                <strong>CANCELLED PRESCRIPTION:</strong> This prescription was cancelled
+                {prescription.cancelledAt ? ` on ${new Date(prescription.cancelledAt).toLocaleDateString('en-GB')}` : ''}.
+                {prescription.cancellationReason && (
+                  <span> Reason: <em>{prescription.cancellationReason}</em></span>
                 )}
-                <div className="stationery-sig-credentials">
-                  <div className="stationery-sig-name">
-                    {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
-                  </div>
-                  {cleanDoctorReg && (
-                    <div className="stationery-sig-reg">
-                      Reg. No.: {cleanDoctorReg}
-                    </div>
-                  )}
-                  <div className="stationery-sig-role">
-                    {effectiveDesignation}
-                  </div>
-                </div>
+                <span style={{ display: 'block', fontSize: '11px', color: '#b91c1c', marginTop: '2px' }}>
+                  Preserved for clinical history. Use "Clone Prescription" to create a new editable version.
+                </span>
               </div>
             </div>
-          </div>
+          )}
+
+          <PrescriptionDocument
+            prescription={prescription}
+            items={items || []}
+            patient={patient}
+            owner={owner}
+            activePractitioner={activePractitioner}
+            activeOrganisation={activeOrganisation}
+            id="prescription-sheet"
+          />
         </div>
 
         {/* Right Sticky Action Column (~340px) */}

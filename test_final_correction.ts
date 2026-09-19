@@ -60,7 +60,10 @@ describe('VetRx Final Controlled Correction Verification Suite', () => {
     const tsPath = path.resolve('web/src/utils/pdfGenerator.ts');
     const code = fs.readFileSync(tsPath, 'utf8');
 
-    assert.ok(code.includes('totalHeightMm <= contentHeightMm + 8'), 'pdfGenerator has 8mm tolerance to ensure 1-to-6 medicines fit 1 page');
+    assert.ok(
+      code.includes('totalHeightMm <= contentHeightMm + 8') || code.includes('totalHeightMm <= contentHeightMm + 12'),
+      'pdfGenerator has expanded tolerance (8-12mm) to ensure 1-to-6 medicines fit 1 page'
+    );
     assert.ok(code.includes('.signature-block'), 'pdfGenerator includes .signature-block in atomicSelectors');
     assert.ok(code.includes('.stationery-advice-grid'), 'pdfGenerator includes .stationery-advice-grid in atomicSelectors');
   });

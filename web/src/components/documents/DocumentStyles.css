@@ -1,0 +1,615 @@
+/* =============================================================
+   VetRx — DocumentStyles.css
+   Authoritative Shared Document Styling
+   Guarantees 100% visual parity between:
+     - Screen Preview
+     - Microsoft Print to PDF (Browser print)
+     - Save PDF (Direct Client-Side Generator)
+   Matches Golden References:
+     - 345.pdf (Original Prescription)
+     - 234.pdf (Tax Invoice)
+     - 2341.pdf (Payment Receipt)
+   ============================================================= */
+
+/* ── Base Document Container ─────────────────────────────────── */
+.vetrx-document {
+  box-sizing: border-box;
+  background: #ffffff !important;
+  width: 100%;
+  max-width: 794px;
+  margin: 0 auto;
+  padding: 4px 6px;
+  color: #0f172a;
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Print resets & forced print color adjust */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 6mm 8mm;
+  }
+
+  .vetrx-document {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+/* Generating PDF Class applied during Save PDF html2canvas clone */
+.generating-pdf .vetrx-document,
+.vetrx-print-document {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 794px !important;
+  max-width: 794px !important;
+  min-width: 794px !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  background: #ffffff !important;
+}
+
+/* ── Document Top Bar ────────────────────────────────────────── */
+.prescription-doc-top-bar,
+.invoice-official-ribbon {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  margin-bottom: 6px !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+}
+
+.prescription-doc-top-left {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+.prescription-official-dot {
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 50% !important;
+  background: #0f766e !important;
+  display: inline-block !important;
+  flex-shrink: 0 !important;
+}
+
+.prescription-doc-top-badge,
+.invoice-official-badge-text {
+  font-family: inherit !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  white-space: nowrap !important;
+}
+
+.prescription-doc-top-right,
+.invoice-official-ref-box {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
+}
+
+.document-badge-prescription {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+.document-status-label {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+/* ── Practitioner / Clinic Header ────────────────────────────── */
+.practitioner-header-container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  padding-bottom: 6px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  margin-bottom: 6px !important;
+  gap: 16px !important;
+}
+
+.practitioner-header-left {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.practitioner-header-hero-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.practitioner-header-avatar {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  border: 1.5px solid #0f766e !important;
+  background: #0f766e !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.practitioner-header-info {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+}
+
+.practitioner-header-tag {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+}
+
+.practitioner-header-name {
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.15 !important;
+  margin: 0 !important;
+}
+
+.practitioner-header-qual {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #0f766e !important;
+  margin: 0 !important;
+}
+
+.practitioner-header-reg-chip {
+  display: inline-block !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  margin-top: 2px !important;
+  width: fit-content !important;
+}
+
+.practitioner-header-right {
+  text-align: right !important;
+  flex-shrink: 0 !important;
+}
+
+.practitioner-header-contact-tag {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+  display: block !important;
+  margin-bottom: 2px !important;
+}
+
+.practitioner-header-contact-address {
+  font-size: 11px !important;
+  color: #334155 !important;
+  margin: 0 !important;
+}
+
+.practitioner-header-contact-row {
+  font-size: 11px !important;
+  color: #475569 !important;
+  margin-top: 2px !important;
+  display: flex !important;
+  gap: 6px !important;
+  justify-content: flex-end !important;
+}
+
+/* Clinic Active Header Band */
+.prescription-letterhead-band {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  justify-content: space-between !important;
+  padding: 4px 8px !important;
+  margin-bottom: 6px !important;
+  border-radius: 6px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  gap: 12px !important;
+}
+
+.letterhead-block {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.letterhead-clinic-brand-row,
+.letterhead-practitioner-hero-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.letterhead-clinic-logo-box,
+.letterhead-practitioner-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+}
+
+.letterhead-clinic-name {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  margin: 0 !important;
+}
+
+.letterhead-location,
+.letterhead-contact-line,
+.letterhead-doctor-qual {
+  font-size: 10.5px !important;
+  color: #475569 !important;
+  margin: 0 !important;
+}
+
+.registration-pill {
+  display: inline-block !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  margin-top: 2px !important;
+}
+
+/* ── Document Title Ribbon ───────────────────────────────────── */
+.prescription-ribbon {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 4px 8px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  margin-bottom: 6px !important;
+}
+
+.prescription-ribbon-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: 0.02em !important;
+}
+
+.prescription-ribbon-meta {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  font-size: 11.5px !important;
+  color: #475569 !important;
+}
+
+/* ── Signalment & Dossier Grid ───────────────────────────────── */
+.stationery-signalment-grid,
+.invoice-print-grid-dossier {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+}
+
+.stationery-signalment-box,
+.invoice-print-dossier-box {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  box-sizing: border-box !important;
+}
+
+.stationery-box-label,
+.invoice-dossier-label {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+  margin-bottom: 3px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.stationery-primary-name {
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  line-height: 1.2 !important;
+}
+
+.stationery-weight-badge {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+}
+
+.stationery-id-code {
+  font-size: 10px !important;
+  font-family: monospace !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+}
+
+.stationery-sub-text {
+  font-size: 11px !important;
+  color: #475569 !important;
+  margin: 2px 0 0 0 !important;
+  line-height: 1.2 !important;
+}
+
+/* ── Clinical Findings Box ───────────────────────────────────── */
+.stationery-findings-box {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  margin-bottom: 6px !important;
+  box-sizing: border-box !important;
+}
+
+/* ── Medication & Charges Tables ─────────────────────────────── */
+.stationery-meds-table,
+.invoice-print-table,
+.receipt-print-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  font-size: 11px !important;
+  margin-bottom: 6px !important;
+}
+
+.stationery-meds-table th,
+.invoice-print-table th,
+.receipt-print-table th {
+  background: #f8fafc !important;
+  color: #475569 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding: 5px 8px !important;
+  border-bottom: 1.5px solid #cbd5e1 !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+.stationery-meds-table td,
+.invoice-print-table td,
+.receipt-print-table td {
+  padding: 5px 8px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  vertical-align: middle !important;
+  color: #0f172a !important;
+}
+
+.medication-name {
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  color: #0f172a !important;
+}
+
+.medication-generic {
+  font-size: 10px !important;
+  color: #64748b !important;
+  margin-top: 1px !important;
+}
+
+.stationery-sig-box {
+  background: #eff6ff !important;
+  border: 1px solid #dbeafe !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+  margin-top: 3px !important;
+  display: inline-block !important;
+  color: #1e40af !important;
+}
+
+.sig-label {
+  font-weight: 700 !important;
+  color: #1d4ed8 !important;
+}
+
+.dose-badge {
+  background: #ecfdf5 !important;
+  color: #065f46 !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+}
+
+.route-badge {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+}
+
+.invoice-category-chip {
+  font-size: 10px !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+}
+
+/* ── Advice & Follow-Up Grid ─────────────────────────────────── */
+.stationery-advice-grid {
+  display: grid !important;
+  grid-template-columns: 1.2fr 1fr !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+  margin-top: 6px !important;
+}
+
+/* ── Invoice & Receipt Ledgers ───────────────────────────────── */
+.invoice-print-ledger-grid,
+.receipt-print-summary-grid {
+  display: grid !important;
+  grid-template-columns: 1.2fr 1fr !important;
+  gap: 8px !important;
+  margin-bottom: 6px !important;
+}
+
+.invoice-print-words-box,
+.invoice-print-totals-box,
+.receipt-payment-info-box,
+.receipt-amount-card {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  box-sizing: border-box !important;
+}
+
+.invoice-words-label,
+.receipt-payment-label {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: #64748b !important;
+  letter-spacing: 0.04em !important;
+  display: block !important;
+}
+
+.invoice-words-value {
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  color: #0f766e !important;
+  margin-top: 1px !important;
+}
+
+.invoice-print-statutory-gst {
+  font-size: 9.5px !important;
+  color: #475569 !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 4px !important;
+  padding: 4px 6px !important;
+  margin-top: 6px !important;
+  line-height: 1.25 !important;
+}
+
+.receipt-amount-card {
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: flex-end !important;
+  text-align: right !important;
+}
+
+/* ── Indivisible Bottom-Right Sign-Off Block ──────────────────── */
+.stationery-signoff-row,
+.invoice-print-signature-section {
+  display: flex !important;
+  justify-content: flex-end !important;
+  text-align: right !important;
+  margin-top: 8px !important;
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+.stationery-signoff-box {
+  display: inline-flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  text-align: right !important;
+  min-width: 200px !important;
+}
+
+.stationery-sig-name {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+.stationery-sig-reg {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #0f766e !important;
+}
+
+.stationery-sig-role {
+  font-size: 10.5px !important;
+  color: #475569 !important;
+}
+
+.invoice-print-footer-wrap {
+  display: flex !important;
+  justify-content: space-between !important;
+  font-size: 9px !important;
+  color: #94a3b8 !important;
+  border-top: 1px solid #e2e8f0 !important;
+  padding-top: 4px !important;
+  margin-top: 12px !important;
+}
+
+/* Force avoid break */
+.avoid-break,
+.signature-block,
+tr {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}

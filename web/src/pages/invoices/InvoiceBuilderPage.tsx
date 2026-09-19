@@ -193,7 +193,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
             const draftedItems: ItemDraft[] = rxItems.map((rxi, i) => ({
               tempId: `rx_${i}_${Date.now()}`,
               category: 'Prescription Medicine',
-              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
+              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
               quantity: rxi.quantity || 1,
               unit: rxi.dispenseUnit || rxi.unit || 'tablets',
               unitPricePaisa: 0, // Safe default rate of 0 (UAT Requirement 8)
@@ -389,7 +389,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     const newItems: ItemDraft[] = rxItems.map((rxi, i) => ({
       tempId: `imported_rx_${rxi.id || i}_${Date.now()}`,
       category: 'Prescription Medicine',
-      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
+      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
       quantity: rxi.quantity || 1,
       unit: rxi.dispenseUnit || rxi.unit || 'tablets',
       unitPricePaisa: 0, // Safe default rate 0

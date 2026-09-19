@@ -31,6 +31,22 @@ body {
   flex-direction: column;
 }
 
+@media (min-width: 1024px) {
+  html, body, #root {
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+@media print {
+  html, body, #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+}
+
 /* ── Headings ─────────────────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
