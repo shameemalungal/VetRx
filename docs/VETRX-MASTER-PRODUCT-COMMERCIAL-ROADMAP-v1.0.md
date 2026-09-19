@@ -303,23 +303,24 @@ PayU is the primary payment gateway for Indian Rupee (INR) transactions:
 ## 20. Business Decisions
 
 Documented in detail in [`docs/VETRX-COMMERCIAL-BUSINESS-DECISIONS.md`](file:///c:/Antigravity/VetRx/docs/VETRX-COMMERCIAL-BUSINESS-DECISIONS.md):
-- `BD-01`: Trial duration — **TBD**
-- `BD-02`: Trial feature scope — **TBD**
-- `BD-03`: Plan tier names — **TBD**
-- `BD-04`: Monthly prices (INR) — **TBD**
-- `BD-05`: Annual prices (INR) — **TBD**
-- `BD-06`: User / seat limits — **TBD**
-- `BD-07`: Patient record limits — **TBD**
-- `BD-08`: Prescription limits — **TBD**
-- `BD-09`: Feature differentiation — **TBD**
-- `BD-10`: Grace period duration — **TBD**
-- `BD-11`: Post-expiry access model — **TBD**
-- `BD-12`: Cancellation policy — **TBD**
-- `BD-13`: Refund policy — **TBD**
-- `BD-14`: Upgrade / proration rules — **TBD**
-- `BD-15`: Downgrade seat rules — **TBD**
-- `BD-16`: PayU settlement & GST handling — **TBD**
-- `BD-17`: Commercial launch criteria — **TBD**
+- `BD-01`: Trial duration — **14 calendar days (APPROVED)**
+- `BD-02`: Trial feature scope — **Full Access / Unmetered (APPROVED)**
+- `BD-03`: Plan tiers — **Trial, Monthly, 3 Months, Annual (APPROVED)**
+- `BD-04`: Monthly price — **₹599 / month (all-inclusive) (APPROVED)**
+- `BD-05`: Multi-month & Annual prices — **₹1,599 (3 mos) / ₹6,588 (Annual, ₹600 off) (APPROVED)**
+- `BD-06`: User / seat limits — **Trial: 1, Monthly: 5, 3 Months: 5, Annual: 10 (APPROVED)**
+- `BD-07`: Patient record limits — **Unlimited across all tiers (APPROVED)**
+- `BD-08`: Prescription limits — **Unlimited across all tiers (APPROVED)**
+- `BD-09`: Feature differentiation — **Nil (100% clinical & document feature parity) (APPROVED)**
+- `BD-10`: Grace period duration — **14 calendar days (APPROVED)**
+- `BD-11`: Post-expiry access model — **Read-only history + data export (zero clinical data loss) (APPROVED)**
+- `BD-12`: Cancellation policy — **No mid-cycle refund; active until period ends (APPROVED)**
+- `BD-13`: Refund policy — **Strictly non-refundable once paid (APPROVED)**
+- `BD-14`: Upgrade / proration rules — **Prorated unused credit applied to upgrade (APPROVED)**
+- `BD-15`: Downgrade seat rules — **Takes effect at period end; excess seats deactivated (APPROVED)**
+- `BD-16`: PayU settlement & GST handling — **Fees absorbed by VetRx; prices include 18% GST (APPROVED)**
+- `BD-17`: Commercial launch criteria — **30d uptime, 10 active vets, 0 P0/P1, PayU KYC (APPROVED)**
+
 
 ---
 

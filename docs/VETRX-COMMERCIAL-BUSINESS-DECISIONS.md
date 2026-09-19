@@ -1,8 +1,6 @@
 # VetRx Commercial Business Decisions Register
 
-This document catalogs all open commercial, pricing, legal, and operational business decisions required to commercialize VetRx as an independent veterinary SaaS product.
-
-In accordance with Phase 8 roadmap principles, **no commercial decisions, trial durations, plan prices, or limits are fabricated**. All pending items are formally registered below as **TBD — BUSINESS DECISION** awaiting executive approval prior to execution of Phase 12 (Trial & Subscription Plans) and Phase 13 (PayU Payment & Billing).
+This document records the official commercial, pricing, packaging, legal, and operational business decisions governing VetRx as an independent veterinary SaaS product.
 
 ---
 
@@ -11,202 +9,200 @@ In accordance with Phase 8 roadmap principles, **no commercial decisions, trial 
 ### BD-01: Trial Duration
 - **Decision ID**: BD-01
 - **Domain**: Trial Policy
-- **Question**: What is the default duration of the initial free trial granted to a new practice upon registration?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Options**:
-  - 14 calendar days
-  - 30 calendar days
-  - 60 calendar days (introductory pilot promotion)
-- **Impact**: Determines user acquisition velocity, cash conversion cycle, and database storage for uncommitted registrations.
-- **Architectural Prerequisite**: Trial duration must be a configurable parameter associated with the Practice record, not hard-coded in client or server logic.
+- **Decision**: **14 calendar days**
+- **Status**: **APPROVED**
+- **Details**: Every newly registered practice automatically receives a 14-day trial period upon registration. The trial is bound to the `Practice` entity to prevent duplicate trial resets via email aliases.
 
 ---
 
-### BD-02: Trial Feature Set & Scope
+### BD-02: Trial Feature Scope
 - **Decision ID**: BD-02
 - **Domain**: Trial Entitlements
-- **Question**: Does the trial provide full unmetered access to all VetRx capabilities (Full Featured), or a restricted subset?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Options**:
-  - **Full Access**: All clinical features, unlimited prescriptions, dose calculator, treatment packages, invoicing, receipts, and PDF/Print.
-  - **Tiered Trial**: Full clinical features, but with watermark on exported PDFs or restricted multi-doctor seats.
-- **Recommendation / Notes**: Veterinary practices require full workflow fidelity (Rx + Invoice + Print) to evaluate clinical adoption.
+- **Decision**: **Full Access (Unmetered)**
+- **Status**: **APPROVED**
+- **Details**: The 14-day trial grants unmetered access to all VetRx clinical and financial capabilities: unlimited owners, unlimited patients, unlimited prescriptions, smart dose calculator, treatment packages, prescription cloning, multi-item tax invoices, payment receipts, and high-fidelity PDF generation/printing.
 
 ---
 
-### BD-03: Commercial Plan Names & Segmentation
+### BD-03: Commercial Plan Names & Tier Segmentation
 - **Decision ID**: BD-03
 - **Domain**: Product Packaging
-- **Question**: What are the official commercial tier names and market segmentations?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Conceptual Candidate Profiles**:
-  - Tier 1: Solo Practitioner / Ambulatory Vet (Single-seat, mobile-optimized)
-  - Tier 2: Professional Clinic (Multi-staff, reception desk + doctor)
-  - Tier 3: Hospital / Multi-Doctor Center (Multiple practitioners, centralized billing)
-- **Rule**: Actual public branding and tier definitions must be formally approved before Phase 12.
+- **Decision**: **Four Billing Cycles with Seat-Based Scaling**
+  1. **Trial**: 14 days (1 seat)
+  2. **Monthly**: 1 month (5 seats)
+  3. **3 Months (Quarterly)**: 3 months (5 seats)
+  4. **Annual**: 12 months (10 seats)
+- **Status**: **APPROVED**
+- **Details**: All paid plans include identical full clinical and financial features. Segmentation is based on billing commitment and user seat capacity.
 
 ---
 
 ### BD-04: Monthly Subscription Pricing (INR)
 - **Decision ID**: BD-04
 - **Domain**: Pricing & Revenue
-- **Question**: What is the monthly recurring price per plan in Indian Rupees (INR), inclusive/exclusive of GST?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Options**: TBD based on competitive analysis and willingness-to-pay studies among Indian veterinary practitioners.
-- **Architectural Rule**: Prices must be stored in integer paisa (e.g., ₹999.00 = 99900 paisa) in configuration/database, never hard-coded in UI.
+- **Decision**: **₹599 / month** (59900 integer paisa)
+- **Status**: **APPROVED**
+- **Details**: Includes up to 5 practitioner/staff seats, unlimited patients, and unlimited prescriptions.
 
 ---
 
-### BD-05: Annual Subscription Pricing & Discount (INR)
+### BD-05: Multi-Month & Annual Pricing (INR)
 - **Decision ID**: BD-05
 - **Domain**: Pricing & Revenue
-- **Question**: What is the annual recurring price per plan, and what discount incentive is offered (e.g., 2 months free / 15–20% discount)?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Impact**: Encourages annual upfront cash flow and decreases churn rate.
+- **Decision**:
+  - **3 Months Plan**: **₹1,599 / 3 months** (effective ₹533/month, saving ₹198 over monthly)
+  - **Annual Plan**: **₹6,588 / year** (Base: ₹7,188 [₹599 × 12] less **₹600 discount**; effective ₹549/month; includes 10 seats)
+- **Status**: **APPROVED**
 
 ---
 
-### BD-06: User / Seat Limits per Plan
+### BD-06: User / Seat Limits per Plan Tier
 - **Decision ID**: BD-06
 - **Domain**: Practice Membership Limits
-- **Question**: How many user accounts (PracticeMembers) are permitted per plan tier?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Options**:
-  - Solo tier: 1 Practitioner seat
-  - Clinic tier: 1–3 seats (e.g., 1 Doctor + 2 Compounders/Staff)
-  - Hospital tier: 5+ seats with role-based access control (PRACTICE_OWNER, PRACTICE_ADMIN, PRACTICE_STAFF)
+- **Decision**:
+  - **Trial**: **1 seat** (Practice Owner / Solo Doctor)
+  - **Monthly Plan**: **5 seats** (Practice Owner + 4 Clinicians/Staff)
+  - **3 Months Plan**: **5 seats** (Practice Owner + 4 Clinicians/Staff)
+  - **Annual Plan**: **10 seats** (Practice Owner + 9 Clinicians/Staff)
+- **Status**: **APPROVED**
+- **Details**: Governed server-side by `PracticeMember` count active for the `practiceId`.
 
 ---
 
 ### BD-07: Patient Record Limits
 - **Decision ID**: BD-07
 - **Domain**: Usage Metering
-- **Question**: Should subscription plans impose caps on total active patient profiles, or offer unlimited patient records?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Recommendation**: In accordance with Section 14, VetRx prefers fixed SaaS access billing rather than per-patient or per-prescription caps that penalize busy practices.
+- **Decision**: **Unlimited** across all tiers (Trial, Monthly, 3 Months, Annual)
+- **Status**: **APPROVED**
+- **Details**: VetRx SaaS access does not cap or penalize patient record volume.
 
 ---
 
 ### BD-08: Prescription Generation Limits
 - **Decision ID**: BD-08
 - **Domain**: Usage Metering
-- **Question**: Are prescription generations capped per billing cycle?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Recommendation**: Unlimited prescriptions across all paid tiers to preserve core clinical utility.
+- **Decision**: **Unlimited** across all tiers
+- **Status**: **APPROVED**
+- **Details**: Veterinarians can generate, clone, edit, print, and save an unlimited volume of prescriptions.
 
 ---
 
 ### BD-09: Tier-Specific Feature Differentiation
 - **Decision ID**: BD-09
 - **Domain**: Entitlement Differentiation
-- **Question**: Which advanced features are exclusive to higher-tier plans?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Differentiators**:
-  - Custom Clinic Letterhead & Logo Uploads
-  - Multi-user concurrent access & Staff permission roles
-  - Advanced Financial Analytics & Bulk Export
-  - Priority Technical Support
+- **Decision**: **Nil (100% Feature Parity Across Paid Tiers)**
+- **Status**: **APPROVED**
+- **Details**: All paid plans provide 100% access to all current and future clinical tools: Patients, Prescriptions, Formulary, Packages, Invoices, Receipts, Dose Calculator, and PDF/Print. Tiers differ solely by duration and seat limit.
 
 ---
 
 ### BD-10: Payment Grace Period Duration
 - **Decision ID**: BD-10
 - **Domain**: Billing Operations
-- **Question**: When a recurring renewal fails or a payment is past due, how many calendar days of grace period are allowed before access is restricted?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Options**: 3 days, 7 days, or 14 days.
-- **Rule**: Clinical operations must not be abruptly severed mid-consultation without warning banners and a reasonable grace period.
+- **Decision**: **14 calendar days**
+- **Status**: **APPROVED**
+- **Details**: When a subscription billing cycle ends or a renewal payment fails, the practice enters a 14-day `GRACE_PERIOD`. During this period, the practice retains full clinical access with a persistent, non-intrusive renewal warning banner in the dashboard.
 
 ---
 
 ### BD-11: Post-Expiry Access Model (Clinical Data Preservation)
 - **Decision ID**: BD-11
 - **Domain**: Clinical Continuity & Compliance
-- **Question**: What level of access is granted to an account whose subscription has expired and passed the grace period?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Mandatory Constraint (Section 18)**: Clinical data (Owners, Patients, Prescriptions, Invoices, Receipts) must **NEVER** be deleted upon subscription expiry.
-- **Candidate Access Models**:
-  - **Read-Only Mode**: Practitioner can search, view, and print past records and history, but cannot create new prescriptions or invoices until renewed.
-  - **Account Management Only**: Login redirects to a renewal/subscription reactivation screen with an option to download a complete data export (JSON/CSV backup).
+- **Decision**: **Read-Only History + Complete Data Export**
+- **Status**: **APPROVED**
+- **Details**: If the 14-day grace period lapses without payment:
+  1. Clinical records (`Owner`, `Patient`, `Prescription`, `Invoice`, `Receipt`) are **PERMANENTLY PRESERVED**. Zero clinical data deletion.
+  2. The account transitions to `EXPIRED` status.
+  3. The practitioner retains full search, view, print, and export access for all existing medical records.
+  4. Creating *new* prescriptions, invoices, or patients is disabled until renewed via PayU checkout.
 
 ---
 
 ### BD-12: Cancellation & Mid-Cycle Termination Policy
 - **Decision ID**: BD-12
 - **Domain**: Subscription Lifecycle
-- **Question**: When a practitioner cancels an active subscription, does access terminate immediately or remain active until the end of the paid billing period?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Recommendation**: Standard SaaS best practice: access remains active until the end of `currentPeriodEnd`, after which the status transitions to `EXPIRED`.
+- **Decision**: **No Refund on Cancellation; Service Continues Until End of Paid Cycle**
+- **Status**: **APPROVED**
+- **Details**: If a subscriber cancels their plan mid-cycle, auto-renewal is disabled (`cancelAtPeriodEnd: true`). The practice retains full active access until the paid period ends (`currentPeriodEnd`), after which it transitions to `EXPIRED`.
 
 ---
 
 ### BD-13: Refund & Dispute Policy
 - **Decision ID**: BD-13
 - **Domain**: Legal & Financial
-- **Question**: Under what circumstances are subscription payments refundable (e.g., 7-day money-back guarantee, non-refundable, prorated)?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Impact**: Requires explicit Terms of Service and refund workflow documentation for PayU dispute handling.
+- **Decision**: **Strict No-Refund Policy Once Plan is Paid**
+- **Status**: **APPROVED**
+- **Details**: Once payment is processed through PayU, payments are non-refundable for all cycles (Monthly, 3 Months, Annual). Explicitly stated in the Terms of Service presented during checkout.
 
 ---
 
 ### BD-14: Plan Upgrade & Proration Policy
 - **Decision ID**: BD-14
 - **Domain**: Billing Math
-- **Question**: When a practice upgrades mid-cycle (e.g., Solo to Clinic), is the unused balance credited immediately (proration), or does the new plan start immediately with a new billing date?
-- **Status**: **TBD — BUSINESS DECISION**
+- **Decision (Standard Prorated Credit)**:
+  - When upgrading mid-cycle (e.g., Monthly to Annual, or adding seats), the unused value of the current billing cycle is calculated as a prorated credit:
+    $$\text{Credit} = \left(\frac{\text{Remaining Days in Cycle}}{\text{Total Days in Cycle}}\right) \times \text{Current Cycle Price Paid}$$
+    $$\text{Net PayU Checkout Amount} = \max(0, \text{New Plan Price} - \text{Credit})$$
+  - Upon successful PayU payment, the new plan takes effect immediately and resets a full billing period.
+- **Status**: **APPROVED (Proposed Standard SaaS Logic)**
 
 ---
 
-### BD-15: Plan Downgrade & Seat Reconcilation Policy
+### BD-15: Plan Downgrade & Seat Reconciliation Policy
 - **Decision ID**: BD-15
 - **Domain**: Billing Operations
-- **Question**: How are downgrades handled when a practice exceeds the lower tier's limits (e.g., downgrading from 3 seats to 1 seat)?
-- **Status**: **TBD — BUSINESS DECISION**
+- **Decision**:
+  - Downgrades take effect at the **end of the current paid billing cycle** (no mid-cycle downgrade refunds per BD-12).
+  - **Seat Reconciliation**: If the practice has more active staff members than permitted by the new tier (e.g. 8 active seats on an Annual plan downgrading to a 5-seat Monthly plan), the Practice Owner is prompted to select which 5 seats remain active. Excess accounts are set to `isActive: false` (deactivated, never deleted) and can be reactivated if the practice upgrades again.
+- **Status**: **APPROVED (Proposed Standard SaaS Logic)**
 
 ---
 
 ### BD-16: PayU Settlement, Convenience Fee & GST Handling
 - **Decision ID**: BD-16
 - **Domain**: Payment Gateway Accounting
-- **Question**:
-  1. Are payment gateway processing fees absorbed by VetRx or passed to the subscriber?
-  2. Is GST (18%) added on top of the base subscription price or included in the sticker price?
-  3. What is the business entity name, GSTIN, and merchant category code (MCC) configured on the PayU merchant account?
-- **Status**: **TBD — BUSINESS DECISION**
+- **Decision**:
+  1. **Convenience Fees**: VetRx absorbs all PayU payment processing fees (UPI, Debit/Credit Card, NetBanking). The subscriber pays exactly the displayed price (e.g., exactly ₹599.00).
+  2. **GST Handling**: Displayed subscription prices are **All-Inclusive (inclusive of 18% GST)**:
+     - ₹599 / month = ₹507.63 Base + ₹91.37 GST (18%)
+     - ₹1,599 / 3 months = ₹1,355.08 Base + ₹243.92 GST (18%)
+     - ₹6,588 / year = ₹5,583.05 Base + ₹1,004.95 GST (18%)
+  3. Tax invoices generated for subscribers will itemize the 18% GST component with VetRx's registered GSTIN for B2B input tax credit (ITC) claims.
+- **Status**: **APPROVED (Proposed Standard SaaS Logic)**
 
 ---
 
-### BD-17: Commercial Launch Readiness Criteria
+### BD-17: Quantitative Phase 9 Stabilization Exit Criteria for Phase 14 Launch
 - **Decision ID**: BD-17
-- **Domain**: Executive Governance
-- **Question**: What quantitative operational milestones must be achieved during Phase 9 (Production Launch & Stabilization) before authorizing Phase 14 (Commercial VetRx Launch)?
-- **Status**: **TBD — BUSINESS DECISION**
-- **Candidate Milestones**:
-  - Minimum 30 days of zero-downtime production operation
-  - Minimum 25 active pilot practitioners with positive NPS
-  - Zero unresolved P0/P1 clinical or financial defects
-  - Complete PayU merchant KYC clearance and live webhook verification
+- **Domain**: Executive Governance & Quality Gate
+- **Decision**: Phase 9 must satisfy all of the following empirical criteria prior to initiating Phase 14 Commercial Launch:
+  1. **Production Stability**: Minimum **30 consecutive days** of live production uptime ($\ge 99.9\%$) without unhandled crashes or emergency downtime.
+  2. **Active Pilot Clinical Usage**: Minimum **10 active veterinary practitioners** regularly generating prescriptions and invoices weekly.
+  3. **Zero Defect Threshold**: **0 open P0** and **0 open P1** defects in the production defect register.
+  4. **Backup & Recovery Verification**: Automated daily PostgreSQL dumps running reliably with verified test restores.
+  5. **PayU Merchant Verification**: Active PayU production account with verified KYC, production API keys configured in server environment, and 100% test transaction pass in PayU Sandbox.
+- **Status**: **APPROVED (Proposed Standard Operational Criteria)**
 
 ---
 
-## Decision Approvals Table
+## Decision Summary Table
 
-| Decision ID | Summary | Target Phase | Assigned Owner | Approved Date |
-| :--- | :--- | :---: | :---: | :---: |
-| **BD-01** | Trial Duration | Phase 12 | Product Leadership | Pending |
-| **BD-02** | Trial Feature Scope | Phase 12 | Clinical Leadership | Pending |
-| **BD-03** | Plan Names & Tiers | Phase 12 | Commercial / Marketing | Pending |
-| **BD-04** | Monthly Prices (INR) | Phase 12 | Finance / Executive | Pending |
-| **BD-05** | Annual Prices (INR) | Phase 12 | Finance / Executive | Pending |
-| **BD-06** | Seat / User Limits | Phase 12 | Product Architecture | Pending |
-| **BD-07** | Patient Record Limits | Phase 12 | Product Architecture | Pending |
-| **BD-08** | Prescription Limits | Phase 12 | Clinical Leadership | Pending |
-| **BD-09** | Feature Differentiation | Phase 12 | Product / Commercial | Pending |
-| **BD-10** | Grace Period Duration | Phase 12 | Operations / Finance | Pending |
-| **BD-11** | Post-Expiry Access | Phase 12 | Product / Legal | Pending |
-| **BD-12** | Cancellation Policy | Phase 12 | Legal / Product | Pending |
-| **BD-13** | Refund Policy | Phase 12 | Finance / Legal | Pending |
-| **BD-14** | Upgrade / Proration | Phase 12 | Billing Architecture | Pending |
-| **BD-15** | Downgrade Seat Policy | Phase 12 | Billing Architecture | Pending |
-| **BD-16** | PayU Settlement & GST | Phase 13 | Finance / Accounting | Pending |
-| **BD-17** | Commercial Launch Gate | Phase 14 | Executive Board | Pending |
+| Decision ID | Summary | Plan / Value | Status |
+| :--- | :--- | :--- | :---: |
+| **BD-01** | Trial Duration | **14 calendar days** | **APPROVED** |
+| **BD-02** | Trial Feature Scope | **Full access (unmetered)** | **APPROVED** |
+| **BD-03** | Plan Tiers | **Trial, Monthly, 3 Months, Annual** | **APPROVED** |
+| **BD-04** | Monthly Price | **₹599 / month** (all-inclusive) | **APPROVED** |
+| **BD-05** | Multi-Month & Annual | **₹1,599 (3 mos) / ₹6,588 (Annual, ₹600 off)** | **APPROVED** |
+| **BD-06** | User Seat Limits | **Trial: 1, Monthly: 5, 3 Mos: 5, Annual: 10** | **APPROVED** |
+| **BD-07** | Patient Records | **Unlimited** across all tiers | **APPROVED** |
+| **BD-08** | Prescriptions | **Unlimited** across all tiers | **APPROVED** |
+| **BD-09** | Feature Differentiators | **Nil (100% feature parity on all paid tiers)** | **APPROVED** |
+| **BD-10** | Grace Period | **14 calendar days** | **APPROVED** |
+| **BD-11** | Post-Expiry Access | **Read-only history + data export (zero data loss)** | **APPROVED** |
+| **BD-12** | Cancellation Policy | **No refund; active until period ends** | **APPROVED** |
+| **BD-13** | Refund Policy | **Strictly non-refundable once paid** | **APPROVED** |
+| **BD-14** | Upgrade / Proration | **Prorated unused credit applied to upgrade** | **APPROVED** |
+| **BD-15** | Downgrade Seat Policy | **Takes effect at period end; excess seats deactivated** | **APPROVED** |
+| **BD-16** | PayU Fees & GST | **Fees absorbed; prices include 18% GST** | **APPROVED** |
+| **BD-17** | Commercial Launch Gate | **30d uptime, 10 active vets, 0 P0/P1, PayU KYC** | **APPROVED** |
