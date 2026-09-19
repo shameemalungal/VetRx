@@ -12,7 +12,8 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import { CreatePackageFromPrescriptionModal } from './CreatePackageFromPrescriptionModal';
-import { generatePdfBlob, savePdfWithFilePicker, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
 import './Prescriptions.css';
@@ -121,6 +122,14 @@ export const PrescriptionDetailsPage: React.FC = () => {
   };
 
   const handleSavePdf = async () => {
+    // Desktop: use browser's native print engine for pixel-perfect PDF output
+    // (identical to "Microsoft Print to PDF" / Ctrl+P)
+    if (!isMobileDevice()) {
+      savePdfNative();
+      return;
+    }
+
+    // Mobile: fallback to html2canvas + jsPDF for direct download/share
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');

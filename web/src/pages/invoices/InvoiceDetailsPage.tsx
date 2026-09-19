@@ -9,7 +9,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
-import { generatePdfBlob, savePdfWithFilePicker, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
+import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
+import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { InvoiceDocument } from '../../components/documents/InvoiceDocument';
 import { ReceiptDocument } from '../../components/documents/ReceiptDocument';
@@ -135,6 +136,15 @@ export const InvoiceDetailsPage: React.FC = () => {
 
   const handleSavePdf = async () => {
     if (!invoice) return;
+
+    // Desktop: use browser's native print engine for pixel-perfect PDF output
+    // (identical to "Microsoft Print to PDF" / Ctrl+P)
+    if (!isMobileDevice()) {
+      savePdfNative();
+      return;
+    }
+
+    // Mobile: fallback to html2canvas + jsPDF for direct download/share
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('invoice-sheet');
@@ -227,7 +237,8 @@ export const InvoiceDetailsPage: React.FC = () => {
     <div className="invoice-print-container">
       {/* Interactive Top Action Toolbar (Hidden in print) */}
       <div className="invoice-print-toolbar no-print">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Row 1 / Left: Navigation & Document Identification */}
+        <div className="invoice-toolbar-nav">
           <button
             type="button"
             className="btn-back"
@@ -237,8 +248,8 @@ export const InvoiceDetailsPage: React.FC = () => {
             <Icon name="arrow-left" size={14} />
             <span>Back</span>
           </button>
-          <span style={{ fontSize: '13px', color: 'var(--color-outline)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700 }}>
+          <span className="invoice-toolbar-slash">/</span>
+          <span className="invoice-toolbar-doc-num">
             {invoice.invoiceNumber}
           </span>
           <span className={`invoices-status-pill ${invoice.status.toLowerCase()}`}>
@@ -246,15 +257,8 @@ export const InvoiceDetailsPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Document Type Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="no-print" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/invoices')}>View Invoice History</button>
-            {invoice.status !== 'Cancelled' && (
-              <button type="button" className="btn btn-danger btn-sm" onClick={handleCancelInvoice}>Cancel Invoice</button>
-            )}
-          </div>
-
+        {/* Row 2 / Center: Document Type Switcher Tabs */}
+        <div className="invoice-toolbar-tabs-wrap">
           <div className="invoices-status-tabs">
             <button
               type="button"
@@ -271,7 +275,10 @@ export const InvoiceDetailsPage: React.FC = () => {
               Payment Receipt
             </button>
           </div>
+        </div>
 
+        {/* Row 3 / Right: Action Buttons Group */}
+        <div className="invoice-toolbar-actions">
           {invoice.status === 'Draft' && (
             <button
               type="button"
@@ -283,10 +290,10 @@ export const InvoiceDetailsPage: React.FC = () => {
             </button>
           )}
 
-          {/* Save PDF (Primary direct download action) */}
+          {/* Save PDF (Primary direct action) */}
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm invoice-btn-save"
             onClick={handleSavePdf}
             disabled={isGeneratingPdf}
             id="btn-save-pdf"
@@ -318,9 +325,37 @@ export const InvoiceDetailsPage: React.FC = () => {
             title="Open browser print dialog"
           >
             <Icon name="print" size={16} />
-            <span>Print {documentType}</span>
+            <span>Print</span>
           </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => navigate('/invoices')}
+            title="View all invoices and receipts"
+          >
+            <Icon name="clock" size={14} />
+            <span>History</span>
+          </button>
+
+          {invoice.status !== 'Cancelled' && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={handleCancelInvoice}
+              title="Cancel this invoice"
+            >
+              <Icon name="trash" size={14} />
+              <span>Cancel</span>
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* Mobile swipe hint banner (visible only on small screens) */}
+      <div className="invoice-mobile-hint no-print">
+        <Icon name="info" size={14} />
+        <span>A4 Print Preview • Swipe horizontally to inspect full document</span>
       </div>
 
       {/* Floating toast notification */}

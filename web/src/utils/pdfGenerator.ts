@@ -296,6 +296,20 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Uses the browser's native print engine to generate a PDF.
+ * This produces output identical to "Microsoft Print to PDF" / "Save as PDF"
+ * because it uses Chrome/Edge's actual CSS rendering engine rather than
+ * re-implementing CSS in JavaScript (which is what html2canvas does).
+ *
+ * On desktop browsers this is the preferred method for pixel-perfect PDFs.
+ * The user will see the browser's print dialog where they can choose
+ * "Save as PDF" or "Microsoft Print to PDF".
+ */
+export function savePdfNative(): void {
+  window.print();
+}
+
+/**
  * Saves a PDF Blob to disk using the File System Access API (showSaveFilePicker)
  * where supported, allowing filename editing.
  * Falls back to an invisible <a> download anchor for unsupported browsers.
