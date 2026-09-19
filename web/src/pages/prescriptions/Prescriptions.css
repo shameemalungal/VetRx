@@ -1740,7 +1740,7 @@
 }
 
 .prescription-doc-top-badge {
-  font-family: var(--font-data, inherit);
+  font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -1754,7 +1754,7 @@
   align-items: center;
   gap: 8px;
   font-size: 10.5px;
-  font-family: var(--font-data, inherit);
+  font-family: var(--font-body, inherit);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -1936,7 +1936,7 @@
   color: #475569;
   border-radius: 9999px;
   padding: 2px 8px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
@@ -1989,7 +1989,7 @@
   border-radius: 4px;
   padding: 2px 7px;
   font-size: 10px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   line-height: 1.2;
   box-sizing: border-box;
   white-space: nowrap;
@@ -2037,7 +2037,7 @@
 }
 
 .stationery-id-code {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 600;
   color: #475569;
@@ -2242,7 +2242,7 @@
 }
 
 .med-col-num {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   font-size: 10.5px;
   color: #64748b;
   text-align: center;
@@ -2262,7 +2262,7 @@
   color: #0f766e;
   border-radius: 9999px;
   padding: 2px 7px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   font-size: 10.5px;
   font-weight: 700;
   line-height: 1.2;
@@ -3229,7 +3229,7 @@ tr {
   border-radius: var(--radius-md, 8px);
   background: var(--color-surface-container-low, #f8fafc);
   border: 1px solid var(--color-outline-variant, #cbd5e1);
-  font-family: var(--font-data, monospace);
+  font-family: var(--font-data, inherit);
   font-size: 13px;
   font-weight: 700;
   color: var(--color-primary, #00685f);

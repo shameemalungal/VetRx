@@ -92,7 +92,7 @@
   /* Typography Aliases used across modules */
   --font-headline:  var(--font-heading);
   --font-label:     var(--font-body);
-  --font-data:      var(--font-mono);
+  --font-data:      var(--font-body);
 
   --text-headline-xl:      2rem;       /* 32px */
   --text-headline-xl-lh:   2.5rem;

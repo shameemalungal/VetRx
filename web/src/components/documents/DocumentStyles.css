@@ -18,14 +18,22 @@
   width: 100%;
   max-width: 794px;
   margin: 0 auto;
-  padding: 4px 6px;
+  padding: 4px 6px 12px 6px;
   color: #0f172a;
   position: relative;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
   -webkit-font-smoothing: antialiased;
   border: none !important;
   border-radius: 0 !important;
   box-shadow: none !important;
+}
+
+/* Enforce uniform clean sans-serif for all clinical document text matching Microsoft Print to PDF */
+.vetrx-document,
+.vetrx-document *,
+.generating-pdf .vetrx-document,
+.generating-pdf .vetrx-document * {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
 }
 
 /* Print resets & forced print color adjust */
@@ -51,8 +59,8 @@
 /* Generating PDF Class applied during Save PDF html2canvas clone */
 .generating-pdf .vetrx-document,
 .vetrx-print-document {
-  padding: 0 !important;
-  margin: 0 !important;
+  padding: 4px 6px 14px 6px !important;
+  margin: 0 auto !important;
   width: 794px !important;
   max-width: 794px !important;
   min-width: 794px !important;
@@ -382,7 +390,7 @@
 
 .stationery-id-code {
   font-size: 10px !important;
-  font-family: monospace !important;
+  font-family: inherit !important;
   font-weight: 600 !important;
   color: #64748b !important;
 }
@@ -603,6 +611,7 @@
   color: #94a3b8 !important;
   border-top: 1px solid #e2e8f0 !important;
   padding-top: 4px !important;
+  padding-bottom: 6px !important;
   margin-top: 12px !important;
 }
 

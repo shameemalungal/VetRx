@@ -94,7 +94,7 @@
   color: #475569;
   border-radius: 9999px;
   padding: 2px 8px;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-body, inherit);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;

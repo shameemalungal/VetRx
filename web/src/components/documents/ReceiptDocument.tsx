@@ -94,11 +94,11 @@ export const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
           </div>
           <div style={{ fontSize: '13px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <span style={{ color: 'var(--color-outline)' }}>Receipt No:</span>
-            <strong style={{ fontFamily: 'var(--font-data)' }}>{invoice.invoiceNumber}</strong>
+            <strong>{invoice.invoiceNumber}</strong>
           </div>
           <div style={{ fontSize: '12px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <span style={{ color: 'var(--color-outline)' }}>Date of Issue:</span>
-            <span style={{ fontFamily: 'var(--font-data)' }}>
+            <span>
               {new Date(invoice.invoiceDate).toLocaleDateString('en-GB', {
                 day: '2-digit',
                 month: 'short',
@@ -111,7 +111,7 @@ export const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
               <span style={{ color: 'var(--color-outline)' }}>
                 {linkedRxNumbers.length > 1 ? 'Prescription Refs:' : 'Prescription Ref:'}
               </span>
-              <strong style={{ fontFamily: 'var(--font-data)', color: 'var(--color-primary)' }}>
+              <strong style={{ color: 'var(--color-primary)' }}>
                 {linkedRxNumbers.map((r: string) => `#${r}`).join(', ')}
               </strong>
             </div>
@@ -133,7 +133,7 @@ export const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
             {formatOwnerPrimary(owner, 'Walk-in Client')}
           </strong>
           {owner?.phone && (
-            <span style={{ fontSize: '12px', fontFamily: 'var(--font-data)', color: 'var(--color-on-surface-variant)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
               Phone: {owner.phone}
             </span>
           )}
@@ -237,7 +237,7 @@ export const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
               {(invoice as any).paymentReference && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--color-on-surface-variant)' }}>Reference No:</span>
-                  <span style={{ fontFamily: 'var(--font-data)' }}>{(invoice as any).paymentReference}</span>
+                  <span>{(invoice as any).paymentReference}</span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -297,7 +297,7 @@ export const ReceiptDocument: React.FC<ReceiptDocumentProps> = ({
               {doctorName}{doctorQual ? `, ${doctorQual}` : ''}
             </strong>
             {cleanReg && (
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-data)', color: 'var(--color-primary)', display: 'block' }}>
+              <span style={{ fontSize: '11px', color: 'var(--color-primary)', display: 'block' }}>
                 Reg. No.: {cleanReg}
               </span>
             )}

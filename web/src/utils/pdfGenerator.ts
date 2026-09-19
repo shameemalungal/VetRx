@@ -149,8 +149,8 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
         targetEl.style.border = 'none';
         targetEl.style.borderRadius = '0';
         targetEl.style.boxShadow = 'none';
-        targetEl.style.padding = '0';
-        targetEl.style.margin = '0';
+        targetEl.style.padding = '4px 6px 14px 6px';
+        targetEl.style.margin = '0 auto';
         targetEl.style.background = '#ffffff';
 
         // Strip any screen preview borders/paddings from inner wrappers
@@ -185,9 +185,12 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
 
   const pageWidthMm = 210;
   const pageHeightMm = 297;
-  const marginMm = 6;
-  const contentWidthMm = pageWidthMm - marginMm * 2;
-  const contentHeightMm = pageHeightMm - marginMm * 2;
+  const marginTopMm = 6;
+  const marginBottomMm = 6;
+  const marginLeftMm = 8;
+  const marginRightMm = 8;
+  const contentWidthMm = pageWidthMm - marginLeftMm - marginRightMm;
+  const contentHeightMm = pageHeightMm - marginTopMm - marginBottomMm;
 
   // Convert canvas to mm height
   const imgWidthPx = canvas.width;
@@ -197,13 +200,13 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   // If height fits within page height (allowing 12mm tolerance for subpixel font/table variations)
   if (totalHeightMm <= contentHeightMm + 12) {
     // Fits comfortably on a single A4 page with preserved aspect ratio
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const imgData = canvas.toDataURL('image/png');
     const scaleFactor = Math.min(1, contentHeightMm / totalHeightMm);
     const renderWidthMm = contentWidthMm * scaleFactor;
     const renderHeightMm = totalHeightMm * scaleFactor;
     const offsetX = (pageWidthMm - renderWidthMm) / 2;
-    const offsetY = marginMm;
-    pdf.addImage(imgData, 'JPEG', offsetX, offsetY, renderWidthMm, renderHeightMm);
+    const offsetY = marginTopMm;
+    pdf.addImage(imgData, 'PNG', offsetX, offsetY, renderWidthMm, renderHeightMm);
   } else {
     // Multi-page document: smart boundary-aware canvas slicing
     const pxPerMm = imgWidthPx / contentWidthMm;
@@ -275,9 +278,9 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
           sliceHeightPx
         );
 
-        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+        const pageImgData = pageCanvas.toDataURL('image/png');
         const sliceHeightMm = (sliceHeightPx * contentWidthMm) / imgWidthPx;
-        pdf.addImage(pageImgData, 'JPEG', marginMm, marginMm, contentWidthMm, sliceHeightMm);
+        pdf.addImage(pageImgData, 'PNG', marginLeftMm, marginTopMm, contentWidthMm, sliceHeightMm);
       }
 
       renderedHeightPx += sliceHeightPx;
