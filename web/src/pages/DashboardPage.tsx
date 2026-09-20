@@ -210,17 +210,17 @@ export const DashboardPage: React.FC = () => {
       <div className="dashboard-header-bar">
         <div className="dashboard-header-left">
           <div className="dashboard-status-strip">
-            {/* Real Offline-First status, NOT fake cloud sync */}
+            {/* Cloud status per Section 33 */}
             <span className="status-badge-local">
               <span className="status-dot-solid" />
-              Local Database (Offline-First)
+              Secure Cloud • Online
             </span>
             <span className="status-badge-doctor">
               <Icon name="verified" size={13} className="text-secondary" />
               {doctorName}
             </span>
           </div>
-          <h1 className="dashboard-headline">Clinical Command Desk</h1>
+          <h1 className="dashboard-headline">Clinical Practice Command Center</h1>
           <p className="dashboard-subheadline">
             {clinicName}
           </p>

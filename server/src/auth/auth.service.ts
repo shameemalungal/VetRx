@@ -292,11 +292,13 @@ export class AuthService {
 
   /**
    * Handles OAuth identity authentication (Google).
-   * Does NOT automatically merge existing password accounts on email collision.
+  /**
+   * Handles OAuth identity authentication (Google).
+   * Supports deterministic account linking for verified matching emails.
    */
   static async handleOAuthIdentity(
     identity: AuthenticatedIdentity,
-    meta: { ipAddress?: string; userAgent?: string }
+    meta: { ipAddress?: string; userAgent?: string; linkingUserId?: string }
   ): Promise<{ token: string; user: SafeUserDTO }> {
     // 1. Check if AuthIdentity already exists for provider + providerUserId
     const existingIdentity = await prisma.authIdentity.findUnique({
@@ -311,6 +313,76 @@ export class AuthService {
       },
     });
 
+    // Handle Explicit Linking Flow from authenticated user session
+    if (meta.linkingUserId) {
+      if (existingIdentity) {
+        if (existingIdentity.userId === meta.linkingUserId) {
+          // Already linked to this exact user
+          const token = await SessionService.createSession({
+            userId: existingIdentity.userId,
+            ipAddress: meta.ipAddress,
+            userAgent: meta.userAgent,
+          });
+          return {
+            token,
+            user: {
+              id: existingIdentity.user.id,
+              email: existingIdentity.user.email,
+              name: existingIdentity.user.name,
+              avatarUrl: existingIdentity.user.avatarUrl,
+              emailVerified: existingIdentity.user.emailVerified,
+              createdAt: existingIdentity.user.createdAt.toISOString(),
+            },
+          };
+        }
+        // Linked to a DIFFERENT user
+        throw new AppError(
+          409,
+          'GOOGLE_ALREADY_LINKED_TO_OTHER',
+          'This Google account is already linked to another VetRx user account.'
+        );
+      }
+
+      // Link to the authenticated user
+      await prisma.authIdentity.create({
+        data: {
+          userId: meta.linkingUserId,
+          provider: identity.provider,
+          providerUserId: identity.providerUserId,
+          providerEmail: identity.email,
+        },
+      });
+
+      void AuditService.record({
+        userId: meta.linkingUserId,
+        action: 'GOOGLE_IDENTITY_LINKED',
+        resource: 'AuthIdentity',
+        details: { email: identity.email, provider: 'google', sub: identity.providerUserId },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: meta.linkingUserId } });
+      const token = await SessionService.createSession({
+        userId: user.id,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      return {
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          emailVerified: user.emailVerified,
+          createdAt: user.createdAt.toISOString(),
+        },
+      };
+    }
+
+    // CASE B: Existing Google Identity Match
     if (existingIdentity) {
       if (!existingIdentity.user.isActive) {
         throw new AppError(403, 'ACCOUNT_INACTIVE', 'This account has been deactivated.');
@@ -323,6 +395,15 @@ export class AuthService {
 
       const token = await SessionService.createSession({
         userId: existingIdentity.userId,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      void AuditService.record({
+        userId: existingIdentity.userId,
+        action: 'GOOGLE_LOGIN_SUCCESS',
+        resource: 'Session',
+        details: { email: existingIdentity.user.email },
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
@@ -340,22 +421,96 @@ export class AuthService {
       };
     }
 
-    // 2. Identity does not exist: check if email is already taken by another account
+    // 2. Identity does not exist: check if email is already taken by an existing account
     const normalizedEmail = identity.email.toLowerCase().trim();
     const existingUser = await prisma.user.findUnique({
       where: { normalizedEmail },
+      include: {
+        authIdentities: true,
+      },
     });
 
     if (existingUser) {
-      // SECURITY RULE: Do not automatically merge accounts based on email alone.
-      throw new AppError(
-        409,
-        'ACCOUNT_COLLISION',
-        'An account with this email address already exists. Please sign in with your email and password to link your Google account.'
-      );
+      if (!existingUser.isActive) {
+        throw new AppError(403, 'ACCOUNT_INACTIVE', 'This account has been deactivated.');
+      }
+
+      // CASE D: Unsafe / Unverified email match -> DO NOT silently merge!
+      if (!identity.emailVerified) {
+        throw new AppError(
+          409,
+          'UNVERIFIED_OAUTH_EMAIL',
+          'Google reports this email is not verified. Please sign in with your email and password to link accounts.'
+        );
+      }
+
+      // CASE A: Existing password account with matching verified Google email -> Link Google identity!
+      const hasGoogleIdentity = existingUser.authIdentities.some((i) => i.provider === 'google');
+      if (hasGoogleIdentity) {
+        throw new AppError(
+          409,
+          'GOOGLE_IDENTITY_ALREADY_LINKED',
+          'This VetRx account is already linked to a different Google account.'
+        );
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.authIdentity.create({
+          data: {
+            userId: existingUser.id,
+            provider: identity.provider,
+            providerUserId: identity.providerUserId,
+            providerEmail: identity.email,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: existingUser.id },
+          data: {
+            emailVerified: true,
+            lastLoginAt: new Date(),
+          },
+        });
+      });
+
+      void AuditService.record({
+        userId: existingUser.id,
+        action: 'GOOGLE_IDENTITY_LINKED',
+        resource: 'AuthIdentity',
+        details: { email: existingUser.email, provider: 'google', sub: identity.providerUserId },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      void AuditService.record({
+        userId: existingUser.id,
+        action: 'GOOGLE_LOGIN_SUCCESS',
+        resource: 'Session',
+        details: { email: existingUser.email },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      const token = await SessionService.createSession({
+        userId: existingUser.id,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      return {
+        token,
+        user: {
+          id: existingUser.id,
+          email: existingUser.email,
+          name: existingUser.name,
+          avatarUrl: existingUser.avatarUrl,
+          emailVerified: true,
+          createdAt: existingUser.createdAt.toISOString(),
+        },
+      };
     }
 
-    // 3. New user registration via Google OAuth (atomic transaction)
+    // CASE C: Completely new user registration via Google OAuth (atomic transaction)
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
@@ -403,6 +558,15 @@ export class AuthService {
       return user;
     });
 
+    void AuditService.record({
+      userId: result.id,
+      action: 'USER_REGISTERED_GOOGLE',
+      resource: 'User',
+      details: { email: result.email },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
     const token = await SessionService.createSession({
       userId: result.id,
       ipAddress: meta.ipAddress,
@@ -420,6 +584,183 @@ export class AuthService {
         createdAt: result.createdAt.toISOString(),
       },
     };
+  }
+
+  /**
+   * Retrieves security and identity provider connection status for a user.
+   */
+  static async getUserIdentities(userId: string): Promise<{
+    userId: string;
+    email: string;
+    hasPassword: boolean;
+    hasGoogle: boolean;
+    googleEmail: string | null;
+    identities: Array<{
+      id: string;
+      provider: string;
+      providerEmail: string | null;
+      createdAt: string;
+    }>;
+  }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { authIdentities: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found.');
+    }
+
+    const googleIdentity = user.authIdentities.find((i) => i.provider === 'google');
+
+    return {
+      userId: user.id,
+      email: user.email,
+      hasPassword: Boolean(user.passwordHash),
+      hasGoogle: Boolean(googleIdentity),
+      googleEmail: googleIdentity?.providerEmail || null,
+      identities: user.authIdentities.map((i) => ({
+        id: i.id,
+        provider: i.provider,
+        providerEmail: i.providerEmail,
+        createdAt: i.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Sets initial password for a user who registered via OAuth only.
+   */
+  static async setPassword(userId: string, newPassword: string): Promise<void> {
+    const strength = PasswordService.validatePasswordStrength(newPassword);
+    if (!strength.isValid) {
+      throw new AppError(400, 'WEAK_PASSWORD', strength.message || 'Password does not meet requirements.');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { authIdentities: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found.');
+    }
+
+    if (user.passwordHash) {
+      throw new AppError(
+        400,
+        'PASSWORD_ALREADY_SET',
+        'A password is already configured for this account. Use change password instead.'
+      );
+    }
+
+    const passwordHash = await PasswordService.hashPassword(newPassword);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+
+      const hasPasswordIdentity = user.authIdentities.some((i) => i.provider === 'password');
+      if (!hasPasswordIdentity) {
+        await tx.authIdentity.create({
+          data: {
+            userId: user.id,
+            provider: 'password',
+            providerUserId: user.normalizedEmail,
+            providerEmail: user.email,
+          },
+        });
+      }
+    });
+
+    void AuditService.record({
+      userId: user.id,
+      action: 'PASSWORD_CONFIGURED',
+      resource: 'User',
+      details: { email: user.email },
+    });
+  }
+
+  /**
+   * Changes existing password after verifying the current password.
+   */
+  static async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.passwordHash) {
+      throw new AppError(400, 'NO_PASSWORD_SET', 'No password is currently configured for this account.');
+    }
+
+    const isMatch = await PasswordService.verifyPassword(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new AppError(401, 'INVALID_CURRENT_PASSWORD', 'The current password you entered is incorrect.');
+    }
+
+    const strength = PasswordService.validatePasswordStrength(newPassword);
+    if (!strength.isValid) {
+      throw new AppError(400, 'WEAK_PASSWORD', strength.message || 'New password does not meet requirements.');
+    }
+
+    const passwordHash = await PasswordService.hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    void AuditService.record({
+      userId: user.id,
+      action: 'PASSWORD_CHANGED',
+      resource: 'User',
+      details: { email: user.email },
+    });
+  }
+
+  /**
+   * Safely disconnects Google OAuth identity from user account.
+   * Requires that an account password exists to prevent total account lockout.
+   */
+  static async unlinkGoogleIdentity(userId: string): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { authIdentities: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'User not found.');
+    }
+
+    if (!user.passwordHash) {
+      throw new AppError(
+        400,
+        'CANNOT_UNLINK_PRIMARY_AUTH',
+        'You must set an account password before disconnecting Google to prevent losing access.'
+      );
+    }
+
+    const googleIdentity = user.authIdentities.find((i) => i.provider === 'google');
+    if (!googleIdentity) {
+      throw new AppError(404, 'IDENTITY_NOT_FOUND', 'No Google account is currently linked to this user.');
+    }
+
+    await prisma.authIdentity.delete({
+      where: { id: googleIdentity.id },
+    });
+
+    void AuditService.record({
+      userId: user.id,
+      action: 'GOOGLE_IDENTITY_UNLINKED',
+      resource: 'AuthIdentity',
+      details: { email: user.email, provider: 'google' },
+    });
   }
 
   /**

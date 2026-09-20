@@ -32,6 +32,23 @@ const loginSchema = z.object({
 // Route Handlers
 // ------------------------------------------------------------------------------
 
+interface OAuthStatePayload {
+  state: string;
+  codeVerifier?: string;
+  action?: 'login' | 'link';
+  linkingUserId?: string;
+  returnTo?: string;
+}
+
+const setPasswordSchema = z.object({
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
 /**
  * POST /api/auth/register
  * Creates a new user, default practice, ownership, settings, and session.
@@ -116,15 +133,110 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res, next) 
 });
 
 /**
- * GET /api/auth/google/start
- * Initiates Google OAuth consent flow with cryptographic state cookie.
+ * GET /api/auth/identities
+ * Retrieves linked authentication methods for current user.
  */
-authRouter.get('/google/start', (req, res, next) => {
+authRouter.get('/identities', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const state = crypto.randomBytes(24).toString('hex');
+    if (!req.user) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    }
 
-    // Store state in short-lived HTTP-only cookie for verification
-    res.cookie('vetrx_oauth_state', state, {
+    const identities = await AuthService.getUserIdentities(req.user.id);
+    res.status(200).json(identities);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/password/set
+ * Sets an initial password for OAuth-created users.
+ */
+authRouter.post('/password/set', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+
+    const { newPassword } = setPasswordSchema.parse(req.body);
+    const result = await AuthService.setPassword(req.user.id, newPassword);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/password/change
+ * Changes password verifying current password first.
+ */
+authRouter.post('/password/change', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+    const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/auth/identities/google
+ * Unlinks Google identity from account (if password is configured).
+ */
+authRouter.delete('/identities/google', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    if (!req.user) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+
+    const result = await AuthService.unlinkGoogleIdentity(req.user.id);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/auth/google/start
+ * Initiates Google OAuth consent flow with PKCE and cryptographic state cookie.
+ */
+authRouter.get('/google/start', async (req, res, next) => {
+  try {
+    const action = req.query.action === 'link' ? 'link' : 'login';
+    let linkingUserId: string | undefined;
+
+    if (action === 'link') {
+      const rawToken = req.cookies?.[env.COOKIE_NAME];
+      if (rawToken) {
+        const session = await SessionService.validateSession(rawToken);
+        if (session) {
+          linkingUserId = session.userId;
+        }
+      }
+      if (!linkingUserId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'You must be logged in to link a Google account.');
+      }
+    }
+
+    const state = crypto.randomBytes(24).toString('hex');
+    const { codeVerifier, codeChallenge } = googleOAuthProvider.generatePkcePair();
+    const returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : (action === 'link' ? '/settings' : '/');
+
+    const statePayload: OAuthStatePayload = {
+      state,
+      codeVerifier,
+      action,
+      linkingUserId,
+      returnTo,
+    };
+
+    res.cookie('vetrx_oauth_state', Buffer.from(JSON.stringify(statePayload)).toString('base64url'), {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -132,7 +244,7 @@ authRouter.get('/google/start', (req, res, next) => {
       path: '/api/auth/google',
     });
 
-    const authUrl = googleOAuthProvider.getAuthorizationUrl(state);
+    const authUrl = googleOAuthProvider.getAuthorizationUrl(state, codeChallenge);
     res.redirect(authUrl);
   } catch (error) {
     next(error);
@@ -141,9 +253,10 @@ authRouter.get('/google/start', (req, res, next) => {
 
 /**
  * GET /api/auth/google/callback
- * Validates Google OAuth callback, verifies state, and logs in user.
+ * Validates Google OAuth callback, verifies state + PKCE, and links/authenticates.
  */
 authRouter.get('/google/callback', async (req, res) => {
+  let returnTo = '/';
   try {
     const { code, state, error } = req.query;
 
@@ -155,15 +268,29 @@ authRouter.get('/google/callback', async (req, res) => {
       throw new AppError(400, 'MISSING_OAUTH_CODE', 'Missing authorization code from Google.');
     }
 
-    const storedState = req.cookies?.vetrx_oauth_state;
-    if (!storedState || storedState !== state) {
+    const rawStateCookie = req.cookies?.vetrx_oauth_state;
+    if (!rawStateCookie) {
+      throw new AppError(400, 'INVALID_OAUTH_STATE', 'OAuth state missing or expired. Please try again.');
+    }
+
+    let parsedPayload: OAuthStatePayload;
+    try {
+      parsedPayload = JSON.parse(Buffer.from(rawStateCookie, 'base64url').toString('utf8'));
+    } catch {
+      // Fallback for simple string state if legacy
+      parsedPayload = { state: rawStateCookie };
+    }
+
+    if (!parsedPayload.state || parsedPayload.state !== state) {
       throw new AppError(400, 'INVALID_OAUTH_STATE', 'OAuth state mismatch or expired. Please try again.');
     }
+
+    returnTo = parsedPayload.returnTo || (parsedPayload.action === 'link' ? '/settings' : '/');
 
     // Clear state cookie
     res.clearCookie('vetrx_oauth_state', { path: '/api/auth/google' });
 
-    const identity = await googleOAuthProvider.handleCallback(code);
+    const identity = await googleOAuthProvider.handleCallback(code, parsedPayload.codeVerifier);
 
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
@@ -171,15 +298,21 @@ authRouter.get('/google/callback', async (req, res) => {
     const { token } = await AuthService.handleOAuthIdentity(identity, {
       ipAddress,
       userAgent,
+      linkingUserId: parsedPayload.linkingUserId,
     });
 
     SessionService.setCookie(res, token);
 
-    // Redirect to frontend application root
-    res.redirect(env.APP_URL);
+    // Redirect to frontend application
+    const destination = new URL(returnTo.startsWith('/') ? returnTo : '/', env.APP_URL);
+    if (parsedPayload.action === 'link') {
+      destination.searchParams.set('google_connected', 'true');
+    }
+    res.redirect(destination.toString());
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Google authentication failed';
-    const redirectUrl = new URL('/login', env.APP_URL);
+    const fallbackPath = returnTo.startsWith('/settings') ? '/settings' : '/login';
+    const redirectUrl = new URL(fallbackPath, env.APP_URL);
     redirectUrl.searchParams.set('error', message);
     res.redirect(redirectUrl.toString());
   }

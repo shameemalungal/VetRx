@@ -16,7 +16,10 @@ import {
   requestPersistentStorage,
   type BackupValidationResult,
 } from '../utils/backupRestore';
+import { useAuth } from '../context/AuthContext';
 import './SettingsPage.css';
+
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 function FormGroup({
   label,
@@ -1401,21 +1404,548 @@ function DeveloperDataResetSection() {
   );
 }
 
+// ── Account & Security Management Section ───────────────────────
+function AccountSecuritySection() {
+  const { user, practice, membership, logout } = useAuth();
+  const { practitioner } = useSettingsStore();
+
+  const [identities, setIdentities] = useState<{
+    email: string;
+    hasPassword: boolean;
+    hasGoogle: boolean;
+    identities: Array<{ provider: string; createdAt: string }>;
+  } | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('error');
+  });
+  const [success, setSuccess] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('google_connected') === 'true'
+      ? 'Google account connected successfully.'
+      : null;
+  });
+
+  // Password Modal / Form State
+  const [showPasswordModal, setShowPasswordModal] = useState<'set' | 'change' | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submittingPassword, setSubmittingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const fetchIdentities = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`${API_BASE}/api/auth/identities`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIdentities(data);
+      }
+    } catch (err) {
+      console.error('Failed to load identities:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchIdentities();
+  }, []);
+
+  const handleConnectGoogle = () => {
+    window.location.href = `${API_BASE}/api/auth/google/start?action=link&returnTo=/settings?tab=account`;
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!identities?.hasPassword) {
+      alert('You must set an account password before disconnecting Google to prevent losing access to your account.');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to disconnect Google authentication from this account?')) {
+      return;
+    }
+
+    try {
+      setError(null);
+      const res = await fetch(`${API_BASE}/api/auth/identities/google`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Failed to disconnect Google.');
+      }
+      setSuccess('Google account disconnected successfully.');
+      void fetchIdentities();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect Google.');
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setSubmittingPassword(true);
+    try {
+      const endpoint = showPasswordModal === 'set' ? '/api/auth/password/set' : '/api/auth/password/change';
+      const body = showPasswordModal === 'set'
+        ? { newPassword }
+        : { currentPassword, newPassword };
+
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Password update failed.');
+      }
+
+      setSuccess(showPasswordModal === 'set' ? 'Password created successfully.' : 'Password updated successfully.');
+      setShowPasswordModal(null);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      void fetchIdentities();
+    } catch (err: unknown) {
+      setPasswordError(err instanceof Error ? err.message : 'Password update failed.');
+    } finally {
+      setSubmittingPassword(false);
+    }
+  };
+
+  return (
+    <div className="settings-sections">
+      {/* Notifications */}
+      {error && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(186, 26, 26, 0.1)',
+          border: '1px solid rgba(186, 26, 26, 0.3)',
+          color: 'var(--color-error)',
+          fontSize: '13px',
+          fontWeight: 500,
+        }}>
+          {error}
+        </div>
+      )}
+      {success && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(0, 104, 95, 0.1)',
+          border: '1px solid rgba(0, 104, 95, 0.3)',
+          color: 'var(--color-primary)',
+          fontSize: '13px',
+          fontWeight: 600,
+        }}>
+          {success}
+        </div>
+      )}
+
+      {/* ── 1. ACCOUNT DETAILS ── */}
+      <section className="settings-section card">
+        <div className="card-header">
+          <div>
+            <div className="section-title">Account Profile</div>
+            <div className="section-sub">Authenticated practitioner identity</div>
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="settings-grid">
+            <div className="form-group">
+              <label className="form-label">Practitioner Name</label>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                {user?.name || practitioner?.name || 'Veterinary Practitioner'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email Address</label>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                {user?.email || 'doctor@example.com'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Mobile Number</label>
+              <div style={{ fontSize: '14px', color: 'var(--color-on-surface-variant)' }}>
+                {practitioner?.phone || 'Not configured'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Account Status</label>
+              <div>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  background: 'rgba(0, 104, 95, 0.12)',
+                  color: 'var(--color-primary)',
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-primary)' }} />
+                  Active
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 2. AUTHENTICATION METHODS ── */}
+      <section className="settings-section card">
+        <div className="card-header">
+          <div>
+            <div className="section-title">Authentication Methods</div>
+            <div className="section-sub">Connected login options for this VetRx account</div>
+          </div>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Email & Password */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-container)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-primary)',
+                }}>
+                  <Icon name="lock" size={20} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
+                    Email & Password
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                    {isLoading ? 'Checking status…' : identities?.hasPassword ? '✓ Configured' : '○ Password not configured'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                {identities?.hasPassword ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setPasswordError(null);
+                      setShowPasswordModal('change');
+                    }}
+                  >
+                    Change Password
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setPasswordError(null);
+                      setShowPasswordModal('set');
+                    }}
+                  >
+                    Set Password
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Google Authentication */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-container)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <svg style={{ width: '20px', height: '20px' }} viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
+                    Google
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                    {isLoading ? 'Checking status…' : identities?.hasGoogle ? '✓ Connected to Google' : '○ Not connected'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                {identities?.hasGoogle ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleDisconnectGoogle}
+                    style={{ color: 'var(--color-error)' }}
+                  >
+                    Disconnect Google
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={handleConnectGoogle}
+                  >
+                    Connect Google
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3. PRACTICE TENANT DETAILS ── */}
+      <section className="settings-section card">
+        <div className="card-header">
+          <div>
+            <div className="section-title">Practice Information</div>
+            <div className="section-sub">Commercial practice tenancy and membership</div>
+          </div>
+        </div>
+        <div className="card-body">
+          <div className="settings-grid">
+            <div className="form-group">
+              <label className="form-label">Practice Name</label>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                {practice?.name || 'Primary Practice'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Membership Role</label>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
+                {membership?.role || 'PRACTICE_OWNER'}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Practice Tenant ID</label>
+              <div style={{ fontSize: '13px', fontFamily: 'monospace', color: 'var(--color-on-surface-variant)' }}>
+                {practice?.id || '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 4. SESSION MANAGEMENT ── */}
+      <section className="settings-section card">
+        <div className="card-header">
+          <div>
+            <div className="section-title">Session Management</div>
+            <div className="section-sub">Current login session controls</div>
+          </div>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
+                Current Active Session
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
+                Protected with HttpOnly, SameSite, cryptographic session verification
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => logout()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="logout" size={14} />
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Modal: Set or Change Password */}
+      {showPasswordModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="password-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+            zIndex: 1000,
+          }}
+        >
+          <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '24px' }}>
+            <h2 id="password-modal-title" style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>
+              {showPasswordModal === 'set' ? 'Set Account Password' : 'Change Account Password'}
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginBottom: '16px' }}>
+              {showPasswordModal === 'set'
+                ? 'Create a password so you can sign in with your email directly.'
+                : 'Enter your current password and a new secure password.'}
+            </p>
+
+            {passwordError && (
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(186, 26, 26, 0.1)',
+                color: 'var(--color-error)',
+                fontSize: '13px',
+                marginBottom: '14px',
+              }}>
+                {passwordError}
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordSubmit}>
+              {showPasswordModal === 'change' && (
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" htmlFor="current-pw">Current Password</label>
+                  <input
+                    id="current-pw"
+                    type="password"
+                    required
+                    className="auth-input"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" htmlFor="new-pw">New Password (min. 8 characters)</label>
+                <input
+                  id="new-pw"
+                  type="password"
+                  required
+                  className="auth-input"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" htmlFor="confirm-pw">Confirm New Password</label>
+                <input
+                  id="confirm-pw"
+                  type="password"
+                  required
+                  className="auth-input"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={submittingPassword}
+                  onClick={() => setShowPasswordModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submittingPassword}
+                >
+                  {submittingPassword ? 'Saving…' : showPasswordModal === 'set' ? 'Set Password' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main SettingsPage Component ────────────────────────────────
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'master-data'>(() => {
+  const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'master-data'>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('tab') === 'master-data' ? 'master-data' : 'profile';
+    const tab = params.get('tab');
+    if (tab === 'account') return 'account';
+    if (tab === 'master-data') return 'master-data';
+    return 'profile';
   });
 
-  const handleTabChange = (tab: 'profile' | 'master-data') => {
+  const handleTabChange = (tab: 'account' | 'profile' | 'master-data') => {
     setActiveTab(tab);
     const url = new URL(window.location.href);
-    if (tab === 'master-data') {
-      url.searchParams.set('tab', 'master-data');
-    } else {
+    if (tab === 'profile') {
       url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', tab);
     }
     window.history.replaceState({}, '', url.toString());
   };
@@ -1427,13 +1957,26 @@ export const SettingsPage: React.FC = () => {
           <div>
             <h1>Settings</h1>
             <p className="section-sub">
-              {activeTab === 'profile'
+              {activeTab === 'account'
+                ? 'Manage your practitioner account, authentication methods, and security.'
+                : activeTab === 'profile'
                 ? 'Manage your practitioner profile and optional clinic identity.'
                 : 'Configure standard clinical options, formulary units, routes, and invoice items.'}
             </p>
           </div>
 
           <div className="settings-tab-switcher" role="tablist" aria-label="Settings Tabs">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'account'}
+              className={`settings-tab-btn ${activeTab === 'account' ? 'active' : ''}`}
+              onClick={() => handleTabChange('account')}
+              id="tab-account"
+            >
+              <Icon name="lock" size={16} />
+              <span>Account & Security</span>
+            </button>
             <button
               type="button"
               role="tab"
@@ -1460,7 +2003,9 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === 'profile' ? (
+      {activeTab === 'account' ? (
+        <AccountSecuritySection />
+      ) : activeTab === 'profile' ? (
         <div className="settings-sections">
           <PractitionerSection />
           <OrganisationSection />
@@ -1474,3 +2019,4 @@ export const SettingsPage: React.FC = () => {
     </div>
   );
 };
+
