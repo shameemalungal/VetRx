@@ -39,16 +39,43 @@ function timeAgo(d?: Date): string {
   return `${Math.round(diffDays / 30)}mo ago`;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
+
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, practice } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
 
-  // ── Instant Formulary & MRN Search State ─────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const formularySearchRef = useRef<HTMLDivElement>(null);
   const [shareInvoice, setShareInvoice] = useState<(Invoice & { patient?: Patient; owner?: Owner }) | null>(null);
+
+  // ── Commercial Subscription Status ───────────────────────────
+  const [commercialInfo, setCommercialInfo] = useState<{
+    status: string;
+    trialDaysRemaining?: number;
+    planName?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let unmounted = false;
+    fetch(`${API_BASE}/api/commercial/status`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data) {
+          setCommercialInfo({
+            status: data.commercialStatus || 'UNKNOWN',
+            trialDaysRemaining: data.trialDaysRemaining,
+            planName: data.plan?.name,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, []);
 
   // ── Metric Counts ───────────────────────────────────────────
   const rxCount      = useLiveQuery(() => db.prescriptions.count(), []);
@@ -219,6 +246,61 @@ export const DashboardPage: React.FC = () => {
               <Icon name="verified" size={13} className="text-secondary" />
               {doctorName}
             </span>
+            {commercialInfo && (
+              <Link
+                to="/settings?tab=subscription"
+                className="status-badge-subscription"
+                title="Manage Subscription & Billing"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  backgroundColor:
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? 'rgba(59, 130, 246, 0.1)'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? 'rgba(245, 158, 11, 0.1)'
+                      : 'rgba(239, 68, 68, 0.1)',
+                  color:
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? '#2563eb'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? '#059669'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? '#d97706'
+                      : '#dc2626',
+                  border: `1px solid ${
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? 'rgba(59, 130, 246, 0.25)'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? 'rgba(245, 158, 11, 0.25)'
+                      : 'rgba(239, 68, 68, 0.25)'
+                  }`,
+                }}
+              >
+                <Icon name="credit-card" size={13} />
+                <span>
+                  {commercialInfo.status === 'TRIAL_ACTIVE'
+                    ? `14-Day Trial • ${commercialInfo.trialDaysRemaining ?? 0}d left`
+                    : commercialInfo.status === 'ACTIVE'
+                    ? `${commercialInfo.planName || 'Active'} Plan`
+                    : commercialInfo.status === 'GRACE_PERIOD'
+                    ? 'Grace Period'
+                    : commercialInfo.status === 'TRIAL_EXPIRED'
+                    ? 'Trial Expired'
+                    : 'Subscription'}
+                </span>
+              </Link>
+            )}
           </div>
           <h1 className="dashboard-headline">Clinical Practice Command Center</h1>
           <p className="dashboard-subheadline">

@@ -4,6 +4,7 @@ import { PasswordService } from '../lib/password.js';
 import { AuditService } from '../lib/audit.service.js';
 import { SessionService } from './session.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { SubscriptionService } from '../commercial/subscription.service.js';
 import type {
   AuthenticatedIdentity,
   SafeUserDTO,
@@ -100,6 +101,9 @@ export class AuthService {
           email: user.email,
         },
       });
+
+      // Initialize 14-day commercial trial
+      await SubscriptionService.initializePracticeTrial(practice.id, { tx });
 
       return { user, practice, membership, settings };
     });
@@ -554,6 +558,9 @@ export class AuthService {
           email: user.email,
         },
       });
+
+      // Initialize 14-day commercial trial
+      await SubscriptionService.initializePracticeTrial(practice.id, { tx });
 
       return user;
     });

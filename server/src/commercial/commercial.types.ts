@@ -90,6 +90,29 @@ export interface PaymentEventDTO {
   processedAt: string | null;
 }
 
+export interface PracticeUsageDTO {
+  patientsCount: number;
+  maxPatients: number | null;
+  packagesCount: number;
+  maxPackages: number | null;
+  customMedicinesCount: number;
+  maxCustomMedicines: number | null;
+  veterinarianSeatsCount: number;
+  maxVeterinarianSeats: number;
+  staffSeatsCount: number;
+  maxStaffSeats: number | null;
+  maxRecordsPerPatient: number | null;
+}
+
+export interface CommercialLimitsDTO {
+  maxPatients: number | null;
+  maxRecordsPerPatient: number | null;
+  maxPackages: number | null;
+  maxCustomMedicines: number | null;
+  maxVeterinarianSeats: number;
+  maxStaffSeats: number | null;
+}
+
 export interface PracticeEntitlementsDTO {
   practiceId: string;
   status: SubscriptionStatus;
@@ -109,6 +132,8 @@ export interface PracticeEntitlementsDTO {
     activeSeatsCount: number;
     maxSeatsAllowed: number;
   };
+  limits: CommercialLimitsDTO;
+  usage?: PracticeUsageDTO;
   isReadOnly: boolean;
   expiresAt: string | null;
   gracePeriodEndsAt: string | null;
@@ -125,6 +150,12 @@ export interface CommercialAccountStatusDTO {
   isPastDue: boolean;
   isInGracePeriod: boolean;
   isExpired: boolean;
+  isTrial: boolean;
+  trialStartsAt: string | null;
+  trialEndsAt: string | null;
   daysRemainingInPeriod: number | null;
   periodEnd: string | null;
+  paymentMethodStatus: 'REQUIRED' | 'PENDING' | 'CONFIGURED';
+  cancelAtPeriodEnd: boolean;
+  usage?: PracticeUsageDTO;
 }

@@ -17,6 +17,7 @@ import {
   type BackupValidationResult,
 } from '../utils/backupRestore';
 import { useAuth } from '../context/AuthContext';
+import { SubscriptionBillingSection } from '../components/commercial/SubscriptionBillingSection';
 import './SettingsPage.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
@@ -1931,15 +1932,16 @@ function AccountSecuritySection() {
 // ── Main SettingsPage Component ────────────────────────────────
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'master-data'>(() => {
+  const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'subscription' | 'master-data'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     if (tab === 'account') return 'account';
+    if (tab === 'subscription') return 'subscription';
     if (tab === 'master-data') return 'master-data';
     return 'profile';
   });
 
-  const handleTabChange = (tab: 'account' | 'profile' | 'master-data') => {
+  const handleTabChange = (tab: 'account' | 'profile' | 'subscription' | 'master-data') => {
     setActiveTab(tab);
     const url = new URL(window.location.href);
     if (tab === 'profile') {
@@ -1959,6 +1961,8 @@ export const SettingsPage: React.FC = () => {
             <p className="section-sub">
               {activeTab === 'account'
                 ? 'Manage your practitioner account, authentication methods, and security.'
+                : activeTab === 'subscription'
+                ? 'Manage your practice subscription plan, limits, and commercial billing.'
                 : activeTab === 'profile'
                 ? 'Manage your practitioner profile and optional clinic identity.'
                 : 'Configure standard clinical options, formulary units, routes, and invoice items.'}
@@ -1976,6 +1980,17 @@ export const SettingsPage: React.FC = () => {
             >
               <Icon name="lock" size={16} />
               <span>Account & Security</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'subscription'}
+              className={`settings-tab-btn ${activeTab === 'subscription' ? 'active' : ''}`}
+              onClick={() => handleTabChange('subscription')}
+              id="tab-subscription"
+            >
+              <Icon name="credit-card" size={16} />
+              <span>Subscription & Billing</span>
             </button>
             <button
               type="button"
@@ -2005,6 +2020,8 @@ export const SettingsPage: React.FC = () => {
 
       {activeTab === 'account' ? (
         <AccountSecuritySection />
+      ) : activeTab === 'subscription' ? (
+        <SubscriptionBillingSection />
       ) : activeTab === 'profile' ? (
         <div className="settings-sections">
           <PractitionerSection />

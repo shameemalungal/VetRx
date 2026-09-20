@@ -4,6 +4,7 @@ import { ClinicalService } from './clinical.service.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePractice } from '../middleware/tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { EntitlementService } from '../commercial/entitlement.service.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 export const clinicalRouter = Router();
@@ -136,6 +137,7 @@ clinicalRouter.get('/patients/:id', async (req: AuthenticatedRequest, res, next)
 clinicalRouter.post('/patients', async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
+    await EntitlementService.assertCanCreatePatient(practiceId);
     const data = createPatientSchema.parse(req.body);
     const patient = await ClinicalService.createPatient(practiceId, data);
     res.status(201).json(patient);
@@ -202,6 +204,7 @@ clinicalRouter.get('/medicines/:id', async (req: AuthenticatedRequest, res, next
 clinicalRouter.post('/medicines', async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
+    await EntitlementService.assertCanAddMedicine(practiceId);
     const data = createMedicineSchema.parse(req.body);
     const medicine = await ClinicalService.createMedicine(practiceId, data);
     res.status(201).json(medicine);
@@ -264,6 +267,7 @@ clinicalRouter.get('/packages/:id', async (req: AuthenticatedRequest, res, next)
 clinicalRouter.post('/packages', async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
+    await EntitlementService.assertCanCreatePackage(practiceId);
     const data = createPackageSchema.parse(req.body);
     const pkg = await ClinicalService.createPackage(practiceId, data);
     res.status(201).json(pkg);
@@ -341,6 +345,7 @@ clinicalRouter.post('/prescriptions', async (req: AuthenticatedRequest, res, nex
   try {
     const practiceId = getPracticeId(req);
     const data = createPrescriptionSchema.parse(req.body);
+    await EntitlementService.assertCanCreateRecord(practiceId, data.patientId);
     const rx = await ClinicalService.createPrescription(practiceId, data);
     res.status(201).json(rx);
   } catch (err) {
@@ -421,6 +426,9 @@ clinicalRouter.post('/invoices', async (req: AuthenticatedRequest, res, next) =>
   try {
     const practiceId = getPracticeId(req);
     const data = createInvoiceSchema.parse(req.body);
+    if (data.patientId) {
+      await EntitlementService.assertCanCreateRecord(practiceId, data.patientId);
+    }
     const invoice = await ClinicalService.createInvoice(practiceId, data);
     res.status(201).json(invoice);
   } catch (err) {
