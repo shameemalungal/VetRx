@@ -115,6 +115,10 @@ model Practice {
   documentSequences DocumentSequence[]
   auditLogs         AuditLog[]
 
+  // Commercial Relations (Phase 10 Foundation)
+  subscriptions     Subscription[]
+  payments          Payment[]
+
   @@index([ownerUserId])
 }
 
@@ -375,3 +379,129 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// ------------------------------------------------------------------------------
+// Commercial SaaS Domain Models (Phase 10 Foundation)
+// Practice is the commercial tenant. Subscriptions and Payments belong to Practice.
+// ------------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  THREE_MONTHS
+  ANNUAL
+  ONE_TIME
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id              String          @id @default(uuid())
+  code            String          @unique // e.g. "TRIAL", "MONTHLY", "THREE_MONTHS", "ANNUAL"
+  name            String          // Human-readable plan name
+  description     String?
+  interval        BillingInterval @default(MONTHLY)
+  intervalCount   Int             @default(1)
+  pricePaisa      Int             // Stored in integer paise (INR), e.g. 59900 = ₹599.00
+  currency        String          @default("INR")
+  trialPeriodDays Int             @default(0)
+  maxUserSeats    Int             @default(1)
+  featuresJson    Json            @default("{}")
+  isActive        Boolean         @default(true)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  subscriptions   Subscription[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  practiceId            String
+  practice              Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  planId                String
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                SubscriptionStatus @default(TRIAL)
+  trialStartsAt         DateTime?
+  trialEndsAt           DateTime?
+  currentPeriodStart    DateTime           @default(now())
+  currentPeriodEnd      DateTime
+  cancelledAt           DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  gracePeriodEndsAt     DateTime?
+  gatewayCustomerId     String?            // Future PayU or provider customer reference
+  gatewaySubscriptionId String?            // Future recurring subscription reference
+  metadata              Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  payments              Payment[]
+
+  @@index([practiceId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model Payment {
+  id                   String        @id @default(uuid())
+  practiceId           String
+  practice             Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  subscriptionId       String?
+  subscription         Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amountPaisa          Int           // Strict integer paise: ₹100.00 = 10000
+  currency             String        @default("INR")
+  status               PaymentStatus @default(PENDING)
+  paymentProvider      String        @default("PAYU")
+  internalReference    String        @unique // Unique internal payment tracking ID
+  gatewayTransactionId String?       // External PayU txnid or reference
+  paymentMethod        String?       // UPI, CARD, NETBANKING
+  gatewayResponseRaw   Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  events               PaymentEvent[]
+
+  @@index([practiceId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([gatewayTransactionId])
+}
+
+model PaymentEvent {
+  id               String    @id @default(uuid())
+  paymentId        String?
+  payment          Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  provider         String    // e.g. "PAYU"
+  eventId          String    // External event ID or gateway transaction ID
+  eventType        String    // e.g. "PAYMENT_SUCCESS", "PAYMENT_FAILED"
+  payloadHash      String?   // SHA-256 hash of raw payload
+  rawPayload       Json?
+  processingStatus String    @default("PROCESSED") // "RECEIVED", "PROCESSED", "FAILED", "IGNORED"
+  errorMessage     String?
+  receivedAt       DateTime  @default(now())
+  processedAt      DateTime?
+
+  @@unique([provider, eventId]) // STRICT IDEMPOTENCY: Duplicate delivery rejected safely
+  @@index([paymentId])
+  @@index([receivedAt])
+}
+
