@@ -10,29 +10,29 @@ The server-side OAuth 2.0 / OpenID Connect architecture, RFC 7636 PKCE S256 veri
 ## 2. Configuration
 
 Google Client ID:
-NOT SET (EMPTY in `/home/ncms/VetRx/.env`)
+SET (`337555927933-ptpmdujkimmpgjuukbsm2q9pnk3ub440.apps.googleusercontent.com` in `/home/ncms/VetRx/.env`)
 
 Google Client Secret:
-NOT SET (EMPTY in `/home/ncms/VetRx/.env`)
+SET (`<REDACTED_GOOGLE_CLIENT_SECRET>` in `/home/ncms/VetRx/.env`)
 
 Google Redirect URI:
 SET (`https://vetrx.adcpmalappuram.in/api/auth/google/callback` via `GOOGLE_CALLBACK_URL`)
 
 OAuth configuration:
-BLOCKED (Awaiting production Google Cloud credentials)
+PASS (Fully configured, active, and verified on production)
 
 *(Never expose actual secret values)*
 
 ## 3. Route Verification
 
 Start endpoint:
-PASS (`/api/auth/google/start` is live; correctly returns safe `OAUTH_NOT_CONFIGURED` when credentials are empty and creates the secure state cookie)
+PASS (`GET /api/auth/google/start` returns HTTP 302 redirect to Google OAuth consent page and issues secure `vetrx_oauth_state` cookie)
 
 Callback:
-PASS (`/api/auth/google/callback` is registered and validates incoming state, PKCE code verifier, and claims)
+PASS (`GET /api/auth/google/callback` registered and ready to exchange authorization codes with PKCE)
 
 Redirect URI:
-PASS (`https://vetrx.adcpmalappuram.in/api/auth/google/callback` verified against application routes and NGINX reverse proxy configuration)
+PASS (`https://vetrx.adcpmalappuram.in/api/auth/google/callback` validated; Google returns HTTP 200 on authorization URL with zero `redirect_uri_mismatch`)
 
 ## 4. Security
 
@@ -66,16 +66,16 @@ PASS (`HttpOnly; Secure; SameSite=Lax` flags verified live on `/api/auth/google/
 ## 5. Manual Acceptance
 
 New Google account:
-BLOCKED (Awaiting Google Cloud credentials in `/home/ncms/VetRx/.env`)
+READY FOR MANUAL BROWSER TEST (OAuth flow redirects cleanly to Google Accounts)
 
 Existing email → Google:
-BLOCKED (Awaiting Google Cloud credentials in `/home/ncms/VetRx/.env`)
+READY FOR MANUAL BROWSER TEST (Case A linking logic active)
 
 Google → password:
-BLOCKED (Awaiting Google Cloud credentials in `/home/ncms/VetRx/.env`)
+READY FOR MANUAL BROWSER TEST (`/api/auth/password/set` active)
 
 Google linking:
-BLOCKED (Awaiting Google Cloud credentials in `/home/ncms/VetRx/.env`)
+READY FOR MANUAL BROWSER TEST (`/settings` Account & Security active)
 
 Google collision:
 PASS (Verified in automated test suite: 409 `GOOGLE_IDENTITY_ALREADY_LINKED`)
@@ -84,7 +84,7 @@ Google cancellation:
 PASS (Callback error query param returns clean error redirect to `/login`)
 
 Logout:
-PASS (Verified on live production; session revoked and cookie cleared)
+PASS (Verified on live production: session revoked and cookie cleared)
 
 Tenant isolation:
 PASS (Verified in automated test suite and live API; practice derived strictly from server session)
@@ -139,41 +139,15 @@ PASS (`vetrx-backend-prod`, `vetrx-frontend-prod`, `vetrx-postgres-prod` all hea
 
 ## 9. Problems Found
 
-1. **Missing Google OAuth Credentials in Production**:
-   - In `/home/ncms/VetRx/.env`:
-     - `GOOGLE_CLIENT_ID` is present but **EMPTY**
-     - `GOOGLE_CLIENT_SECRET` is present but **EMPTY**
-   - Result: `GET /api/auth/google/start` returns `OAUTH_NOT_CONFIGURED`, as intentionally programmed for safety.
-   - The application code is 100% correct, complete, and passing all tests; live Google redirection simply requires the OAuth Client ID and Secret to be populated from Google Cloud Console.
+None. Google OAuth Client credentials are fully configured in the production environment, the backend container successfully reloaded, and `GET /api/auth/google/start` redirects directly to Google's consent screen.
 
 ## 10. Manual Action Required
 
-To activate Google Authentication in production:
-
-1. **Configure Google Cloud Console**:
-   - **Where**: [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
-   - **What**: Create an **OAuth 2.0 Client ID** of type **Web application**:
-     - **Authorized JavaScript origins**: `https://vetrx.adcpmalappuram.in`
-     - **Authorized redirect URIs**: `https://vetrx.adcpmalappuram.in/api/auth/google/callback`
-   - **Why**: Google OAuth requires registered origins and exact callback URI matching to issue authorization codes.
-
-2. **Populate Credentials on Production VPS**:
-   - **Where**: SSH to `109.122.56.148` as `ncms`, file `/home/ncms/VetRx/.env`
-   - **What**: Set:
-     ```env
-     GOOGLE_CLIENT_ID=<YOUR_CLIENT_ID>.apps.googleusercontent.com
-     GOOGLE_CLIENT_SECRET=<YOUR_CLIENT_SECRET>
-     GOOGLE_CALLBACK_URL=https://vetrx.adcpmalappuram.in/api/auth/google/callback
-     ```
-   - **Why**: The backend reads these variables on startup to construct the Google authorization URL and exchange authorization codes for ID tokens.
-
-3. **Reload Backend Container**:
-   - **Where**: Run in `/home/ncms/VetRx` on VPS:
-     ```bash
-     docker compose -f docker-compose.prod.yml up -d --no-deps backend
-     ```
-   - **Why**: Injects the updated environment variables into `vetrx-backend-prod` without interrupting PostgreSQL or NGINX.
+None for configuration. The system is live. You may now perform a manual test in your browser:
+1. Open `https://vetrx.adcpmalappuram.in/login`
+2. Click **Continue with Google**
+3. Select your test Google account to sign in
 
 ## 11. Final Status
 
-**PASS WITH MANUAL CONFIGURATION REQUIRED**
+**PASS — Google OAuth fully activated and ready for manual acceptance**
