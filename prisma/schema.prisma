@@ -89,6 +89,8 @@ model Session {
   id               String    @id @default(uuid())
   userId           String
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceId       String?
+  practice         Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
   sessionTokenHash String    @unique // SHA-256 hash of raw session token
   expiresAt        DateTime
   createdAt        DateTime  @default(now())
@@ -98,6 +100,7 @@ model Session {
   revokedAt        DateTime?
 
   @@index([userId])
+  @@index([practiceId])
   @@index([sessionTokenHash])
   @@index([expiresAt])
 }
@@ -120,6 +123,7 @@ model Practice {
   members     PracticeMember[]
   settings    PracticeSettings?
   invitations PracticeInvitation[]
+  sessions    Session[]
 
   // Clinical Data Tenant Scoping (Future Stages)
   owners            Owner[]

@@ -21,6 +21,7 @@ const registerSchema = z.object({
   email: z.string().email('Valid email address is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   practiceName: z.string().max(120).optional(),
+  invitationToken: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -38,6 +39,7 @@ interface OAuthStatePayload {
   action?: 'login' | 'link';
   linkingUserId?: string;
   returnTo?: string;
+  invitationToken?: string;
 }
 
 const setPasswordSchema = z.object({
@@ -125,7 +127,7 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res, next) 
       throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
     }
 
-    const context = await AuthService.getMeContext(req.user.id);
+    const context = await AuthService.getMeContext(req.user.id, req.session?.practiceId, req.session?.id);
     res.status(200).json(context);
   } catch (error) {
     next(error);
@@ -226,7 +228,20 @@ authRouter.get('/google/start', async (req, res, next) => {
 
     const state = crypto.randomBytes(24).toString('hex');
     const { codeVerifier, codeChallenge } = googleOAuthProvider.generatePkcePair();
-    const returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : (action === 'link' ? '/settings' : '/');
+    let returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : (action === 'link' ? '/settings' : '/');
+    // Prevent open redirect: only allow internal relative paths
+    if (!returnTo.startsWith('/') || returnTo.startsWith('//')) {
+      returnTo = '/';
+    }
+
+    // Extract invitationToken if returnTo contains /invite/:token or if passed explicitly
+    let invitationToken: string | undefined;
+    const inviteMatch = returnTo.match(/\/invite\/([a-zA-Z0-9_-]+)/);
+    if (inviteMatch && inviteMatch[1]) {
+      invitationToken = inviteMatch[1];
+    } else if (typeof req.query.invitationToken === 'string') {
+      invitationToken = req.query.invitationToken;
+    }
 
     const statePayload: OAuthStatePayload = {
       state,
@@ -234,6 +249,7 @@ authRouter.get('/google/start', async (req, res, next) => {
       action,
       linkingUserId,
       returnTo,
+      invitationToken,
     };
 
     res.cookie('vetrx_oauth_state', Buffer.from(JSON.stringify(statePayload)).toString('base64url'), {
@@ -298,7 +314,9 @@ authRouter.get('/google/callback', async (req, res) => {
     const { token } = await AuthService.handleOAuthIdentity(identity, {
       ipAddress,
       userAgent,
+      action: parsedPayload.action,
       linkingUserId: parsedPayload.linkingUserId,
+      invitationToken: parsedPayload.invitationToken,
     });
 
     SessionService.setCookie(res, token);

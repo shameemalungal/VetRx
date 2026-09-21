@@ -239,7 +239,8 @@ export class InvitationService {
    */
   static async acceptInvitation(
     rawToken: string,
-    acceptingUser: { id: string; email: string; name?: string }
+    acceptingUser: { id: string; email: string; name?: string },
+    sessionId?: string | null
   ): Promise<{ practiceId: string; role: Role; membershipId: string }> {
     if (!rawToken || typeof rawToken !== 'string') {
       throw new AppError(400, 'INVALID_TOKEN', 'A valid invitation token is required.');
@@ -351,6 +352,14 @@ export class InvitationService {
             isActive: true,
           },
         });
+
+        // If session ID is provided, update the session practice context
+        if (sessionId) {
+          await tx.session.update({
+            where: { id: sessionId },
+            data: { practiceId: invitation.practiceId },
+          });
+        }
 
         return member;
       });

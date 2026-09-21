@@ -46,11 +46,15 @@ practiceMemberRouter.post('/invitations/accept', requireAuth, async (req: Authen
 
     const { token } = z.object({ token: z.string().min(1, 'Token is required') }).parse(req.body);
 
-    const result = await InvitationService.acceptInvitation(token, {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    });
+    const result = await InvitationService.acceptInvitation(
+      token,
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      req.session?.id
+    );
 
     res.status(200).json({
       message: 'Invitation successfully accepted.',

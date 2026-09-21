@@ -17,19 +17,46 @@ export async function requirePractice(
       throw new AppError(401, 'UNAUTHORIZED', 'Authentication required prior to resolving practice context.');
     }
 
-    // Resolve user's active practice membership
-    const membership = await prisma.practiceMember.findFirst({
-      where: {
-        userId: req.user.id,
-        isActive: true,
-      },
-      include: {
-        practice: true,
-      },
-      orderBy: {
-        createdAt: 'asc', // Default to their primary practice
-      },
-    });
+    // Resolve user's active practice membership authoritative from session.practiceId
+    let membership = null;
+    const sessionPracticeId = req.session?.practiceId;
+
+    if (sessionPracticeId) {
+      membership = await prisma.practiceMember.findFirst({
+        where: {
+          userId: req.user.id,
+          practiceId: sessionPracticeId,
+          isActive: true,
+        },
+        include: {
+          practice: true,
+        },
+      });
+    }
+
+    // Fallback: If session had no practiceId or practiceId was invalidated, resolve valid active membership
+    if (!membership) {
+      membership = await prisma.practiceMember.findFirst({
+        where: {
+          userId: req.user.id,
+          isActive: true,
+        },
+        include: {
+          practice: true,
+        },
+      });
+
+      // Backfill session.practiceId if session exists
+      if (membership && req.session?.id) {
+        req.session.practiceId = membership.practiceId;
+        prisma.session
+          .update({
+            where: { id: req.session.id },
+            data: { practiceId: membership.practiceId },
+          })
+          .catch((err) => console.warn('Failed to backfill session practiceId:', err));
+      }
+    }
 
     if (!membership || !membership.practice || !membership.practice.isActive) {
       throw new AppError(

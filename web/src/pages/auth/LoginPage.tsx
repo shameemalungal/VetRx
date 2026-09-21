@@ -37,7 +37,10 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleGoogleSignIn = () => {
-    window.location.href = `${API_BASE}/api/auth/google/start`;
+    const params = new URLSearchParams(location.search);
+    const redirectUrl = params.get('redirect') || '/';
+    const safeReturnTo = redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') ? redirectUrl : '/';
+    window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
   };
 
   return (

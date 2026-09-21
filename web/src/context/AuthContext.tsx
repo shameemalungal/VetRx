@@ -65,7 +65,7 @@ interface AuthContextType {
   isPracticeOwner: () => boolean;
   isPlatformAdmin: () => boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, practiceName?: string) => Promise<void>;
+  register: (name: string, email: string, password: string, practiceName?: string, invitationToken?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updatePracticeSettings: (updates: Partial<AuthPracticeSettings>) => Promise<void>;
@@ -180,13 +180,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
-  const register = async (name: string, email: string, password: string, practiceName?: string) => {
+  const register = async (name: string, email: string, password: string, practiceName?: string, invitationToken?: string) => {
     setError(null);
     const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name, email, password, practiceName }),
+      body: JSON.stringify({ name, email, password, practiceName, invitationToken }),
     });
 
     const data = await res.json();

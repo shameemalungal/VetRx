@@ -75,6 +75,10 @@ export interface ApiErrorResponse {
 export interface AuthenticatedRequest extends Request {
   id?: string;
   user?: SafeUserDTO;
+  session?: {
+    id: string;
+    practiceId?: string | null;
+  };
   practice?: SafePracticeDTO;
   membership?: SafeMembershipDTO;
   permissions?: string[];

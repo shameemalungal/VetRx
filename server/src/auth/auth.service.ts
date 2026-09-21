@@ -1,4 +1,6 @@
-import { Role } from '@prisma/client';
+import { Role, InvitationStatus } from '@prisma/client';
+import { InvitationService } from './invitation.service.js';
+import { EntitlementService } from '../commercial/entitlement.service.js';
 import { prisma } from '../lib/prisma.js';
 import { PasswordService } from '../lib/password.js';
 import { AuditService } from '../lib/audit.service.js';
@@ -24,10 +26,11 @@ export class AuthService {
     email: string;
     password: string;
     practiceName?: string;
+    invitationToken?: string;
     ipAddress?: string;
     userAgent?: string;
   }): Promise<{ token: string; data: AuthMeResponse }> {
-    const { name, email, password, practiceName, ipAddress, userAgent } = params;
+    const { name, email, password, practiceName, invitationToken, ipAddress, userAgent } = params;
 
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -48,6 +51,44 @@ export class AuthService {
         'EMAIL_ALREADY_EXISTS',
         'An account with this email address already exists. Please sign in instead.'
       );
+    }
+
+    // Check invitation if token provided
+    let invitation: any = null;
+    if (invitationToken) {
+      const tokenHash = InvitationService.hashToken(invitationToken);
+      const dbInv = await prisma.practiceInvitation.findUnique({
+        where: { tokenHash },
+        include: {
+          practice: {
+            include: {
+              settings: true,
+            },
+          },
+        },
+      });
+
+      if (!dbInv) {
+        throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid.');
+      }
+      if (dbInv.status === InvitationStatus.ACCEPTED) {
+        throw new AppError(409, 'INVITATION_ALREADY_ACCEPTED', 'This invitation has already been accepted.');
+      }
+      if (dbInv.status === InvitationStatus.REVOKED) {
+        throw new AppError(400, 'INVITATION_REVOKED', 'This invitation has been revoked.');
+      }
+      if (dbInv.status === InvitationStatus.EXPIRED || new Date() > new Date(dbInv.expiresAt)) {
+        throw new AppError(400, 'INVITATION_EXPIRED', 'This invitation has expired.');
+      }
+      if (normalizedEmail !== dbInv.email.toLowerCase()) {
+        throw new AppError(
+          403,
+          'INVITATION_EMAIL_MISMATCH',
+          `Invitation was issued for ${dbInv.email}, but registration email is ${email}.`
+        );
+      }
+      await EntitlementService.assertCanAddSeat(dbInv.practiceId, dbInv.role);
+      invitation = dbInv;
     }
 
     // 3. Hash password
@@ -77,45 +118,86 @@ export class AuthService {
         },
       });
 
-      // Create Practice (Tenant boundary)
-      const practice = await tx.practice.create({
-        data: {
-          name: defaultPracticeName,
-          ownerUserId: user.id,
-        },
-      });
+      if (invitation) {
+        // Mark invitation consumed
+        await tx.practiceInvitation.update({
+          where: { id: invitation.id },
+          data: { status: InvitationStatus.ACCEPTED, acceptedAt: new Date() },
+        });
 
-      // Create Practice Membership as PRACTICE_OWNER
-      const membership = await tx.practiceMember.create({
-        data: {
-          practiceId: practice.id,
-          userId: user.id,
-          role: Role.PRACTICE_OWNER,
-        },
-      });
+        // Create Practice Membership in INVITING practice directly
+        const membership = await tx.practiceMember.create({
+          data: {
+            practiceId: invitation.practiceId,
+            userId: user.id,
+            role: invitation.role,
+            isActive: true,
+          },
+        });
 
-      // Create Practice Settings
-      const settings = await tx.practiceSettings.create({
-        data: {
-          practiceId: practice.id,
-          doctorName: user.name,
-          email: user.email,
-        },
-      });
+        return {
+          user,
+          practice: invitation.practice,
+          membership,
+          settings: invitation.practice.settings,
+          isInvitation: true,
+          invitationId: invitation.id,
+        };
+      } else {
+        // Create Practice (Tenant boundary)
+        const practice = await tx.practice.create({
+          data: {
+            name: defaultPracticeName,
+            ownerUserId: user.id,
+          },
+        });
 
-      // Initialize 14-day commercial trial
-      await SubscriptionService.initializePracticeTrial(practice.id, { tx });
+        // Create Practice Membership as PRACTICE_OWNER
+        const membership = await tx.practiceMember.create({
+          data: {
+            practiceId: practice.id,
+            userId: user.id,
+            role: Role.PRACTICE_OWNER,
+          },
+        });
 
-      return { user, practice, membership, settings };
+        // Create Practice Settings
+        const settings = await tx.practiceSettings.create({
+          data: {
+            practiceId: practice.id,
+            doctorName: user.name,
+            email: user.email,
+          },
+        });
+
+        // Initialize 14-day commercial trial
+        await SubscriptionService.initializePracticeTrial(practice.id, { tx });
+
+        return { user, practice, membership, settings, isInvitation: false };
+      }
     });
 
-    // 5. Create Session
+    // 5. Create Session with explicit practiceId
     const token = await SessionService.createSession({
       userId: result.user.id,
+      practiceId: result.practice.id,
       ipAddress,
       userAgent,
     });
+
     // 6. Record audit log asynchronously
+    if (result.isInvitation) {
+      void AuditService.record({
+        practiceId: result.practice.id,
+        userId: result.user.id,
+        action: 'INVITATION_ACCEPTED',
+        resource: 'PracticeMember',
+        resourceId: result.membership.id,
+        details: { invitationId: (result as any).invitationId, role: result.membership.role },
+        ipAddress,
+        userAgent,
+      });
+    }
     void AuditService.record({
       practiceId: result.practice.id,
       userId: result.user.id,
@@ -235,6 +317,7 @@ export class AuthService {
 
     const token = await SessionService.createSession({
       userId: user.id,
+      practiceId: practice.id,
       ipAddress,
       userAgent,
     });
@@ -301,13 +384,17 @@ export class AuthService {
 
   /**
    * Handles OAuth identity authentication (Google).
-  /**
-   * Handles OAuth identity authentication (Google).
    * Supports deterministic account linking for verified matching emails.
    */
   static async handleOAuthIdentity(
     identity: AuthenticatedIdentity,
-    meta: { ipAddress?: string; userAgent?: string; linkingUserId?: string }
+    meta: {
+      ipAddress?: string;
+      userAgent?: string;
+      action?: 'login' | 'link';
+      linkingUserId?: string;
+      invitationToken?: string;
+    }
   ): Promise<{ token: string; user: SafeUserDTO }> {
     // 1. Check if AuthIdentity already exists for provider + providerUserId
     const existingIdentity = await prisma.authIdentity.findUnique({
@@ -391,6 +478,26 @@ export class AuthService {
       };
     }
 
+    const normalizedEmail = identity.email.toLowerCase().trim();
+
+    // Check if invitation token is present and valid
+    let oauthInvitation: any = null;
+    if (meta.invitationToken) {
+      const tokenHash = InvitationService.hashToken(meta.invitationToken);
+      const dbInv = await prisma.practiceInvitation.findUnique({
+        where: { tokenHash },
+        include: { practice: { include: { settings: true } } },
+      });
+      if (
+        dbInv &&
+        dbInv.status === InvitationStatus.PENDING &&
+        new Date() <= new Date(dbInv.expiresAt) &&
+        dbInv.email.toLowerCase() === normalizedEmail
+      ) {
+        oauthInvitation = dbInv;
+      }
+    }
+
     // CASE B: Existing Google Identity Match
     if (existingIdentity) {
       if (!existingIdentity.user.isActive) {
@@ -402,8 +509,40 @@ export class AuthService {
         data: { lastLoginAt: new Date() },
       });
 
+      let practiceId = oauthInvitation?.practiceId || null;
+      if (oauthInvitation) {
+        await prisma.practiceInvitation.update({
+          where: { id: oauthInvitation.id },
+          data: { status: InvitationStatus.ACCEPTED, acceptedAt: new Date() },
+        });
+        await prisma.practiceMember.upsert({
+          where: {
+            practiceId_userId: {
+              practiceId: oauthInvitation.practiceId,
+              userId: existingIdentity.userId,
+            },
+          },
+          create: {
+            practiceId: oauthInvitation.practiceId,
+            userId: existingIdentity.userId,
+            role: oauthInvitation.role,
+            isActive: true,
+          },
+          update: {
+            role: oauthInvitation.role,
+            isActive: true,
+          },
+        });
+      } else {
+        const mem = await prisma.practiceMember.findFirst({
+          where: { userId: existingIdentity.userId, isActive: true },
+        });
+        practiceId = mem?.practiceId || null;
+      }
+
       const token = await SessionService.createSession({
         userId: existingIdentity.userId,
+        practiceId,
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
@@ -431,7 +570,6 @@ export class AuthService {
     }
 
     // 2. Identity does not exist: check if email is already taken by an existing account
-    const normalizedEmail = identity.email.toLowerCase().trim();
     const existingUser = await prisma.user.findUnique({
       where: { normalizedEmail },
       include: {
@@ -482,6 +620,37 @@ export class AuthService {
         });
       });
 
+      let practiceId = oauthInvitation?.practiceId || null;
+      if (oauthInvitation) {
+        await prisma.practiceInvitation.update({
+          where: { id: oauthInvitation.id },
+          data: { status: InvitationStatus.ACCEPTED, acceptedAt: new Date() },
+        });
+        await prisma.practiceMember.upsert({
+          where: {
+            practiceId_userId: {
+              practiceId: oauthInvitation.practiceId,
+              userId: existingUser.id,
+            },
+          },
+          create: {
+            practiceId: oauthInvitation.practiceId,
+            userId: existingUser.id,
+            role: oauthInvitation.role,
+            isActive: true,
+          },
+          update: {
+            role: oauthInvitation.role,
+            isActive: true,
+          },
+        });
+      } else {
+        const mem = await prisma.practiceMember.findFirst({
+          where: { userId: existingUser.id, isActive: true },
+        });
+        practiceId = mem?.practiceId || null;
+      }
+
       void AuditService.record({
         userId: existingUser.id,
         action: 'GOOGLE_IDENTITY_LINKED',
@@ -502,6 +671,7 @@ export class AuthService {
 
       const token = await SessionService.createSession({
         userId: existingUser.id,
+        practiceId,
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
@@ -541,46 +711,85 @@ export class AuthService {
         },
       });
 
-      const practice = await tx.practice.create({
-        data: {
-          name: `${user.name}'s Practice`,
-          ownerUserId: user.id,
-        },
-      });
+      if (oauthInvitation) {
+        // Mark invitation accepted
+        await tx.practiceInvitation.update({
+          where: { id: oauthInvitation.id },
+          data: { status: InvitationStatus.ACCEPTED, acceptedAt: new Date() },
+        });
 
-      await tx.practiceMember.create({
-        data: {
-          practiceId: practice.id,
-          userId: user.id,
-          role: Role.PRACTICE_OWNER,
-        },
-      });
+        // Add directly as member of inviting practice
+        const membership = await tx.practiceMember.create({
+          data: {
+            practiceId: oauthInvitation.practiceId,
+            userId: user.id,
+            role: oauthInvitation.role,
+            isActive: true,
+          },
+        });
 
-      await tx.practiceSettings.create({
-        data: {
-          practiceId: practice.id,
-          doctorName: user.name,
-          email: user.email,
-        },
-      });
+        return {
+          user,
+          practiceId: oauthInvitation.practiceId,
+          membershipId: membership.id,
+          isInvitation: true,
+        };
+      } else {
+        const practice = await tx.practice.create({
+          data: {
+            name: `${user.name}'s Practice`,
+            ownerUserId: user.id,
+          },
+        });
 
-      // Initialize 14-day commercial trial
-      await SubscriptionService.initializePracticeTrial(practice.id, { tx });
+        await tx.practiceMember.create({
+          data: {
+            practiceId: practice.id,
+            userId: user.id,
+            role: Role.PRACTICE_OWNER,
+          },
+        });
 
-      return user;
+        await tx.practiceSettings.create({
+          data: {
+            practiceId: practice.id,
+            doctorName: user.name,
+            email: user.email,
+          },
+        });
+
+        // Initialize 14-day commercial trial
+        await SubscriptionService.initializePracticeTrial(practice.id, { tx });
+
+        return { user, practiceId: practice.id, isInvitation: false };
+      }
     });
 
+    if (result.isInvitation) {
+      void AuditService.record({
+        practiceId: result.practiceId,
+        userId: result.user.id,
+        action: 'INVITATION_ACCEPTED',
+        resource: 'PracticeMember',
+        resourceId: (result as any).membershipId,
+        details: { invitationId: oauthInvitation.id, role: oauthInvitation.role },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    }
+
     void AuditService.record({
-      userId: result.id,
+      userId: result.user.id,
       action: 'USER_REGISTERED_GOOGLE',
       resource: 'User',
-      details: { email: result.email },
+      details: { email: result.user.email },
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
 
     const token = await SessionService.createSession({
-      userId: result.id,
+      userId: result.user.id,
+      practiceId: result.practiceId,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
@@ -588,12 +797,12 @@ export class AuthService {
     return {
       token,
       user: {
-        id: result.id,
-        email: result.email,
-        name: result.name,
-        avatarUrl: result.avatarUrl,
-        emailVerified: result.emailVerified,
-        createdAt: result.createdAt.toISOString(),
+        id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        avatarUrl: result.user.avatarUrl,
+        emailVerified: result.user.emailVerified,
+        createdAt: result.user.createdAt.toISOString(),
       },
     };
   }
@@ -778,7 +987,11 @@ export class AuthService {
   /**
    * Retrieves full context for the authenticated user and their active practice.
    */
-  static async getMeContext(userId: string): Promise<AuthMeResponse> {
+  static async getMeContext(
+    userId: string,
+    activePracticeId?: string | null,
+    sessionId?: string | null
+  ): Promise<AuthMeResponse> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -791,7 +1004,6 @@ export class AuthService {
               },
             },
           },
-          orderBy: { createdAt: 'asc' },
         },
       },
     });
@@ -800,7 +1012,27 @@ export class AuthService {
       throw new AppError(404, 'USER_NOT_FOUND', 'User record not found.');
     }
 
-    const membership = user.memberships[0];
+    // Resolve membership by authoritative session.practiceId if available
+    let membership = null;
+    if (activePracticeId) {
+      membership = user.memberships.find(
+        (m) => m.practiceId === activePracticeId && m.isActive && m.practice?.isActive
+      );
+    }
+
+    // Fallback if session had no practiceId or practiceId was deactivated
+    if (!membership) {
+      membership = user.memberships.find((m) => m.isActive && m.practice?.isActive);
+      if (membership && sessionId) {
+        prisma.session
+          .update({
+            where: { id: sessionId },
+            data: { practiceId: membership.practiceId },
+          })
+          .catch((err) => console.warn('Failed to backfill session practiceId in getMeContext:', err));
+      }
+    }
+
     if (!membership || !membership.practice) {
       throw new AppError(403, 'NO_ACTIVE_PRACTICE', 'No active practice membership found.');
     }

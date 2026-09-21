@@ -35,10 +35,16 @@ export const RegisterPage: React.FC = () => {
 
     setLoading(true);
 
+    const params = new URLSearchParams(location.search);
+    const redirectUrl = params.get('redirect') || '/';
+    let invitationToken: string | undefined;
+    const inviteMatch = redirectUrl.match(/\/invite\/([a-zA-Z0-9_-]+)/);
+    if (inviteMatch && inviteMatch[1]) {
+      invitationToken = inviteMatch[1];
+    }
+
     try {
-      await register(name, email, password, practiceName);
-      const params = new URLSearchParams(location.search);
-      const redirectUrl = params.get('redirect') || '/';
+      await register(name, email, password, practiceName, invitationToken);
       navigate(redirectUrl);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Registration failed.');
@@ -48,7 +54,10 @@ export const RegisterPage: React.FC = () => {
   };
 
   const handleGoogleSignIn = () => {
-    window.location.href = `${API_BASE}/api/auth/google/start`;
+    const params = new URLSearchParams(location.search);
+    const redirectUrl = params.get('redirect') || '/';
+    const safeReturnTo = redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') ? redirectUrl : '/';
+    window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
   };
 
   return (

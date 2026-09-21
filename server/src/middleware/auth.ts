@@ -37,6 +37,10 @@ export async function requireAuth(
     };
 
     req.user = safeUser;
+    req.session = {
+      id: session.id,
+      practiceId: (session as any).practiceId || null,
+    };
     next();
   } catch (error) {
     next(error);
