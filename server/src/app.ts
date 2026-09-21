@@ -9,6 +9,8 @@ import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 import { authRouter } from './auth/auth.controller.js';
 import { practiceRouter } from './practice/practice.controller.js';
+import { practiceMemberRouter } from './auth/practice-member.controller.js';
+import { platformAdminRouter } from './platform/platform-admin.controller.js';
 import { healthRouter } from './health/health.controller.js';
 import { clinicalRouter } from './clinical/clinical.controller.js';
 import { commercialRouter } from './commercial/commercial.controller.js';
@@ -85,7 +87,9 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/commercial/webhooks', webhookRouter);
   app.use('/api/commercial/payments/return', publicPaymentsRouter);
+  app.use('/api/practice', practiceMemberRouter);
   app.use('/api/practice', practiceRouter);
+  app.use('/api/platform/admin', platformAdminRouter);
   app.use('/api/commercial', commercialRouter);
   app.use('/api', clinicalRouter);
 

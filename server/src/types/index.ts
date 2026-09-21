@@ -1,6 +1,14 @@
 import type { Request } from 'express';
 
-export type UserRole = 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'PRACTICE_STAFF';
+export type UserRole =
+  | 'PRACTICE_OWNER'
+  | 'PRACTICE_ADMIN'
+  | 'VETERINARIAN'
+  | 'STAFF'
+  | 'PRACTICE_STAFF'
+  | 'READ_ONLY';
+
+export type PlatformRoleType = 'PLATFORM_SUPER_ADMIN';
 
 export interface SafeUserDTO {
   id: string;
@@ -8,6 +16,7 @@ export interface SafeUserDTO {
   name: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  platformRole?: PlatformRoleType | null;
   createdAt: string;
 }
 
@@ -26,6 +35,7 @@ export interface SafeMembershipDTO {
   userId: string;
   role: UserRole;
   isActive: boolean;
+  permissions?: string[];
 }
 
 export interface SafePracticeSettingsDTO {
@@ -49,6 +59,7 @@ export interface AuthMeResponse {
   user: SafeUserDTO;
   practice: SafePracticeDTO;
   membership: SafeMembershipDTO;
+  permissions: string[];
   settings: SafePracticeSettingsDTO | null;
 }
 
@@ -66,6 +77,8 @@ export interface AuthenticatedRequest extends Request {
   user?: SafeUserDTO;
   practice?: SafePracticeDTO;
   membership?: SafeMembershipDTO;
+  permissions?: string[];
+  platformRole?: PlatformRoleType | null;
 }
 
 export interface AuthenticatedIdentity {

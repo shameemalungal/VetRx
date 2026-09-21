@@ -5,6 +5,7 @@ import { AuditService } from '../lib/audit.service.js';
 import { SessionService } from './session.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { SubscriptionService } from '../commercial/subscription.service.js';
+import { getPermissionsForRole } from './permissions.js';
 import type {
   AuthenticatedIdentity,
   SafeUserDTO,
@@ -151,7 +152,9 @@ export class AuthService {
           userId: result.membership.userId,
           role: result.membership.role,
           isActive: result.membership.isActive,
+          permissions: getPermissionsForRole(result.membership.role),
         },
+        permissions: getPermissionsForRole(result.membership.role),
         settings: {
           id: result.settings.id,
           practiceId: result.settings.practiceId,
@@ -271,7 +274,9 @@ export class AuthService {
           userId: primaryMembership.userId,
           role: primaryMembership.role,
           isActive: primaryMembership.isActive,
+          permissions: getPermissionsForRole(primaryMembership.role),
         },
+        permissions: getPermissionsForRole(primaryMembership.role),
         settings: settings
           ? {
               id: settings.id,
@@ -802,6 +807,7 @@ export class AuthService {
 
     const practice = membership.practice;
     const settings = practice.settings;
+    const permissions = getPermissionsForRole(membership.role);
 
     return {
       user: {
@@ -810,6 +816,7 @@ export class AuthService {
         name: user.name,
         avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified,
+        platformRole: user.platformRole as any,
         createdAt: user.createdAt.toISOString(),
       },
       practice: {
@@ -826,7 +833,9 @@ export class AuthService {
         userId: membership.userId,
         role: membership.role,
         isActive: membership.isActive,
+        permissions,
       },
+      permissions,
       settings: settings
         ? {
             id: settings.id,

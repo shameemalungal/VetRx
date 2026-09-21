@@ -215,10 +215,10 @@ export class EntitlementService {
           prisma.treatmentPackage.count({ where: { practiceId, isActive: true } }),
           prisma.medicine.count({ where: { practiceId, isActive: true } }),
           prisma.practiceMember.count({
-            where: { practiceId, isActive: true, role: Role.PRACTICE_OWNER },
+            where: { practiceId, isActive: true, role: { in: [Role.PRACTICE_OWNER, Role.VETERINARIAN] } },
           }),
           prisma.practiceMember.count({
-            where: { practiceId, isActive: true, role: { not: Role.PRACTICE_OWNER } },
+            where: { practiceId, isActive: true, role: { notIn: [Role.PRACTICE_OWNER, Role.VETERINARIAN] } },
           }),
         ]);
 
@@ -399,7 +399,7 @@ export class EntitlementService {
   static async assertCanAddSeat(practiceId: string, role: Role): Promise<void> {
     const entitlements = await this.resolvePracticeEntitlements(practiceId);
 
-    if (role === Role.PRACTICE_OWNER) {
+    if (role === Role.PRACTICE_OWNER || role === Role.VETERINARIAN) {
       // Veterinarian seat
       const usage = await this.getPracticeUsage(practiceId);
       if (usage.veterinarianSeatsCount >= entitlements.limits.maxVeterinarianSeats) {
@@ -410,7 +410,7 @@ export class EntitlementService {
         );
       }
     }
-    // Administrative/staff members are unlimited on both Individual and Clinic
+    // Administrative/staff/read-only members are unlimited on both Individual and Clinic
   }
 
   /**

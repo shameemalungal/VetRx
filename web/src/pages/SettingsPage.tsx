@@ -18,6 +18,7 @@ import {
 } from '../utils/backupRestore';
 import { useAuth } from '../context/AuthContext';
 import { SubscriptionBillingSection } from '../components/commercial/SubscriptionBillingSection';
+import { UsersPermissionsSection } from '../components/settings/UsersPermissionsSection';
 import './SettingsPage.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
@@ -1932,16 +1933,17 @@ function AccountSecuritySection() {
 // ── Main SettingsPage Component ────────────────────────────────
 
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'subscription' | 'master-data'>(() => {
+  const [activeTab, setActiveTab] = useState<'account' | 'profile' | 'subscription' | 'users' | 'master-data'>(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     if (tab === 'account') return 'account';
     if (tab === 'subscription') return 'subscription';
+    if (tab === 'users') return 'users';
     if (tab === 'master-data') return 'master-data';
     return 'profile';
   });
 
-  const handleTabChange = (tab: 'account' | 'profile' | 'subscription' | 'master-data') => {
+  const handleTabChange = (tab: 'account' | 'profile' | 'subscription' | 'users' | 'master-data') => {
     setActiveTab(tab);
     const url = new URL(window.location.href);
     if (tab === 'profile') {
@@ -1963,6 +1965,8 @@ export const SettingsPage: React.FC = () => {
                 ? 'Manage your practitioner account, authentication methods, and security.'
                 : activeTab === 'subscription'
                 ? 'Manage your practice subscription plan, limits, and commercial billing.'
+                : activeTab === 'users'
+                ? 'Manage practice staff, assign granular roles, and track team permissions.'
                 : activeTab === 'profile'
                 ? 'Manage your practitioner profile and optional clinic identity.'
                 : 'Configure standard clinical options, formulary units, routes, and invoice items.'}
@@ -1995,6 +1999,17 @@ export const SettingsPage: React.FC = () => {
             <button
               type="button"
               role="tab"
+              aria-selected={activeTab === 'users'}
+              className={`settings-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
+              onClick={() => handleTabChange('users')}
+              id="tab-users"
+            >
+              <Icon name="users" size={16} />
+              <span>Users & Permissions</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={activeTab === 'profile'}
               className={`settings-tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
               onClick={() => handleTabChange('profile')}
@@ -2022,6 +2037,8 @@ export const SettingsPage: React.FC = () => {
         <AccountSecuritySection />
       ) : activeTab === 'subscription' ? (
         <SubscriptionBillingSection />
+      ) : activeTab === 'users' ? (
+        <UsersPermissionsSection />
       ) : activeTab === 'profile' ? (
         <div className="settings-sections">
           <PractitionerSection />

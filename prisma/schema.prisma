@@ -19,7 +19,21 @@ datasource db {
 enum Role {
   PRACTICE_OWNER
   PRACTICE_ADMIN
-  PRACTICE_STAFF
+  VETERINARIAN
+  STAFF
+  PRACTICE_STAFF // legacy alias for STAFF
+  READ_ONLY
+}
+
+enum PlatformRole {
+  PLATFORM_SUPER_ADMIN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
 }
 
 enum IdentityProviderType {
@@ -41,6 +55,7 @@ model User {
   emailVerified   Boolean          @default(false)
   passwordHash    String?          // Nullable for OAuth-only users
   isActive        Boolean          @default(true)
+  platformRole    PlatformRole?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   lastLoginAt     DateTime?
@@ -51,6 +66,7 @@ model User {
   ownedPractices  Practice[]       @relation("PracticeOwner")
   sessions        Session[]
   auditLogs       AuditLog[]
+  invitationsSent PracticeInvitation[] @relation("UserInvitationsSent")
 
   @@index([normalizedEmail])
 }
@@ -103,6 +119,7 @@ model Practice {
   // Relations
   members     PracticeMember[]
   settings    PracticeSettings?
+  invitations PracticeInvitation[]
 
   // Clinical Data Tenant Scoping (Future Stages)
   owners            Owner[]
@@ -136,6 +153,28 @@ model PracticeMember {
   @@unique([practiceId, userId])
   @@index([practiceId])
   @@index([userId])
+}
+
+model PracticeInvitation {
+  id          String           @id @default(uuid())
+  practiceId  String
+  practice    Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role             @default(STAFF)
+  tokenHash   String           @unique
+  invitedById String
+  invitedBy   User             @relation("UserInvitationsSent", fields: [invitedById], references: [id], onDelete: Restrict)
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([practiceId])
+  @@index([email])
+  @@index([tokenHash])
+  @@index([status])
 }
 
 model PracticeSettings {
