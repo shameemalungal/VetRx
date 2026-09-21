@@ -26,7 +26,9 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login(email, password);
-      navigate('/');
+      const params = new URLSearchParams(location.search);
+      const redirectUrl = params.get('redirect') || '/';
+      navigate(redirectUrl);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Invalid credentials.');
     } finally {

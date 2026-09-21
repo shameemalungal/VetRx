@@ -192,7 +192,7 @@ export const UsersPermissionsSection: React.FC = () => {
         throw new Error(data.error?.message || 'Failed to resend invitation.');
       }
 
-      alert(`Invitation resent successfully! Token: ${data.token}`);
+      alert(`Invitation resent successfully! An invitation email has been sent to ${data.email}.`);
       await fetchData();
     } catch (err: any) {
       alert(err.message || 'Error resending invitation.');

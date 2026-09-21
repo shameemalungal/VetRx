@@ -45,6 +45,11 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-https://vetrx.adcpmalappuram.in/api/auth/google/callback}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-supportvetrx@gmail.com}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-VetRx}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      APP_BASE_URL: ${APP_BASE_URL:-https://vetrx.adcpmalappuram.in}
     ports:
       # Exposed locally to VPS loopback for NGINX reverse proxy
       - "127.0.0.1:4000:4000"

@@ -11,6 +11,8 @@ import { PERMISSIONS } from './permissions.js';
 import { AuthorizationService } from './authorization.service.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
 import { AuditService } from '../lib/audit.service.js';
+import { EmailService } from '../email/email.service.js';
+import { env } from '../config/env.js';
 
 export interface InvitationRecord {
   id: string;
@@ -171,7 +173,7 @@ export class InvitationService {
       });
     }
 
-    // 7. Security audit trail
+    // 7. Security audit trail (NEVER records raw token)
     await AuditService.record({
       practiceId,
       userId: actorUserId,
@@ -180,6 +182,47 @@ export class InvitationService {
       resourceId: id,
       details: { email: normalizedEmail, role, expiresAt: expiresAt.toISOString() },
     });
+
+    // 8. Construct HTTPS invitation URL (using trusted server config)
+    const baseUrl = env.APP_BASE_URL.replace(/\/$/, '');
+    const invitationUrl = `${baseUrl}/invite/${rawToken}`;
+
+    // 9. Fetch practice branding
+    let practiceName = 'VetRx Practice';
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const practice = await prisma.practice.findUnique({
+          where: { id: practiceId },
+          select: { name: true },
+        });
+        if (practice?.name) practiceName = practice.name;
+      } catch {
+        // Fallback to default name
+      }
+    }
+
+    // 10. Deliver transactional email
+    const emailResult = await EmailService.sendInvitationEmail(
+      {
+        recipientEmail: normalizedEmail,
+        practiceName,
+        roleName: role,
+        invitationUrl,
+        expiresInDays: 7,
+      },
+      id,
+      practiceId
+    );
+
+    if (!emailResult.success) {
+      if (env.EMAIL_ENABLED && process.env.VETRX_FAST_TEST !== '1') {
+        throw new AppError(
+          502,
+          'EMAIL_DELIVERY_FAILED',
+          'Failed to deliver invitation email. The invitation was saved and can be resent.'
+        );
+      }
+    }
 
     return {
       id,
@@ -415,12 +458,16 @@ export class InvitationService {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const now = new Date();
 
+    const oldTokenHash = inv.tokenHash;
     inv.tokenHash = tokenHash;
     inv.expiresAt = expiresAt;
     inv.status = InvitationStatus.PENDING;
     inv.updatedAt = now;
 
     if (process.env.VETRX_FAST_TEST === '1') {
+      if (oldTokenHash) {
+        this.mockInvitations.delete(`hash:${oldTokenHash}`);
+      }
       this.mockInvitations.set(inv.id, inv);
       this.mockInvitations.set(`hash:${tokenHash}`, inv);
     } else {
@@ -443,6 +490,47 @@ export class InvitationService {
       resourceId: invitationId,
       details: { email: inv.email, role: inv.role, resend: true },
     });
+
+    // Construct HTTPS invitation URL (using trusted server config)
+    const baseUrl = env.APP_BASE_URL.replace(/\/$/, '');
+    const invitationUrl = `${baseUrl}/invite/${rawToken}`;
+
+    // Fetch practice branding
+    let practiceName = 'VetRx Practice';
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const practice = await prisma.practice.findUnique({
+          where: { id: practiceId },
+          select: { name: true },
+        });
+        if (practice?.name) practiceName = practice.name;
+      } catch {
+        // Fallback to default name
+      }
+    }
+
+    // Deliver transactional email
+    const emailResult = await EmailService.sendInvitationEmail(
+      {
+        recipientEmail: inv.email,
+        practiceName,
+        roleName: inv.role,
+        invitationUrl,
+        expiresInDays: 7,
+      },
+      inv.id,
+      practiceId
+    );
+
+    if (!emailResult.success) {
+      if (env.EMAIL_ENABLED && process.env.VETRX_FAST_TEST !== '1') {
+        throw new AppError(
+          502,
+          'EMAIL_DELIVERY_FAILED',
+          'Failed to deliver invitation email. The invitation was updated and can be resent.'
+        );
+      }
+    }
 
     return {
       id: inv.id,
@@ -488,5 +576,61 @@ export class InvitationService {
     });
 
     return invitations;
+  }
+
+  /**
+   * Retrieves safe invitation preview details using the raw token.
+   * Public endpoint helper: returns practice name, email, role, status, and expiry without exposing secrets.
+   */
+  static async getInvitationPreview(rawToken: string): Promise<{
+    practiceName: string;
+    email: string;
+    role: Role;
+    expiresAt: string;
+    status: InvitationStatus;
+    isExpired: boolean;
+  }> {
+    if (!rawToken || typeof rawToken !== 'string') {
+      throw new AppError(400, 'INVALID_TOKEN', 'A valid invitation token is required.');
+    }
+
+    const tokenHash = this.hashToken(rawToken);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const inv = this.mockInvitations.get(`hash:${tokenHash}`);
+      if (!inv) {
+        throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid.');
+      }
+      return {
+        practiceName: 'VetRx Practice',
+        email: inv.email,
+        role: inv.role,
+        expiresAt: inv.expiresAt.toISOString(),
+        status: inv.status,
+        isExpired: new Date() > new Date(inv.expiresAt),
+      };
+    }
+
+    const invitation = await prisma.practiceInvitation.findUnique({
+      where: { tokenHash },
+      include: {
+        practice: {
+          select: { name: true },
+        },
+      },
+    });
+
+    if (!invitation) {
+      throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid.');
+    }
+
+    return {
+      practiceName: invitation.practice?.name || 'VetRx Practice',
+      email: invitation.email,
+      role: invitation.role,
+      expiresAt: invitation.expiresAt.toISOString(),
+      status: invitation.status,
+      isExpired: new Date() > new Date(invitation.expiresAt),
+    };
   }
 }

@@ -20,6 +20,10 @@ export class AuditService {
     this.mockLogs = [];
   }
 
+  static getMockLogs(): RecordAuditParams[] {
+    return this.mockLogs;
+  }
+
   /**
    * Records a security or domain audit log entry asynchronously without blocking caller.
    */

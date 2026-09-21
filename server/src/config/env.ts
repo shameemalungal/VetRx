@@ -31,6 +31,13 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
   AUTH_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
+
+  // Transactional Email (Brevo / SMTP)
+  EMAIL_ENABLED: z.coerce.boolean().default(false),
+  EMAIL_FROM: z.string().default('supportvetrx@gmail.com'),
+  EMAIL_FROM_NAME: z.string().default('VetRx'),
+  BREVO_API_KEY: z.string().optional().default(''),
+  APP_BASE_URL: z.string().default('https://vetrx.adcpmalappuram.in'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
@@ -56,6 +63,10 @@ function parseEnv(): EnvConfig {
     }
     if (env.SESSION_SECRET.includes('development_secret')) {
       console.error('FATAL: Production cannot use default development session secret.');
+      process.exit(1);
+    }
+    if (env.EMAIL_ENABLED && (!env.BREVO_API_KEY || env.BREVO_API_KEY.trim() === '')) {
+      console.error('FATAL: In production with EMAIL_ENABLED=true, BREVO_API_KEY must be provided.');
       process.exit(1);
     }
   }

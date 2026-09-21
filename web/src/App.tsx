@@ -4,7 +4,7 @@
 // =============================================================
 
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { AppShell } from './components/Layout/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
@@ -23,6 +23,7 @@ import { InvoiceBuilderPage } from './pages/invoices/InvoiceBuilderPage';
 import { InvoiceDetailsPage } from './pages/invoices/InvoiceDetailsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { AcceptInvitationPage } from './pages/auth/AcceptInvitationPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSettingsStore } from './store/settingsStore';
 import { ensureSeeded } from './db/schema';
@@ -60,6 +61,7 @@ function AuthenticatedAppRoutes() {
         <Route path="/invoices/:id/edit" element={<InvoiceBuilderPage mode="edit" />} />
 
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
 
         {/* Auth routes when already authenticated redirect to dashboard */}
         <Route path="/login" element={<Navigate to="/" replace />} />
@@ -75,6 +77,7 @@ function AuthenticatedAppRoutes() {
 function PublicAuthRoutes() {
   return (
     <Routes>
+      <Route path="/invite/:token" element={<AcceptInvitationPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
@@ -86,6 +89,16 @@ function MainContent() {
   const { user, practice, settings, isLoading } = useAuth();
   const { loadSettings } = useSettingsStore();
   const [dbReady, setDbReady] = useState(false);
+  const location = useLocation();
+
+  // Public/direct invitation acceptance route
+  if (location.pathname.startsWith('/invite/')) {
+    return (
+      <Routes>
+        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
+      </Routes>
+    );
+  }
 
   useEffect(() => {
     async function initDb() {

@@ -15,9 +15,18 @@ import { healthRouter } from './health/health.controller.js';
 import { clinicalRouter } from './clinical/clinical.controller.js';
 import { commercialRouter } from './commercial/commercial.controller.js';
 import { webhookRouter, publicPaymentsRouter } from './commercial/webhook.controller.js';
+import { EmailService } from './email/email.service.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
 export function createApp() {
+  // Initialize Transactional Email Service
+  EmailService.configure({
+    enabled: env.EMAIL_ENABLED,
+    fromEmail: env.EMAIL_FROM,
+    fromName: env.EMAIL_FROM_NAME,
+    brevoApiKey: env.BREVO_API_KEY,
+  });
+
   const app = express();
 
   // Trust reverse proxy (e.g. NGINX on VPS)

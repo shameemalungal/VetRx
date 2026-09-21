@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { VetRxLogo } from '../../components/ui/VetRxLogo';
 import './Auth.css';
@@ -9,6 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173
 export const RegisterPage: React.FC = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -36,7 +37,9 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register(name, email, password, practiceName);
-      navigate('/');
+      const params = new URLSearchParams(location.search);
+      const redirectUrl = params.get('redirect') || '/';
+      navigate(redirectUrl);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Registration failed.');
     } finally {

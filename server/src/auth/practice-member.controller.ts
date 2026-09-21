@@ -18,6 +18,24 @@ import type { AuthenticatedRequest } from '../types/index.js';
 export const practiceMemberRouter = Router();
 
 // ------------------------------------------------------------------------------
+// Preview Invitation (Public/Unauthenticated endpoint)
+// Allows frontend invitation page to display safe details before accepting.
+// ------------------------------------------------------------------------------
+practiceMemberRouter.get('/invitations/preview/:token', async (req, res, next) => {
+  try {
+    const rawToken = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+    if (!rawToken) {
+      throw new AppError(400, 'INVALID_TOKEN', 'A valid invitation token is required.');
+    }
+
+    const preview = await InvitationService.getInvitationPreview(rawToken);
+    res.status(200).json(preview);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ------------------------------------------------------------------------------
 // Accept Invitation (Public/Authenticated endpoint)
 // User must be authenticated, but does not need prior membership in this practice.
 // ------------------------------------------------------------------------------
