@@ -448,8 +448,23 @@ export class ClinicalService {
   // ----------------------------------------------------------------------------
   // 5. Prescriptions
   // ----------------------------------------------------------------------------
-  static async listPrescriptions(practiceId: string, search?: string) {
+  // 5. Prescriptions
+  // ----------------------------------------------------------------------------
+  static async listPrescriptions(
+    practiceId: string,
+    options?: string | { search?: string; status?: string; forwardedToUserId?: string }
+  ) {
+    const search = typeof options === 'string' ? options : options?.search;
+    const status = typeof options === 'object' ? options?.status : undefined;
+    const forwardedToUserId = typeof options === 'object' ? options?.forwardedToUserId : undefined;
+
     const where: any = { practiceId };
+    if (status && status.trim()) {
+      where.status = status.trim();
+    }
+    if (forwardedToUserId && forwardedToUserId.trim()) {
+      where.forwardedToUserId = forwardedToUserId.trim();
+    }
     if (search && search.trim()) {
       where.OR = [
         { rxNumber: { contains: search.trim() } },
@@ -463,6 +478,10 @@ export class ClinicalService {
       include: {
         patient: { include: { owner: true } },
         items: true,
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+        forwardedToUser: { select: { id: true, name: true, email: true } },
+        approvedByUser: { select: { id: true, name: true, email: true } },
+        requestedByUser: { select: { id: true, name: true, email: true } },
       },
     });
   }
@@ -473,6 +492,17 @@ export class ClinicalService {
       include: {
         patient: { include: { owner: true } },
         items: { include: { medicine: true } },
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+        forwardedToUser: { select: { id: true, name: true, email: true } },
+        approvedByUser: { select: { id: true, name: true, email: true } },
+        requestedByUser: { select: { id: true, name: true, email: true } },
+        workflowHistory: {
+          include: {
+            actorUser: { select: { id: true, name: true, email: true } },
+            targetUser: { select: { id: true, name: true, email: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!rx) {
@@ -487,6 +517,8 @@ export class ClinicalService {
     diagnosis?: string | null;
     notes?: string | null;
     status?: string;
+    forwardedToUserId?: string | null;
+    forwardingRemarks?: string | null;
     items: Array<{
       medicineId?: string | null;
       medicineName: string;
@@ -497,9 +529,22 @@ export class ClinicalService {
       quantityUnit?: string | null;
       instructions?: string | null;
     }>;
-  }) {
+  }, actorUserId?: string) {
     // Ensure patient belongs to same practice
     await this.getPatientById(data.patientId, practiceId);
+
+    // If forwarded directly upon creation
+    let targetClinician = null;
+    if (data.forwardedToUserId) {
+      targetClinician = await prisma.practiceMember.findFirst({
+        where: { practiceId, userId: data.forwardedToUserId, isActive: true },
+      });
+      if (!targetClinician) {
+        throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+      }
+    }
+
+    const initialStatus = data.forwardedToUserId ? 'Pending Approval' : (data.status || 'Draft');
 
     const rx = await prisma.prescription.create({
       data: {
@@ -508,7 +553,12 @@ export class ClinicalService {
         rxNumber: data.rxNumber.trim(),
         diagnosis: data.diagnosis?.trim() || null,
         notes: data.notes?.trim() || null,
-        status: data.status || 'Final',
+        status: initialStatus,
+        version: 1,
+        forwardedToUserId: data.forwardedToUserId || null,
+        forwardedByUserId: data.forwardedToUserId && actorUserId ? actorUserId : null,
+        forwardedAt: data.forwardedToUserId ? new Date() : null,
+        forwardingRemarks: data.forwardingRemarks?.trim() || null,
         items: {
           create: data.items.map((item) => ({
             medicineId: item.medicineId || null,
@@ -525,15 +575,31 @@ export class ClinicalService {
       include: {
         patient: { include: { owner: true } },
         items: true,
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+        forwardedToUser: { select: { id: true, name: true, email: true } },
       },
     });
+
+    if (actorUserId) {
+      await prisma.prescriptionWorkflowHistory.create({
+        data: {
+          prescriptionId: rx.id,
+          version: 1,
+          status: initialStatus,
+          action: data.forwardedToUserId ? 'FORWARDED' : 'CREATED',
+          actorUserId,
+          targetUserId: data.forwardedToUserId || null,
+          remarks: data.forwardingRemarks?.trim() || (data.forwardedToUserId ? 'Forwarded for clinical approval on creation' : 'Prescription created as draft'),
+        },
+      }).catch(err => console.warn('Could not record initial prescription workflow history:', err));
+    }
 
     void AuditService.record({
       practiceId,
       action: 'PRESCRIPTION_CREATED',
       resource: 'Prescription',
       resourceId: rx.id,
-      details: { rxNumber: rx.rxNumber, patientId: rx.patientId, itemCount: rx.items.length },
+      details: { rxNumber: rx.rxNumber, patientId: rx.patientId, itemCount: data.items.length, status: initialStatus },
     });
 
     return rx;
@@ -543,8 +609,55 @@ export class ClinicalService {
     diagnosis: string | null;
     notes: string | null;
     status: string;
-  }>) {
-    await this.getPrescriptionById(id, practiceId);
+    items?: Array<{
+      medicineId?: string | null;
+      medicineName: string;
+      dosage: string;
+      frequency: string;
+      durationDays?: number;
+      totalQuantity?: number;
+      quantityUnit?: string | null;
+      instructions?: string | null;
+    }>;
+  }>, actorUserId?: string) {
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    // Immutability Check: Approved prescriptions CANNOT be directly edited
+    if (existing.status === 'Approved') {
+      throw new AppError(
+        400,
+        'APPROVED_PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions are legally sealed clinical records. To modify treatments, create a new revision.'
+      );
+    }
+
+    if (existing.status === 'Cancelled') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_CANCELLED',
+        'Cancelled prescriptions cannot be edited.'
+      );
+    }
+
+    // If items are provided, replace existing items
+    if (data.items && Array.isArray(data.items)) {
+      await prisma.prescriptionItem.deleteMany({
+        where: { prescriptionId: id },
+      });
+      await prisma.prescriptionItem.createMany({
+        data: data.items.map((item) => ({
+          prescriptionId: id,
+          medicineId: item.medicineId || null,
+          medicineName: item.medicineName.trim(),
+          dosage: item.dosage.trim(),
+          frequency: item.frequency.trim(),
+          durationDays: item.durationDays ?? 1,
+          totalQuantity: item.totalQuantity ?? 1,
+          quantityUnit: item.quantityUnit || null,
+          instructions: item.instructions || null,
+        })),
+      });
+    }
 
     const updated = await prisma.prescription.update({
       where: { id },
@@ -556,6 +669,10 @@ export class ClinicalService {
       include: {
         patient: { include: { owner: true } },
         items: true,
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+        forwardedToUser: { select: { id: true, name: true, email: true } },
+        approvedByUser: { select: { id: true, name: true, email: true } },
+        requestedByUser: { select: { id: true, name: true, email: true } },
       },
     });
 
@@ -564,10 +681,276 @@ export class ClinicalService {
       action: 'PRESCRIPTION_UPDATED',
       resource: 'Prescription',
       resourceId: updated.id,
-      details: data,
+      details: { ...data, actorUserId },
     });
 
     return updated;
+  }
+
+  static async forwardPrescription(id: string, practiceId: string, actorUserId: string, data: {
+    forwardedToUserId: string;
+    forwardingRemarks?: string | null;
+  }) {
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status !== 'Draft' && existing.status !== 'Changes Requested') {
+      throw new AppError(
+        400,
+        'INVALID_PRESCRIPTION_STATUS',
+        'Only Draft or Changes Requested prescriptions can be forwarded for clinical approval.'
+      );
+    }
+
+    const targetMember = await prisma.practiceMember.findFirst({
+      where: { practiceId, userId: data.forwardedToUserId, isActive: true },
+      include: { user: true },
+    });
+
+    if (!targetMember) {
+      throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+    }
+
+    const updated = await prisma.prescription.update({
+      where: { id },
+      data: {
+        status: 'Pending Approval',
+        forwardedToUserId: data.forwardedToUserId,
+        forwardedByUserId: actorUserId,
+        forwardedAt: new Date(),
+        forwardingRemarks: data.forwardingRemarks?.trim() || null,
+      },
+      include: {
+        patient: { include: { owner: true } },
+        items: true,
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+        forwardedToUser: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await prisma.prescriptionWorkflowHistory.create({
+      data: {
+        prescriptionId: id,
+        version: existing.version,
+        status: 'Pending Approval',
+        action: 'FORWARDED',
+        actorUserId,
+        targetUserId: data.forwardedToUserId,
+        remarks: data.forwardingRemarks?.trim() || 'Forwarded for clinical approval',
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'PRESCRIPTION_FORWARDED',
+      resource: 'Prescription',
+      resourceId: id,
+      details: { forwardedToUserId: data.forwardedToUserId, remarks: data.forwardingRemarks },
+    });
+
+    return updated;
+  }
+
+  static async approvePrescription(id: string, practiceId: string, actorUserId: string, data?: {
+    approvalRemarks?: string | null;
+  }) {
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status !== 'Pending Approval') {
+      throw new AppError(
+        400,
+        'INVALID_PRESCRIPTION_STATUS',
+        'Only prescriptions with Pending Approval status can be approved.'
+      );
+    }
+
+    const updated = await prisma.prescription.update({
+      where: { id },
+      data: {
+        status: 'Approved',
+        approvedByUserId: actorUserId,
+        approvedAt: new Date(),
+        approvedVersion: existing.version,
+        approvalRemarks: data?.approvalRemarks?.trim() || null,
+      },
+      include: {
+        patient: { include: { owner: true } },
+        items: true,
+        approvedByUser: { select: { id: true, name: true, email: true } },
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await prisma.prescriptionWorkflowHistory.create({
+      data: {
+        prescriptionId: id,
+        version: existing.version,
+        status: 'Approved',
+        action: 'APPROVED',
+        actorUserId,
+        remarks: data?.approvalRemarks?.trim() || 'Clinically approved and digitally signed',
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'PRESCRIPTION_APPROVED',
+      resource: 'Prescription',
+      resourceId: id,
+      details: { version: existing.version, approvalRemarks: data?.approvalRemarks },
+    });
+
+    return updated;
+  }
+
+  static async requestChangesPrescription(id: string, practiceId: string, actorUserId: string, data: {
+    changeRequestRemarks: string;
+  }) {
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status !== 'Pending Approval') {
+      throw new AppError(
+        400,
+        'INVALID_PRESCRIPTION_STATUS',
+        'Only prescriptions with Pending Approval status can have changes requested.'
+      );
+    }
+
+    if (!data.changeRequestRemarks || !data.changeRequestRemarks.trim()) {
+      throw new AppError(400, 'REMARKS_REQUIRED', 'Mandatory change request remarks must be provided.');
+    }
+
+    const updated = await prisma.prescription.update({
+      where: { id },
+      data: {
+        status: 'Changes Requested',
+        requestedByUserId: actorUserId,
+        requestedAt: new Date(),
+        changeRequestRemarks: data.changeRequestRemarks.trim(),
+      },
+      include: {
+        patient: { include: { owner: true } },
+        items: true,
+        requestedByUser: { select: { id: true, name: true, email: true } },
+        forwardedByUser: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    await prisma.prescriptionWorkflowHistory.create({
+      data: {
+        prescriptionId: id,
+        version: existing.version,
+        status: 'Changes Requested',
+        action: 'CHANGES_REQUESTED',
+        actorUserId,
+        remarks: data.changeRequestRemarks.trim(),
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'PRESCRIPTION_CHANGES_REQUESTED',
+      resource: 'Prescription',
+      resourceId: id,
+      details: { changeRequestRemarks: data.changeRequestRemarks },
+    });
+
+    return updated;
+  }
+
+  static async revisePrescription(id: string, practiceId: string, actorUserId: string) {
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status !== 'Approved') {
+      throw new AppError(
+        400,
+        'REVISION_NOT_ALLOWED',
+        'Only Approved prescriptions can have a new revision created.'
+      );
+    }
+
+    const newVersion = (existing.version || 1) + 1;
+
+    const updated = await prisma.prescription.update({
+      where: { id },
+      data: {
+        version: newVersion,
+        status: 'Draft',
+        approvedByUserId: null,
+        approvedAt: null,
+        approvedVersion: null,
+        approvalRemarks: null,
+        forwardedToUserId: null,
+        forwardedByUserId: null,
+        forwardedAt: null,
+        forwardingRemarks: null,
+        requestedByUserId: null,
+        requestedAt: null,
+        changeRequestRemarks: null,
+      },
+      include: {
+        patient: { include: { owner: true } },
+        items: true,
+      },
+    });
+
+    await prisma.prescriptionWorkflowHistory.create({
+      data: {
+        prescriptionId: id,
+        version: newVersion,
+        status: 'Draft',
+        action: 'RESUBMITTED',
+        actorUserId,
+        remarks: `Created revision v${newVersion} from approved v${existing.version}`,
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'PRESCRIPTION_REVISION_CREATED',
+      resource: 'Prescription',
+      resourceId: id,
+      details: { previousVersion: existing.version, newVersion },
+    });
+
+    return updated;
+  }
+
+  static async getEligibleClinicians(practiceId: string) {
+    const members = await prisma.practiceMember.findMany({
+      where: {
+        practiceId,
+        isActive: true,
+        OR: [
+          { role: 'VETERINARIAN' },
+          { permissionOverrides: { some: { permission: 'PRESCRIPTION_APPROVE', effect: 'ALLOW' } } },
+        ],
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, avatarUrl: true },
+        },
+      },
+    });
+
+    return members.map((m) => ({
+      userId: m.userId,
+      name: m.user.name,
+      email: m.user.email,
+      avatarUrl: m.user.avatarUrl,
+      role: m.role,
+    }));
+  }
+
+  static async getPendingApprovalsCount(practiceId: string, clinicianUserId?: string) {
+    const where: any = {
+      practiceId,
+      status: 'Pending Approval',
+    };
+    if (clinicianUserId) {
+      where.forwardedToUserId = clinicianUserId;
+    }
+    const count = await prisma.prescription.count({ where });
+    return { count };
   }
 
   static async deletePrescription(id: string, practiceId: string) {

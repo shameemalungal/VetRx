@@ -16,13 +16,18 @@ import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildPrescriptio
 import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
+import { useAuth } from '../../context/AuthContext';
+import type { PrescriptionWorkflowHistoryItem } from '../../types';
 import './Prescriptions.css';
+
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 export const PrescriptionDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const rxId = id ? parseInt(id, 10) : undefined;
 
+  const { user, can, isPracticeOwner, hasRole } = useAuth();
   const { practitioner: storePractitioner, organisation: storeOrganisation } = useSettingsStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -33,6 +38,18 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [cachedPdfBlob, setCachedPdfBlob] = useState<Blob | null>(null);
+
+  // Clinical Approval Workflow States
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
+  const [showReviseModal, setShowReviseModal] = useState(false);
+  const [forwardToUserId, setForwardToUserId] = useState('');
+  const [forwardRemarks, setForwardRemarks] = useState('');
+  const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [changeRequestRemarks, setChangeRequestRemarks] = useState('');
+  const [eligibleClinicians, setEligibleClinicians] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [loadingClinicians, setLoadingClinicians] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -92,10 +109,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
     }
   };
 
-  const handleCompleteAndIssue = () => {
-    setShowConfirmIssueModal(true);
-  };
-
   const handleExecuteCancel = async () => {
     if (!prescription?.id || prescription.status === 'Cancelled') return;
     setIsUpdating(true);
@@ -112,6 +125,267 @@ export const PrescriptionDetailsPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to cancel prescription:', err);
       showToast('Error cancelling prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // ── Approval Workflow Actions ─────────────────────────────────
+  const loadEligibleClinicians = async () => {
+    setLoadingClinicians(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/prescriptions/eligible-clinicians`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setEligibleClinicians(data);
+          if (!forwardToUserId && data[0]?.id) {
+            setForwardToUserId(data[0].id);
+          }
+          return;
+        }
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoadingClinicians(false);
+    }
+
+    if (allPractitioners && allPractitioners.length > 0) {
+      const fallbackList = allPractitioners.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        email: p.email || '',
+      }));
+      setEligibleClinicians(fallbackList);
+      if (!forwardToUserId && fallbackList[0]?.id) {
+        setForwardToUserId(fallbackList[0].id);
+      }
+    }
+  };
+
+  const handleOpenForwardModal = () => {
+    void loadEligibleClinicians();
+    setShowForwardModal(true);
+  };
+
+  const handleExecuteForward = async () => {
+    if (!prescription?.id || !forwardToUserId) return;
+    setIsUpdating(true);
+    try {
+      const selectedClinician = eligibleClinicians.find((c) => c.id === forwardToUserId);
+      const targetUser = selectedClinician || { id: forwardToUserId, name: 'Veterinarian', email: '' };
+
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/forward`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            forwardedToUserId: forwardToUserId,
+            forwardingRemarks: forwardRemarks.trim() || undefined,
+          }),
+        });
+      } catch (err) {
+        console.warn('Server forward sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Pending Approval',
+        action: 'FORWARDED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        targetUserId: forwardToUserId,
+        targetUser: targetUser,
+        remarks: forwardRemarks.trim() || null,
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Pending Approval',
+        forwardedToUserId: forwardToUserId,
+        forwardedToUser: targetUser,
+        forwardedByUserId: user?.id || null,
+        forwardedByUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        forwardingRemarks: forwardRemarks.trim() || null,
+        forwardedAt: now,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowForwardModal(false);
+      setForwardRemarks('');
+      showToast(`Prescription ${prescription.rxNumber} forwarded to Dr. ${targetUser.name} for clinical approval.`);
+    } catch (err) {
+      console.error('Failed to forward prescription:', err);
+      showToast('Error forwarding prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteApprove = async () => {
+    if (!prescription?.id) return;
+    setIsUpdating(true);
+    try {
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            approvalRemarks: approvalRemarks.trim() || undefined,
+          }),
+        });
+      } catch (err) {
+        console.warn('Server approve sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const approverName = user?.name || activePractitioner?.name || 'Veterinarian';
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Approved',
+        action: 'APPROVED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+        remarks: approvalRemarks.trim() || null,
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Approved',
+        approvedByUserId: user?.id || null,
+        approvedByUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+        approvedAt: now,
+        approvedVersion: prescription.version || 1,
+        approvalRemarks: approvalRemarks.trim() || null,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowApproveModal(false);
+      setApprovalRemarks('');
+      showToast(`Prescription ${prescription.rxNumber} approved and digitally sealed.`);
+    } catch (err) {
+      console.error('Failed to approve prescription:', err);
+      showToast('Error approving prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteRequestChanges = async () => {
+    if (!prescription?.id || !changeRequestRemarks.trim()) return;
+    setIsUpdating(true);
+    try {
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/request-changes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            changeRequestRemarks: changeRequestRemarks.trim(),
+          }),
+        });
+      } catch (err) {
+        console.warn('Server request-changes sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const clinicianName = user?.name || activePractitioner?.name || 'Veterinarian';
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Changes Requested',
+        action: 'CHANGES_REQUESTED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: clinicianName, email: user?.email || '' },
+        remarks: changeRequestRemarks.trim(),
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Changes Requested',
+        requestedByUserId: user?.id || null,
+        requestedByUser: { id: user?.id || 'current-user', name: clinicianName, email: user?.email || '' },
+        requestedAt: now,
+        changeRequestRemarks: changeRequestRemarks.trim(),
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowRequestChangesModal(false);
+      setChangeRequestRemarks('');
+      showToast(`Changes requested for prescription ${prescription.rxNumber}.`);
+    } catch (err) {
+      console.error('Failed to request changes:', err);
+      showToast('Error requesting changes.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteRevise = async () => {
+    if (!prescription?.id) return;
+    setIsUpdating(true);
+    try {
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/revise`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch (err) {
+        console.warn('Server revise sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const newVersion = (prescription.version || 1) + 1;
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: newVersion,
+        status: 'Draft',
+        action: 'REVISED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        remarks: `Revised from v${prescription.version || 1} to create new editable draft v${newVersion}`,
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        version: newVersion,
+        status: 'Draft',
+        forwardedToUserId: null,
+        forwardedToUser: null,
+        forwardedByUserId: null,
+        forwardedByUser: null,
+        forwardingRemarks: null,
+        forwardedAt: null,
+        approvedByUserId: null,
+        approvedByUser: null,
+        approvedAt: null,
+        approvedVersion: null,
+        approvalRemarks: null,
+        requestedByUserId: null,
+        requestedByUser: null,
+        requestedAt: null,
+        changeRequestRemarks: null,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowReviseModal(false);
+      showToast(`Prescription revised to Version ${newVersion}. You can now edit medications.`);
+      navigate(`/prescriptions/${prescription.id}/edit`);
+    } catch (err) {
+      console.error('Failed to revise prescription:', err);
+      showToast('Error revising prescription.');
     } finally {
       setIsUpdating(false);
     }
@@ -251,6 +525,21 @@ export const PrescriptionDetailsPage: React.FC = () => {
 
   const isIssued = prescription.status === 'Issued';
   const isCancelled = prescription.status === 'Cancelled';
+  const isPendingApproval = prescription.status === 'Pending Approval';
+  const isChangesRequested = prescription.status === 'Changes Requested';
+  const isApproved = prescription.status === 'Approved';
+  const isDraft = prescription.status === 'Draft' || (!prescription.status as any);
+
+  const canApprove =
+    can('PRESCRIPTION_APPROVE') ||
+    isPracticeOwner() ||
+    hasRole('VETERINARIAN') ||
+    hasRole('PRACTICE_ADMIN') ||
+    (Boolean(user?.id) && prescription.forwardedToUserId === user?.id);
+
+  const canRequestChanges =
+    can('PRESCRIPTION_REQUEST_CHANGES') ||
+    canApprove;
 
   return (
     <div className="rx-page-container">
@@ -322,9 +611,25 @@ export const PrescriptionDetailsPage: React.FC = () => {
       {/* ── Page Header Module ─────────────────────────────────── */}
       <div className="no-print rx-preview-header-card">
         <div className="rx-preview-header-left">
-          <div className="rx-preview-title-row">
+          <div className="rx-preview-title-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 className="rx-title">Prescription Preview</h1>
-            {isIssued ? (
+            <span className="rx-version-badge">v{prescription.version || 1}</span>
+            {isApproved ? (
+              <span className="rx-status-chip approved">
+                <span className="status-dot"></span>
+                Approved &amp; Sealed
+              </span>
+            ) : isPendingApproval ? (
+              <span className="rx-status-chip pending">
+                <span className="status-dot pulse"></span>
+                Pending Approval
+              </span>
+            ) : isChangesRequested ? (
+              <span className="rx-status-chip changes-requested">
+                <span className="status-dot"></span>
+                Changes Requested
+              </span>
+            ) : isIssued ? (
               <span className="rx-status-chip issued">
                 <span className="status-dot"></span>
                 Issued Record
@@ -337,16 +642,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
             ) : (
               <span className="rx-status-chip ready">
                 <span className="status-dot pulse"></span>
-                Ready to Generate
+                Draft
               </span>
             )}
           </div>
           <p className="rx-subtitle">
             {isCancelled
               ? 'This prescription is cancelled and preserved as a read-only historical record.'
+              : isApproved
+              ? `Approved clinical veterinary prescription (v${prescription.version || 1}). Printable and recorded in patient history.`
+              : isPendingApproval
+              ? `Prescription forwarded for clinical sign-off to Dr. ${prescription.forwardedToUser?.name || 'Veterinarian'}.`
+              : isChangesRequested
+              ? 'Clinical modifications requested. Update medication items and re-forward for sign-off.'
               : isIssued
               ? 'Official issued veterinary prescription. Printable and recorded in patient history.'
-              : 'Review the prescription before printing or saving.'}
+              : 'Draft prescription. Forward for clinical approval or approve before printing.'}
           </p>
         </div>
 
@@ -460,6 +771,105 @@ export const PrescriptionDetailsPage: React.FC = () => {
             </div>
           )}
 
+          {/* Workflow Banner: Pending Clinical Approval */}
+          {isPendingApproval && (
+            <div className="no-print rx-workflow-banner pending">
+              <Icon name="clock" size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title">
+                  Pending Clinical Approval — Forwarded to Dr. {prescription.forwardedToUser?.name || 'Veterinarian'}
+                </div>
+                <p className="rx-workflow-banner-desc">
+                  This prescription is awaiting clinical sign-off by a registered veterinarian before it can be sealed and issued to the client.
+                  {prescription.forwardingRemarks && (
+                    <span style={{ display: 'block', marginTop: '4px', fontStyle: 'italic' }}>
+                      Forwarding Remarks: "{prescription.forwardingRemarks}"
+                    </span>
+                  )}
+                </p>
+              </div>
+              {canApprove && (
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ height: '36px', fontSize: '12px', background: '#fff' }}
+                    onClick={() => setShowRequestChangesModal(true)}
+                  >
+                    Request Changes
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ height: '36px', fontSize: '12px', background: '#059669', borderColor: '#047857' }}
+                    onClick={() => setShowApproveModal(true)}
+                  >
+                    Approve Prescription
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Workflow Banner: Changes Requested */}
+          {isChangesRequested && (
+            <div className="no-print rx-workflow-banner changes-requested">
+              <Icon name="alert-triangle" size={20} color="#e11d48" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title">
+                  Clinical Changes Requested by Dr. {prescription.requestedByUser?.name || 'Veterinarian'}
+                </div>
+                <p className="rx-workflow-banner-desc">
+                  The prescribing clinician requested modifications before approval:
+                  <span style={{ display: 'block', marginTop: '4px', fontWeight: 600, color: '#9f1239' }}>
+                    "{prescription.changeRequestRemarks}"
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '36px', fontSize: '12px', flexShrink: 0 }}
+                onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+              >
+                <Icon name="edit" size={14} />
+                <span>Edit Prescription</span>
+              </button>
+            </div>
+          )}
+
+          {/* Workflow Banner: Approved & Sealed Record */}
+          {isApproved && (
+            <div className="no-print rx-workflow-banner approved">
+              <Icon name="check-circle" size={20} color="#059669" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title">
+                  Clinically Approved &amp; Sealed Record (Version {prescription.version || 1})
+                </div>
+                <p className="rx-workflow-banner-desc">
+                  Digitally signed and sealed by Dr. {prescription.approvedByUser?.name || doctorName}
+                  {prescription.approvedAt ? ` on ${new Date(prescription.approvedAt).toLocaleDateString('en-GB')}` : ''}.
+                  Approved records are immutable under clinical governance standards.
+                  {prescription.approvalRemarks && (
+                    <span style={{ display: 'block', marginTop: '4px', fontStyle: 'italic' }}>
+                      Approval Remarks: "{prescription.approvalRemarks}"
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '36px', fontSize: '12px', flexShrink: 0, background: '#fff' }}
+                onClick={() => setShowReviseModal(true)}
+                title="Create a new revision starting as Draft"
+              >
+                <Icon name="copy" size={14} />
+                <span>Create New Revision</span>
+              </button>
+            </div>
+          )}
+
           <PrescriptionDocument
             prescription={prescription}
             items={items || []}
@@ -542,17 +952,121 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <Icon name="copy" size={20} />
                 <span>Clone Prescription</span>
               </button>
-            ) : !isIssued ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}
-                onClick={handleCompleteAndIssue}
-                disabled={isUpdating}
-              >
-                <Icon name="check-circle" size={20} />
-                <span>{isUpdating ? 'Issuing…' : 'Complete Prescription'}</span>
-              </button>
+            ) : isPendingApproval ? (
+              canApprove || canRequestChanges ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  {canApprove && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, background: '#059669', borderColor: '#047857' }}
+                      onClick={() => setShowApproveModal(true)}
+                      disabled={isUpdating}
+                    >
+                      <Icon name="check-circle" size={20} />
+                      <span>Approve &amp; Sign Prescription</span>
+                    </button>
+                  )}
+                  {canRequestChanges && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600, color: '#e11d48', borderColor: '#fecdd3' }}
+                      onClick={() => setShowRequestChangesModal(true)}
+                      disabled={isUpdating}
+                    >
+                      <Icon name="alert-triangle" size={16} />
+                      <span>Request Changes</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px',
+                    marginBottom: '12px',
+                    fontSize: '13px',
+                    color: '#92400e',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Icon name="clock" size={18} color="#b45309" />
+                  <span>Awaiting approval by Dr. {prescription.forwardedToUser?.name || 'Clinician'}</span>
+                </div>
+              )
+            ) : isChangesRequested ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                >
+                  <Icon name="edit" size={20} />
+                  <span>Edit &amp; Fix Medications</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px' }}
+                  onClick={handleOpenForwardModal}
+                  disabled={isUpdating}
+                >
+                  <Icon name="share" size={16} />
+                  <span>Re-forward for Approval</span>
+                </button>
+              </div>
+            ) : isDraft ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={handleOpenForwardModal}
+                  disabled={isUpdating}
+                >
+                  <Icon name="share" size={20} />
+                  <span>Forward for Clinical Approval</span>
+                </button>
+                {canApprove && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600, color: '#059669', borderColor: '#a7f3d0' }}
+                    onClick={() => setShowApproveModal(true)}
+                    disabled={isUpdating}
+                  >
+                    <Icon name="check-circle" size={16} />
+                    <span>Direct Clinician Approval</span>
+                  </button>
+                )}
+              </div>
+            ) : isApproved ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={handlePrint}
+                >
+                  <Icon name="printer" size={20} />
+                  <span>Print Approved Prescription</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={() => setShowReviseModal(true)}
+                >
+                  <Icon name="copy" size={16} />
+                  <span>Create New Revision (v{(prescription.version || 1) + 1})</span>
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -635,7 +1149,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             )}
 
             {/* Return / Edit / Clone Action Button */}
-            {!isIssued && !isCancelled ? (
+            {!isIssued && !isCancelled && !isApproved ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -650,10 +1164,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 type="button"
                 className="btn btn-secondary"
                 style={{ width: '100%', height: '38px', fontSize: '13px' }}
-                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+                onClick={() => (isApproved ? setShowReviseModal(true) : navigate(`/prescriptions/new?cloneFrom=${prescription.id}`))}
               >
                 <Icon name="copy" size={16} />
-                <span>Clone Prescription</span>
+                <span>{isApproved ? 'Create New Revision' : 'Clone Prescription'}</span>
               </button>
             ) : (
               <div
@@ -819,6 +1333,53 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Workflow Audit Trail & Revision History */}
+          {prescription.workflowHistory && prescription.workflowHistory.length > 0 && (
+            <div className="rx-timeline-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '13.5px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0 }}>
+                  Workflow History
+                </h3>
+                <span className="rx-version-badge">v{prescription.version || 1}</span>
+              </div>
+              <div className="rx-timeline-list">
+                {prescription.workflowHistory.slice().reverse().map((step) => {
+                  const isApprovedStep = step.action === 'APPROVED';
+                  const isPendingStep = step.action === 'FORWARDED';
+                  const isChangesStep = step.action === 'CHANGES_REQUESTED';
+                  const isRevisedStep = step.action === 'REVISED';
+                  const dotClass = isApprovedStep ? 'approved' : isPendingStep ? 'pending' : isChangesStep ? 'changes' : isRevisedStep ? 'revised' : '';
+                  const timeStr = step.createdAt ? new Date(step.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                  return (
+                    <div key={step.id} className="rx-timeline-item">
+                      <div className={`rx-timeline-dot ${dotClass}`} />
+                      <div className="rx-timeline-header">
+                        <span className="rx-timeline-action">
+                          {step.action.replace(/_/g, ' ')}
+                          <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginLeft: '4px' }}>
+                            (v{step.version})
+                          </span>
+                        </span>
+                        <span className="rx-timeline-time">{timeStr}</span>
+                      </div>
+                      <div className="rx-timeline-actor">
+                        By: <strong>{step.actorUser?.name || 'Staff'}</strong>
+                        {step.targetUser && (
+                          <span> → To: <strong>Dr. {step.targetUser.name}</strong></span>
+                        )}
+                      </div>
+                      {step.remarks && (
+                        <div className="rx-timeline-remarks">
+                          "{step.remarks}"
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -969,6 +1530,305 @@ export const PrescriptionDetailsPage: React.FC = () => {
           patientSpecies={patient?.species}
           onSuccessToast={showToast}
         />
+      )}
+
+      {/* Forward for Clinical Approval Modal */}
+      {showForwardModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(0, 104, 95, 0.1)',
+                  color: 'var(--color-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="share" size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Forward for Clinical Approval
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Assign to a licensed veterinarian for clinical validation
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label" htmlFor="forward-clinician-select">
+                Select Prescribing Veterinarian *
+              </label>
+              {loadingClinicians ? (
+                <div style={{ fontSize: '13px', color: 'var(--color-outline)', padding: '8px 0' }}>
+                  Loading eligible clinicians…
+                </div>
+              ) : (
+                <select
+                  id="forward-clinician-select"
+                  className="form-input"
+                  value={forwardToUserId}
+                  onChange={(e) => setForwardToUserId(e.target.value)}
+                  style={{ width: '100%', height: '40px', fontSize: '13px' }}
+                >
+                  {eligibleClinicians.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Dr. {c.name} {c.email ? `(${c.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="forward-remarks">
+                Clinical Remarks / Handover Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="forward-remarks"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Prepared under Dr.'s telephone advice; special dosing for renal condition..."
+                value={forwardRemarks}
+                onChange={(e) => setForwardRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowForwardModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '160px' }}
+                onClick={handleExecuteForward}
+                disabled={isUpdating || !forwardToUserId}
+              >
+                {isUpdating ? 'Forwarding…' : 'Forward for Approval'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Prescription Modal */}
+      {showApproveModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="check-circle" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Approve &amp; Digitally Seal
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Prescription {prescription.rxNumber} (Version {prescription.version || 1})
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '16px' }}>
+              You are approving this prescription under your veterinary license. Once approved, this clinical record will be sealed as immutable. Any future changes will require creating a new numbered revision.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="approval-remarks">
+                Approval Remarks / Seal Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="approval-remarks"
+                className="form-textarea"
+                rows={2}
+                placeholder="e.g. Dose reviewed and confirmed against patient weight and biochemistry."
+                value={approvalRemarks}
+                onChange={(e) => setApprovalRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowApproveModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '150px', background: '#059669', borderColor: '#047857' }}
+                onClick={handleExecuteApprove}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Approving…' : 'Approve & Sign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Changes Modal */}
+      {showRequestChangesModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#ffe4e6',
+                  color: '#e11d48',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="alert-triangle" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Request Clinical Changes
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Return prescription to draft with instructions for staff
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-on-surface-variant)', marginBottom: '14px' }}>
+              Please specify the clinical adjustments or dosage corrections required before this prescription can be approved.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="change-request-remarks">
+                Required Changes / Instructions *
+              </label>
+              <textarea
+                id="change-request-remarks"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Reduce Amoxicillin dose to 10mg/kg BID; check if patient has had NSAIDs recently..."
+                value={changeRequestRemarks}
+                onChange={(e) => setChangeRequestRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowRequestChangesModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '160px', background: '#dc2626', color: '#fff', borderColor: '#b91c1c' }}
+                onClick={handleExecuteRequestChanges}
+                disabled={isUpdating || !changeRequestRemarks.trim()}
+              >
+                {isUpdating ? 'Submitting…' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Revision Modal */}
+      {showReviseModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  color: '#6366f1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="copy" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Create New Revision (v{(prescription.version || 1) + 1})?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Amend approved prescription {prescription.rxNumber}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '20px' }}>
+              Approved prescriptions are legally sealed and immutable. Creating a revision will generate Version {(prescription.version || 1) + 1} starting in Draft status, preserving the approved record in audit history.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowReviseModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '160px' }}
+                onClick={handleExecuteRevise}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Creating…' : `Create Revision v${(prescription.version || 1) + 1}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Share Document Modal */}

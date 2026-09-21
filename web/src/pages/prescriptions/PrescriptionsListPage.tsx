@@ -13,7 +13,7 @@ import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import './Prescriptions.css';
 
-type StatusFilter = 'all' | 'Issued' | 'Draft' | 'Cancelled';
+type StatusFilter = 'all' | 'Pending Approval' | 'Draft' | 'Changes Requested' | 'Approved' | 'Cancelled';
 
 export const PrescriptionsListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,12 +53,20 @@ export const PrescriptionsListPage: React.FC = () => {
 
   // ── Counts ────────────────────────────────────────────────────
   const totalCount = prescriptions?.length || 0;
-  const issuedCount = useMemo(
-    () => prescriptions?.filter((rx) => rx.status === 'Issued').length || 0,
+  const pendingCount = useMemo(
+    () => prescriptions?.filter((rx) => rx.status === 'Pending Approval').length || 0,
     [prescriptions]
   );
   const draftCount = useMemo(
     () => prescriptions?.filter((rx) => rx.status === 'Draft').length || 0,
+    [prescriptions]
+  );
+  const changesRequestedCount = useMemo(
+    () => prescriptions?.filter((rx) => rx.status === 'Changes Requested').length || 0,
+    [prescriptions]
+  );
+  const approvedCount = useMemo(
+    () => prescriptions?.filter((rx) => rx.status === 'Approved' || rx.status === 'Issued').length || 0,
     [prescriptions]
   );
   const cancelledCount = useMemo(
@@ -74,8 +82,12 @@ export const PrescriptionsListPage: React.FC = () => {
 
     return prescriptions.filter((rx) => {
       // Status filter
-      if (statusFilter !== 'all' && rx.status !== statusFilter) {
-        return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'Approved') {
+          if (rx.status !== 'Approved' && rx.status !== 'Issued') return false;
+        } else if (rx.status !== statusFilter) {
+          return false;
+        }
       }
 
       // Query filter
@@ -187,14 +199,14 @@ export const PrescriptionsListPage: React.FC = () => {
           <div>
             <span className="rx-metric-label">Issued Prescriptions</span>
             <div className="rx-metric-value-row">
-              <span className="rx-metric-val">{issuedCount}</span>
+              <span className="rx-metric-val">{approvedCount}</span>
               <span className="rx-metric-unit">Issued</span>
             </div>
           </div>
           <div className="rx-metric-footer">
             <span>Ready to share or print</span>
             <span className="font-semibold text-success">
-              {totalCount > 0 ? `${Math.round((issuedCount / totalCount) * 100)}% rate` : '0%'}
+              {totalCount > 0 ? `${Math.round((approvedCount / totalCount) * 100)}% rate` : '0%'}
             </span>
           </div>
         </div>
@@ -261,19 +273,41 @@ export const PrescriptionsListPage: React.FC = () => {
           </button>
           <button
             type="button"
-            className={`rx-filter-chip ${statusFilter === 'Issued' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('Issued')}
+            className={`rx-filter-chip ${statusFilter === 'Pending Approval' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('Pending Approval')}
+            style={pendingCount > 0 ? { borderColor: '#f59e0b', color: '#b45309' } : {}}
           >
-            <span>Issued</span>
-            <span className="rx-chip-count">({issuedCount})</span>
+            <span>Pending Approvals</span>
+            <span className="rx-chip-count" style={pendingCount > 0 ? { background: '#fef3c7', color: '#92400e', fontWeight: 700 } : {}}>
+              ({pendingCount})
+            </span>
           </button>
           <button
             type="button"
             className={`rx-filter-chip ${statusFilter === 'Draft' ? 'active' : ''}`}
             onClick={() => setStatusFilter('Draft')}
           >
-            <span>Draft</span>
+            <span>Drafts</span>
             <span className="rx-chip-count">({draftCount})</span>
+          </button>
+          <button
+            type="button"
+            className={`rx-filter-chip ${statusFilter === 'Changes Requested' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('Changes Requested')}
+            style={changesRequestedCount > 0 ? { borderColor: '#f97316', color: '#c2410c' } : {}}
+          >
+            <span>Changes Requested</span>
+            <span className="rx-chip-count" style={changesRequestedCount > 0 ? { background: '#ffedd5', color: '#9a3412', fontWeight: 700 } : {}}>
+              ({changesRequestedCount})
+            </span>
+          </button>
+          <button
+            type="button"
+            className={`rx-filter-chip ${statusFilter === 'Approved' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('Approved')}
+          >
+            <span>Approved</span>
+            <span className="rx-chip-count">({approvedCount})</span>
           </button>
           <button
             type="button"
@@ -285,6 +319,51 @@ export const PrescriptionsListPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {pendingCount > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+          border: '1px solid #fcd34d',
+          borderRadius: 'var(--radius-lg, 12px)',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(245, 158, 11, 0.1)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: '#fef08a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#b45309'
+            }}>
+              <Icon name="clock" size={18} />
+            </div>
+            <div>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#92400e', display: 'block' }}>
+                Clinical Action Required
+              </span>
+              <span style={{ fontSize: '12px', color: '#b45309' }}>
+                {pendingCount} prescription{pendingCount > 1 ? 's are' : ' is'} pending clinician review and digital signature.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#f59e0b', color: '#ffffff', fontWeight: 600, border: 'none' }}
+            onClick={() => setStatusFilter('Pending Approval')}
+          >
+            Review Pending ({pendingCount})
+          </button>
+        </div>
+      )}
 
       {/* ── Primary Prescriptions Table Surface ─────────────────── */}
       <div className="rx-table-surface">

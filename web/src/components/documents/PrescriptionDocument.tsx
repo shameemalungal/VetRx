@@ -109,6 +109,19 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
 
   return (
     <div className="vetrx-document prescription-sheet-canvas" id={id}>
+      {/* Non-Approved Watermark Overlay */}
+      {prescription.status !== 'Approved' && prescription.status !== 'Issued' && (
+        <div className="document-watermark-overlay" aria-hidden="true">
+          {prescription.status === 'Pending Approval'
+            ? 'PENDING CLINICAL APPROVAL'
+            : prescription.status === 'Changes Requested'
+            ? 'CHANGES REQUESTED'
+            : prescription.status === 'Cancelled'
+            ? 'CANCELLED'
+            : 'DRAFT — NOT APPROVED'}
+        </div>
+      )}
+
       {/* Document Top Bar */}
       <div className="prescription-doc-top-bar avoid-break">
         <div className="prescription-doc-top-left">
@@ -119,10 +132,10 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
         </div>
         <div className="prescription-doc-top-right">
           <span className="prescription-doc-ref">
-            Doc Ref: <strong>{prescription.rxNumber}</strong>
+            Doc Ref: <strong>{prescription.rxNumber}</strong> {prescription.version ? `(v${prescription.version})` : ''}
           </span>
-          <span className="document-badge-prescription">
-            Original Prescription
+          <span className={`document-badge-prescription ${prescription.status === 'Approved' ? 'badge-approved' : ''}`}>
+            {prescription.status === 'Approved' ? 'Approved Clinical Rx' : prescription.status === 'Issued' ? 'Issued Prescription' : 'Prescription Preview'}
           </span>
         </div>
       </div>
@@ -456,6 +469,11 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
             <div className="stationery-sig-role">
               {effectiveDesignation}
             </div>
+            {prescription.status === 'Approved' && prescription.approvedAt && (
+              <div style={{ fontSize: '10px', color: '#0f766e', fontWeight: 600, marginTop: '4px', letterSpacing: '0.02em' }}>
+                ✓ Digitally Approved {prescription.approvedByUser?.name ? `by ${prescription.approvedByUser.name}` : ''} ({new Date(prescription.approvedAt).toLocaleDateString('en-GB')})
+              </div>
+            )}
           </div>
         </div>
       </div>

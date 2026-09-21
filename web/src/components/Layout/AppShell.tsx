@@ -57,7 +57,7 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
-  const { user, practice, logout } = useAuth();
+  const { user, practice, logout, isPlatformAdmin } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -219,7 +219,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     };
   }, [searchQuery]);
 
-  // ── Live Notifications (Draft Prescriptions & Draft Invoices) ──
+  // ── Live Notifications (Pending Approvals, Draft Prescriptions & Draft Invoices) ──
+  const pendingRx = useLiveQuery(
+    () => db.prescriptions.where('status').equals('Pending Approval').toArray(),
+    []
+  );
   const draftRx = useLiveQuery(
     () => db.prescriptions.where('status').equals('Draft').toArray(),
     []
@@ -229,7 +233,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     []
   );
 
-  const totalNotifications = (draftRx?.length || 0) + (draftInvs?.length || 0);
+  const pendingApprovalsCount = pendingRx?.length || 0;
+  const totalNotifications = pendingApprovalsCount + (draftRx?.length || 0) + (draftInvs?.length || 0);
 
   // ── Derive current page label for mobile header ──────────────
   const currentNav =
@@ -276,9 +281,36 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               }
             >
               <Icon name={icon} size={18} />
-              {label}
+              <span style={{ flex: 1 }}>{label}</span>
+              {path === '/prescriptions' && pendingApprovalsCount > 0 && (
+                <span
+                  style={{
+                    background: '#fef3c7',
+                    color: '#b45309',
+                    border: '1px solid #fde68a',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                  }}
+                  title={`${pendingApprovalsCount} pending clinical approvals`}
+                >
+                  {pendingApprovalsCount}
+                </span>
+              )}
             </NavLink>
           ))}
+          {isPlatformAdmin?.() && (
+            <NavLink
+              to="/platform/permissions"
+              className={({ isActive }) =>
+                `sidebar-nav-item${isActive ? ' active' : ''}`
+              }
+            >
+              <Icon name="shield" size={18} />
+              <span>Platform Matrix</span>
+            </NavLink>
+          )}
         </nav>
 
         {/* Footer — Settings + practitioner */}
@@ -540,6 +572,29 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       </div>
                     ) : (
                       <div className="popover-list">
+                        {pendingRx?.map((rx) => (
+                          <button
+                            key={rx.id}
+                            type="button"
+                            className="popover-item"
+                            style={{ background: '#fffbeb' }}
+                            onClick={() => {
+                              navigate(`/prescriptions/${rx.id}`);
+                              setIsNotificationsOpen(false);
+                            }}
+                          >
+                            <div className="popover-item-icon" style={{ background: '#fef3c7', color: '#b45309' }}>
+                              <Icon name="clock" size={14} />
+                            </div>
+                            <div className="popover-item-content">
+                              <span className="popover-item-title" style={{ color: '#92400e', fontWeight: 600 }}>
+                                Clinical Approval Needed
+                              </span>
+                              <span className="popover-item-sub data-mono">{rx.rxNumber} • Awaiting doctor sign-off</span>
+                            </div>
+                          </button>
+                        ))}
+
                         {draftRx?.map((rx) => (
                           <button
                             key={rx.id}
@@ -657,6 +712,20 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       <Icon name="settings" size={16} />
                       <span>Workspace &amp; Practice Settings</span>
                     </button>
+
+                    {isPlatformAdmin?.() && (
+                      <button
+                        type="button"
+                        className="profile-popover-item"
+                        onClick={() => {
+                          navigate('/platform/permissions');
+                          setIsProfileMenuOpen(false);
+                        }}
+                      >
+                        <Icon name="shield" size={16} />
+                        <span>Platform Role &amp; Action Matrix</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"

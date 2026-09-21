@@ -42,6 +42,11 @@ enum IdentityProviderType {
   FUTURE_MYKGVOA
 }
 
+enum OverrideEffect {
+  ALLOW
+  DENY
+}
+
 // ------------------------------------------------------------------------------
 // User & Authentication Models
 // ------------------------------------------------------------------------------
@@ -67,6 +72,15 @@ model User {
   sessions        Session[]
   auditLogs       AuditLog[]
   invitationsSent PracticeInvitation[] @relation("UserInvitationsSent")
+
+  // Overrides and Prescription Clinical Workflow Relations
+  permissionOverridesCreated        MemberPermissionOverride[]   @relation("PermissionOverrideCreatedBy")
+  prescriptionsForwarded             Prescription[]               @relation("PrescriptionForwardedBy")
+  prescriptionsAssigned              Prescription[]               @relation("PrescriptionForwardedTo")
+  prescriptionsApproved              Prescription[]               @relation("PrescriptionApprovedBy")
+  prescriptionsRequestedChanges      Prescription[]               @relation("PrescriptionRequestedBy")
+  prescriptionWorkflowActions        PrescriptionWorkflowHistory[]
+  prescriptionWorkflowTargetActions  PrescriptionWorkflowHistory[] @relation("WorkflowHistoryTargetUser")
 
   @@index([normalizedEmail])
 }
@@ -154,9 +168,26 @@ model PracticeMember {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  permissionOverrides MemberPermissionOverride[]
+
   @@unique([practiceId, userId])
   @@index([practiceId])
   @@index([userId])
+}
+
+model MemberPermissionOverride {
+  id               String         @id @default(uuid())
+  practiceMemberId String
+  practiceMember   PracticeMember @relation(fields: [practiceMemberId], references: [id], onDelete: Cascade)
+  permission       String
+  effect           OverrideEffect @default(ALLOW)
+  createdByUserId  String
+  createdBy        User           @relation("PermissionOverrideCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([practiceMemberId, permission])
+  @@index([practiceMemberId])
 }
 
 model PracticeInvitation {
@@ -297,18 +328,58 @@ model Prescription {
   patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   rxNumber        String
   diagnosis       String?
-  notes           String?
-  status          String             @default("Final") // "Draft", "Final", "Cancelled"
-  prescribedAt    DateTime           @default(now())
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  notes                 String?
+  status                String             @default("DRAFT") // "DRAFT", "PENDING_APPROVAL", "CHANGES_REQUESTED", "APPROVED", "CANCELLED", legacy: "Draft", "Final"
+  version               Int                @default(1)
+  prescribedAt          DateTime           @default(now())
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  items           PrescriptionItem[]
-  invoiceItems    InvoiceItem[]
+  // Workflow & Approval Fields
+  forwardingRemarks     String?
+  forwardedByUserId     String?
+  forwardedByUser       User?              @relation("PrescriptionForwardedBy", fields: [forwardedByUserId], references: [id], onDelete: SetNull)
+  forwardedToUserId     String?
+  forwardedToUser       User?              @relation("PrescriptionForwardedTo", fields: [forwardedToUserId], references: [id], onDelete: SetNull)
+  forwardedAt           DateTime?
+
+  approvedByUserId      String?
+  approvedByUser        User?              @relation("PrescriptionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  approvedAt            DateTime?
+  approvalRemarks       String?
+  approvedVersion       Int?
+
+  requestedByUserId     String?
+  requestedByUser       User?              @relation("PrescriptionRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  requestedAt           DateTime?
+  changeRequestRemarks  String?
+
+  items                 PrescriptionItem[]
+  invoiceItems          InvoiceItem[]
+  workflowHistory       PrescriptionWorkflowHistory[]
 
   @@unique([practiceId, rxNumber])
   @@index([practiceId])
   @@index([patientId])
+  @@index([status])
+}
+
+model PrescriptionWorkflowHistory {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  version        Int          @default(1)
+  status         String
+  action         String       // "CREATED", "FORWARDED", "CHANGES_REQUESTED", "APPROVED", "RESUBMITTED", "CANCELLED"
+  actorUserId    String
+  actorUser      User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  targetUserId   String?
+  targetUser     User?        @relation("WorkflowHistoryTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  remarks        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([prescriptionId])
+  @@index([createdAt])
 }
 
 model PrescriptionItem {

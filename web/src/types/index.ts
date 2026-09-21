@@ -200,14 +200,33 @@ export interface Medicine {
 
 // ── Prescription ──────────────────────────────────────────────
 
-export type PrescriptionStatus = 'Draft' | 'Issued' | 'Cancelled';
+export type PrescriptionStatus =
+  | 'Draft'
+  | 'Pending Approval'
+  | 'Changes Requested'
+  | 'Approved'
+  | 'Issued'
+  | 'Cancelled';
+
+export interface PrescriptionWorkflowHistoryItem {
+  id: string;
+  version: number;
+  status: string;
+  action: string;
+  actorUserId: string;
+  actorUser?: { id: string; name: string; email: string };
+  targetUserId?: string | null;
+  targetUser?: { id: string; name: string; email: string } | null;
+  remarks?: string | null;
+  createdAt: string | Date;
+}
 
 export interface Prescription {
   id?: number;
   rxNumber: string;        // e.g. RX-2026-0892
   patientId: number;
   ownerId: number;
-  practitionerId: number;
+  practitionerId?: number;
   packageId?: number;      // if created from a package
   symptoms?: string;
   diagnosis?: string;
@@ -216,6 +235,25 @@ export interface Prescription {
   recheckIntervalPreset?: string; // 'None' | '3 days' | '5 days' | '7 days' | '14 days' | 'Custom'
   recheckIntervalCustom?: string; // e.g. '10 days', '2 weeks', 'After 5 days'
   status: PrescriptionStatus;
+  version?: number;
+  forwardingRemarks?: string | null;
+  forwardedByUserId?: string | null;
+  forwardedByUser?: { id: string; name: string; email: string } | null;
+  forwardedToUserId?: string | null;
+  forwardedToUser?: { id: string; name: string; email: string } | null;
+  forwardedAt?: string | Date | null;
+  approvedByUserId?: string | null;
+  approvedByUser?: { id: string; name: string; email: string } | null;
+  approvedAt?: string | Date | null;
+  approvedVersion?: number | null;
+  approvalRemarks?: string | null;
+  requestedByUserId?: string | null;
+  requestedByUser?: { id: string; name: string; email: string } | null;
+  requestedAt?: string | Date | null;
+  changeRequestRemarks?: string | null;
+  workflowHistory?: PrescriptionWorkflowHistoryItem[];
+  items?: PrescriptionItem[];
+  patient?: any;
   issuedAt?: Date;
   cancelledAt?: Date;
   cancellationReason?: string;

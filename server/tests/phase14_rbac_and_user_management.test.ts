@@ -151,17 +151,21 @@ describe('Phase 14: User Management, RBAC & Practice Administration Test Suite',
       assert.strictEqual(perms.includes(PERMISSIONS.PRACTICE_SETTINGS_MANAGE), false);
     });
 
-    it('4. STAFF has operational permissions but cannot issue prescriptions or manage users/billing', () => {
+    it('4. STAFF has operational permissions and can draft prescriptions but cannot clinically approve or manage users/billing', () => {
       const perms = getPermissionsForRole(Role.STAFF);
       assert.ok(perms.includes(PERMISSIONS.PATIENT_VIEW));
       assert.ok(perms.includes(PERMISSIONS.PATIENT_CREATE));
       assert.ok(perms.includes(PERMISSIONS.OWNER_CREATE));
       assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_VIEW));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_CREATE));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_UPDATE));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_FORWARD_FOR_APPROVAL));
       assert.ok(perms.includes(PERMISSIONS.INVOICE_CREATE));
 
-      // Invariants: Staff cannot prescribe or administer
-      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_CREATE), false);
-      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_UPDATE), false);
+      // Invariants: Staff cannot clinically approve, delete prescriptions, or administer practice
+      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE), false);
+      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES), false);
+      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_DELETE), false);
       assert.strictEqual(perms.includes(PERMISSIONS.USER_INVITE), false);
       assert.strictEqual(perms.includes(PERMISSIONS.BILLING_MANAGE), false);
       assert.strictEqual(perms.includes(PERMISSIONS.PRACTICE_SETTINGS_MANAGE), false);

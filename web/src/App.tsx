@@ -24,6 +24,7 @@ import { InvoiceDetailsPage } from './pages/invoices/InvoiceDetailsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { AcceptInvitationPage } from './pages/auth/AcceptInvitationPage';
+import { RolePermissionManagementPage } from './pages/platform/RolePermissionManagementPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useSettingsStore } from './store/settingsStore';
 import { ensureSeeded } from './db/schema';
@@ -61,6 +62,7 @@ function AuthenticatedAppRoutes() {
         <Route path="/invoices/:id/edit" element={<InvoiceBuilderPage mode="edit" />} />
 
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/platform/permissions" element={<RolePermissionManagementPage />} />
         <Route path="/invite/:token" element={<AcceptInvitationPage />} />
 
         {/* Auth routes when already authenticated redirect to dashboard */}

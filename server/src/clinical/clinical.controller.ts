@@ -5,6 +5,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { requirePractice } from '../middleware/tenant.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
+import { requirePracticePermission } from '../middleware/authorization.js';
+import { PERMISSIONS } from '../auth/permissions.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 export const clinicalRouter = Router();
@@ -305,7 +307,9 @@ const createPrescriptionSchema = z.object({
   rxNumber: z.string().min(1).max(50),
   diagnosis: z.string().max(300).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
-  status: z.enum(['Draft', 'Final', 'Cancelled']).optional(),
+  status: z.enum(['Draft', 'Pending Approval', 'Changes Requested', 'Approved', 'Cancelled', 'Final']).optional(),
+  forwardedToUserId: z.string().uuid().nullable().optional(),
+  forwardingRemarks: z.string().max(1000).nullable().optional(),
   items: z.array(
     z.object({
       medicineId: z.string().uuid().nullable().optional(),
@@ -320,63 +324,192 @@ const createPrescriptionSchema = z.object({
   ).min(1),
 });
 
-clinicalRouter.get('/prescriptions', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const search = req.query.search as string | undefined;
-    const rxList = await ClinicalService.listPrescriptions(practiceId, search);
-    res.status(200).json(rxList);
-  } catch (err) {
-    next(err);
+clinicalRouter.get(
+  '/prescriptions/eligible-clinicians',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const clinicians = await ClinicalService.getEligibleClinicians(practiceId);
+      res.status(200).json(clinicians);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
-clinicalRouter.get('/prescriptions/:id', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const rx = await ClinicalService.getPrescriptionById(getId(req), practiceId);
-    res.status(200).json(rx);
-  } catch (err) {
-    next(err);
+clinicalRouter.get(
+  '/prescriptions/pending-approvals-count',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const clinicianUserId = req.query.clinicianUserId as string | undefined;
+      const result = await ClinicalService.getPendingApprovalsCount(practiceId, clinicianUserId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
-clinicalRouter.post('/prescriptions', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const data = createPrescriptionSchema.parse(req.body);
-    await EntitlementService.assertCanCreateRecord(practiceId, data.patientId);
-    const rx = await ClinicalService.createPrescription(practiceId, data);
-    res.status(201).json(rx);
-  } catch (err) {
-    next(err);
+clinicalRouter.get(
+  '/prescriptions',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const search = req.query.search as string | undefined;
+      const status = req.query.status as string | undefined;
+      const forwardedToUserId = req.query.forwardedToUserId as string | undefined;
+      const rxList = await ClinicalService.listPrescriptions(practiceId, { search, status, forwardedToUserId });
+      res.status(200).json(rxList);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
-clinicalRouter.patch('/prescriptions/:id', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const data = z.object({
-      diagnosis: z.string().max(300).nullable().optional(),
-      notes: z.string().max(1000).nullable().optional(),
-      status: z.enum(['Draft', 'Final', 'Cancelled']).optional(),
-    }).parse(req.body);
-    const updated = await ClinicalService.updatePrescription(getId(req), practiceId, data);
-    res.status(200).json(updated);
-  } catch (err) {
-    next(err);
+clinicalRouter.get(
+  '/prescriptions/:id',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const rx = await ClinicalService.getPrescriptionById(getId(req), practiceId);
+      res.status(200).json(rx);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
-clinicalRouter.delete('/prescriptions/:id', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deletePrescription(getId(req), practiceId);
-    res.status(200).json(deleted);
-  } catch (err) {
-    next(err);
+clinicalRouter.post(
+  '/prescriptions',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_CREATE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const data = createPrescriptionSchema.parse(req.body);
+      await EntitlementService.assertCanCreateRecord(practiceId, data.patientId);
+      const rx = await ClinicalService.createPrescription(practiceId, data, req.user?.id);
+      res.status(201).json(rx);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
+
+clinicalRouter.patch(
+  '/prescriptions/:id',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_UPDATE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const data = z.object({
+        diagnosis: z.string().max(300).nullable().optional(),
+        notes: z.string().max(1000).nullable().optional(),
+        status: z.enum(['Draft', 'Pending Approval', 'Changes Requested', 'Approved', 'Cancelled', 'Final']).optional(),
+        items: z.array(
+          z.object({
+            medicineId: z.string().uuid().nullable().optional(),
+            medicineName: z.string().min(1).max(150),
+            dosage: z.string().min(1).max(80),
+            frequency: z.string().min(1).max(80),
+            durationDays: z.number().int().min(1).optional(),
+            totalQuantity: z.number().min(0).optional(),
+            quantityUnit: z.string().max(30).nullable().optional(),
+            instructions: z.string().max(500).nullable().optional(),
+          })
+        ).optional(),
+      }).parse(req.body);
+      const updated = await ClinicalService.updatePrescription(getId(req), practiceId, data, req.user?.id);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+clinicalRouter.post(
+  '/prescriptions/:id/forward',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_FORWARD_FOR_APPROVAL),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const body = z.object({
+        forwardedToUserId: z.string().uuid(),
+        forwardingRemarks: z.string().max(1000).nullable().optional(),
+      }).parse(req.body);
+      const updated = await ClinicalService.forwardPrescription(getId(req), practiceId, req.user!.id, body);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+clinicalRouter.post(
+  '/prescriptions/:id/approve',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_APPROVE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const body = z.object({
+        approvalRemarks: z.string().max(1000).nullable().optional(),
+      }).optional().parse(req.body);
+      const updated = await ClinicalService.approvePrescription(getId(req), practiceId, req.user!.id, body);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+clinicalRouter.post(
+  '/prescriptions/:id/request-changes',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const body = z.object({
+        changeRequestRemarks: z.string().min(1).max(1000),
+      }).parse(req.body);
+      const updated = await ClinicalService.requestChangesPrescription(getId(req), practiceId, req.user!.id, body);
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+clinicalRouter.post(
+  '/prescriptions/:id/revise',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_CREATE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const revised = await ClinicalService.revisePrescription(getId(req), practiceId, req.user!.id);
+      res.status(200).json(revised);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+clinicalRouter.delete(
+  '/prescriptions/:id',
+  requirePracticePermission(PERMISSIONS.PRESCRIPTION_DELETE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const deleted = await ClinicalService.deletePrescription(getId(req), practiceId);
+      res.status(200).json(deleted);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // ------------------------------------------------------------------------------
 // 6. Invoices Router

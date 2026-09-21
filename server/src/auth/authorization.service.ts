@@ -27,6 +27,7 @@ export class AuthorizationService {
   private static mockMemberships: Map<string, MembershipRecord> = new Map();
   private static mockPlatformUsers: Map<string, { platformRole: PlatformRole | null }> = new Map();
   private static mockPracticeOwners: Map<string, string> = new Map(); // practiceId -> ownerUserId
+  private static mockOverrides: Map<string, Map<string, 'ALLOW' | 'DENY'>> = new Map(); // practiceMemberId -> (permission -> effect)
 
   static setMockMembership(userId: string, practiceId: string, record: Partial<MembershipRecord>): void {
     const key = `${userId}:${practiceId}`;
@@ -37,6 +38,26 @@ export class AuthorizationService {
       role: record.role || Role.STAFF,
       isActive: record.isActive !== undefined ? record.isActive : true,
     });
+  }
+
+  static setMockOverride(practiceMemberId: string, permission: string, effect: 'ALLOW' | 'DENY'): void {
+    let memberMap = this.mockOverrides.get(practiceMemberId);
+    if (!memberMap) {
+      memberMap = new Map();
+      this.mockOverrides.set(practiceMemberId, memberMap);
+    }
+    memberMap.set(permission, effect);
+  }
+
+  static removeMockOverride(practiceMemberId: string, permission: string): void {
+    const memberMap = this.mockOverrides.get(practiceMemberId);
+    if (memberMap) {
+      memberMap.delete(permission);
+    }
+  }
+
+  static clearMockOverrides(): void {
+    this.mockOverrides.clear();
   }
 
   static setMockPlatformUser(userId: string, platformRole: PlatformRole | null): void {
@@ -51,6 +72,7 @@ export class AuthorizationService {
     this.mockMemberships.clear();
     this.mockPlatformUsers.clear();
     this.mockPracticeOwners.clear();
+    this.mockOverrides.clear();
   }
 
   /**
@@ -105,14 +127,52 @@ export class AuthorizationService {
   }
 
   /**
-   * Returns effective permissions for a user in a practice.
+   * Returns effective permissions for a user in a practice, incorporating role defaults and overrides.
    */
   static async getEffectivePermissions(userId: string, practiceId: string): Promise<Permission[]> {
     const membership = await this.resolveMembership(userId, practiceId);
     if (!membership || !membership.isActive) {
       return [];
     }
-    return getPermissionsForRole(membership.role);
+    const rolePermissions = new Set<Permission>(getPermissionsForRole(membership.role));
+
+    // Check mock overrides first
+    const mockMemberOverrides = this.mockOverrides.get(membership.id);
+    if (mockMemberOverrides && mockMemberOverrides.size > 0) {
+      for (const [perm, effect] of mockMemberOverrides.entries()) {
+        if (effect === 'ALLOW') {
+          // Platform permissions cannot be granted via practice-level overrides
+          if (!perm.startsWith('PLATFORM_')) {
+            rolePermissions.add(perm as Permission);
+          }
+        } else if (effect === 'DENY') {
+          rolePermissions.delete(perm as Permission);
+        }
+      }
+      return Array.from(rolePermissions);
+    }
+
+    // If database lookup is enabled
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const dbOverrides = await prisma.memberPermissionOverride.findMany({
+          where: { practiceMemberId: membership.id },
+        });
+        for (const ov of dbOverrides) {
+          if (ov.effect === 'ALLOW') {
+            if (!ov.permission.startsWith('PLATFORM_')) {
+              rolePermissions.add(ov.permission as Permission);
+            }
+          } else if (ov.effect === 'DENY') {
+            rolePermissions.delete(ov.permission as Permission);
+          }
+        }
+      } catch {
+        // Fallback to role permissions if table not accessible yet
+      }
+    }
+
+    return Array.from(rolePermissions);
   }
 
   /**
@@ -124,13 +184,11 @@ export class AuthorizationService {
     permission: Permission | string
   ): Promise<boolean> {
     const membership = await this.resolveMembership(userId, practiceId);
-    if (!membership) {
+    if (!membership || !membership.isActive) {
       return false;
     }
-    if (!membership.isActive) {
-      return false;
-    }
-    return roleHasPermission(membership.role, permission);
+    const effective = await this.getEffectivePermissions(userId, practiceId);
+    return effective.includes(permission as Permission);
   }
 
   /**
@@ -156,7 +214,8 @@ export class AuthorizationService {
         'Your membership in this practice has been deactivated.'
       );
     }
-    if (!roleHasPermission(membership.role, permission)) {
+    const effective = await this.getEffectivePermissions(userId, practiceId);
+    if (!effective.includes(permission as Permission)) {
       throw new AppError(
         403,
         'INSUFFICIENT_PERMISSION',
