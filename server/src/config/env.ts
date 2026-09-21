@@ -33,10 +33,10 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
 
   // Transactional Email (Brevo / SMTP)
-  EMAIL_ENABLED: z
-    .union([z.boolean(), z.string()])
-    .default(false)
-    .transform((val) => val === true || val === 'true' || val === '1'),
+  EMAIL_ENABLED: z.preprocess(
+    (val) => (typeof val === 'string' ? val.trim().toLowerCase() === 'true' || val.trim() === '1' : Boolean(val)),
+    z.boolean()
+  ).default(false),
   EMAIL_FROM: z.string().default('supportvetrx@gmail.com'),
   EMAIL_FROM_NAME: z.string().default('VetRx'),
   BREVO_API_KEY: z.string().optional().default(''),
