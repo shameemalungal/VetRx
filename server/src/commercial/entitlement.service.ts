@@ -19,13 +19,28 @@ import type {
 export class EntitlementService {
   // In-memory registry for mock subscriptions during fast isolated unit testing
   private static mockSubscriptions: Map<string, any> = new Map();
+  private static mockUsages: Map<string, any> = new Map();
 
   static setMockSubscription(practiceId: string, subscription: any): void {
     this.mockSubscriptions.set(practiceId, subscription);
   }
 
+  static getMockSubscription(practiceId: string): any {
+    return this.mockSubscriptions.get(practiceId) || null;
+  }
+
+  static setMockUsage(practiceId: string, usage: any): void {
+    const existing = this.mockSubscriptions.get(practiceId);
+    if (existing) {
+      existing.usage = { ...(existing.usage || {}), ...usage };
+      this.mockSubscriptions.set(practiceId, existing);
+    }
+    this.mockUsages.set(practiceId, usage);
+  }
+
   static clearMockSubscriptions(): void {
     this.mockSubscriptions.clear();
+    this.mockUsages.clear();
   }
 
   /**
@@ -173,6 +188,7 @@ export class EntitlementService {
   static async getPracticeUsage(practiceId: string): Promise<PracticeUsageDTO> {
     const entitlements = await this.resolvePracticeEntitlements(practiceId);
     const mock = this.mockSubscriptions.get(practiceId);
+    const mockUsage = this.mockUsages.get(practiceId) || mock?.usage;
 
     let patientsCount = 0;
     let packagesCount = 0;
@@ -180,12 +196,12 @@ export class EntitlementService {
     let veterinarianSeatsCount = 1;
     let staffSeatsCount = 0;
 
-    if (mock && mock.usage) {
-      patientsCount = mock.usage.patientsCount ?? 0;
-      packagesCount = mock.usage.packagesCount ?? 0;
-      customMedicinesCount = mock.usage.customMedicinesCount ?? 0;
-      veterinarianSeatsCount = mock.usage.veterinarianSeatsCount ?? 1;
-      staffSeatsCount = mock.usage.staffSeatsCount ?? 0;
+    if (mockUsage) {
+      patientsCount = mockUsage.patientsCount ?? 0;
+      packagesCount = mockUsage.packagesCount ?? 0;
+      customMedicinesCount = mockUsage.customMedicinesCount ?? 0;
+      veterinarianSeatsCount = mockUsage.veterinarianSeatsCount ?? 1;
+      staffSeatsCount = mockUsage.staffSeatsCount ?? 0;
     } else if (process.env.VETRX_FAST_TEST === '1') {
       patientsCount = 0;
       packagesCount = 0;
@@ -395,5 +411,12 @@ export class EntitlementService {
       }
     }
     // Administrative/staff members are unlimited on both Individual and Clinic
+  }
+
+  /**
+   * Asserts whether the practice can add an additional veterinarian seat.
+   */
+  static async assertCanAddVeterinarianSeat(practiceId: string): Promise<void> {
+    return this.assertCanAddSeat(practiceId, Role.PRACTICE_OWNER);
   }
 }

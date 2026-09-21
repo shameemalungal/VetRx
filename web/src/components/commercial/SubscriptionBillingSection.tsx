@@ -45,9 +45,27 @@ interface CommercialStatus {
   usage?: UsageData;
 }
 
+interface PaymentRecord {
+  id: string;
+  amountPaisa: number;
+  currency: string;
+  status: string;
+  paymentProvider: string;
+  internalReference: string;
+  gatewayTransactionId: string | null;
+  paymentMethod: string | null;
+  createdAt: string;
+  gatewayResponseRaw?: {
+    planCode?: string;
+    planName?: string;
+    billingInterval?: string;
+  };
+}
+
 export const SubscriptionBillingSection: React.FC = () => {
   const [status, setStatus] = useState<CommercialStatus | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [billingInterval, setBillingInterval] = useState<'MONTHLY' | 'ANNUAL'>('ANNUAL');
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -64,9 +82,10 @@ export const SubscriptionBillingSection: React.FC = () => {
   const fetchCommercialData = async () => {
     try {
       setLoading(true);
-      const [statusRes, usageRes] = await Promise.all([
+      const [statusRes, usageRes, paymentsRes] = await Promise.all([
         fetch(`${API_BASE}/api/commercial/status`, { credentials: 'include' }),
         fetch(`${API_BASE}/api/commercial/usage`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/commercial/payments`, { credentials: 'include' }),
       ]);
 
       if (statusRes.ok) {
@@ -76,6 +95,10 @@ export const SubscriptionBillingSection: React.FC = () => {
       if (usageRes.ok) {
         const usageData = await usageRes.json();
         setUsage(usageData);
+      }
+      if (paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        setPayments(paymentsData);
       }
     } catch {
       // Fallback for isolated offline/demo mode
@@ -111,12 +134,21 @@ export const SubscriptionBillingSection: React.FC = () => {
         maxStaffSeats: null,
         maxRecordsPerPatient: 5,
       });
+      setPayments([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const paymentStatus = searchParams.get('payment_status');
+    const txnid = searchParams.get('txnid');
+    if (paymentStatus === 'success') {
+      setActionSuccess(`Payment verified successfully! Transaction reference: ${txnid || 'Confirmed'}. Your subscription is now active.`);
+    } else if (paymentStatus === 'failed') {
+      setActionError('Payment could not be verified or was cancelled. Please try again.');
+    }
     void fetchCommercialData();
   }, []);
 
@@ -127,13 +159,44 @@ export const SubscriptionBillingSection: React.FC = () => {
     setActionSuccess(null);
 
     try {
+      if (confirmModal.type === 'UPGRADE') {
+        const payRes = await fetch(`${API_BASE}/api/commercial/payments/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ planCode: confirmModal.planCode, billingInterval }),
+        });
+        const payData = await payRes.json();
+        if (!payRes.ok) {
+          throw new Error(payData.message || 'Payment order initiation failed.');
+        }
+
+        if (payData.checkoutUrl && payData.formParameters) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = payData.checkoutUrl;
+          for (const [k, v] of Object.entries(payData.formParameters)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = k;
+            input.value = String(v);
+            form.appendChild(input);
+          }
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
+
+        setActionSuccess('Payment initiated successfully.');
+        setConfirmModal(null);
+        await fetchCommercialData();
+        return;
+      }
+
       let endpoint = '';
       let body: any = undefined;
 
-      if (confirmModal.type === 'UPGRADE') {
-        endpoint = `${API_BASE}/api/commercial/subscription/upgrade`;
-        body = JSON.stringify({ planCode: confirmModal.planCode });
-      } else if (confirmModal.type === 'DOWNGRADE') {
+      if (confirmModal.type === 'DOWNGRADE') {
         endpoint = `${API_BASE}/api/commercial/subscription/downgrade`;
         body = JSON.stringify({ planCode: confirmModal.planCode });
       } else if (confirmModal.type === 'CANCEL') {
@@ -292,11 +355,11 @@ export const SubscriptionBillingSection: React.FC = () => {
           </div>
         )}
 
-        {/* Payment Method Notice (BD-01, BD-27) */}
+        {/* Payment Method Notice (BD-01, BD-22) */}
         <div className="payment-req-banner">
           <Icon name="info" size={16} />
           <span>
-            <strong>Payment Method Notice:</strong> A payment method is required to start your subscription. PayU payment gateway processing will be connected in Phase 13.
+            <strong>Payment Method Notice:</strong> Subscriptions are processed securely in INR through PayU payment gateway.
           </span>
         </div>
 
@@ -610,8 +673,50 @@ export const SubscriptionBillingSection: React.FC = () => {
       </div>
 
       <p className="gst-disclaimer">
-        Prices shown are exclusive of GST. Detailed GSTIN and SaaS tax invoicing will be enabled in Phase 13.
+        Prices shown are exclusive of GST. Official GST treatment will be finalized before live production billing activation.
       </p>
+
+      {/* ── PAYMENT HISTORY ────────────────────────────────────── */}
+      <div className="payment-history-card">
+        <h3 className="payment-history-title">Payment & Billing History</h3>
+        <p className="payment-history-subtitle">
+          Record of all commercial subscription transactions processed through PayU.
+        </p>
+        {payments && payments.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="payment-history-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Transaction Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p.id}>
+                    <td>{new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td>{p.gatewayResponseRaw?.planName || 'VetRx Subscription'} ({p.gatewayResponseRaw?.billingInterval || 'Standard'})</td>
+                    <td>₹{(p.amountPaisa / 100).toLocaleString('en-IN')}</td>
+                    <td>
+                      <span className={`billing-status-badge ${p.status === 'SUCCESS' ? 'active' : p.status === 'PENDING' ? 'trial' : 'expired'}`}>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{p.gatewayTransactionId || p.internalReference}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="payment-history-empty">
+            No payment transactions recorded yet.
+          </div>
+        )}
+      </div>
 
       {/* ── CONFIRMATION MODAL ─────────────────────────────────── */}
       {confirmModal && (
@@ -619,7 +724,7 @@ export const SubscriptionBillingSection: React.FC = () => {
           <div className="billing-modal-card" onClick={(e) => e.stopPropagation()}>
             <h3 className="billing-modal-title">
               {confirmModal.type === 'UPGRADE'
-                ? `Upgrade to ${confirmModal.planName}`
+                ? `Subscribe to ${confirmModal.planName}`
                 : confirmModal.type === 'DOWNGRADE'
                 ? `Downgrade to ${confirmModal.planName}`
                 : confirmModal.type === 'CANCEL'
@@ -629,7 +734,7 @@ export const SubscriptionBillingSection: React.FC = () => {
 
             <p className="billing-modal-body">
               {confirmModal.type === 'UPGRADE'
-                ? `Your plan will upgrade to ${confirmModal.planName} immediately. Payment collection is scheduled for Phase 13.`
+                ? `You will proceed to secure PayU checkout for the ${confirmModal.planName} plan (${billingInterval === 'ANNUAL' ? 'Annual: ₹' + (confirmModal.planName === 'Clinic' ? '14,999' : '5,999') + '/yr' : 'Monthly: ₹' + (confirmModal.planName === 'Clinic' ? '1,499' : '599') + '/mo'}).`
                 : confirmModal.type === 'DOWNGRADE'
                 ? `Your plan will downgrade to ${confirmModal.planName} at the end of your current billing period. Please ensure your active veterinarian seats do not exceed the plan limit.`
                 : confirmModal.type === 'CANCEL'
@@ -652,7 +757,7 @@ export const SubscriptionBillingSection: React.FC = () => {
                 disabled={submittingAction}
                 onClick={handleExecuteAction}
               >
-                {submittingAction ? 'Processing…' : 'Confirm'}
+                {submittingAction ? 'Processing…' : confirmModal.type === 'UPGRADE' ? 'Proceed to PayU' : 'Confirm'}
               </button>
             </div>
           </div>

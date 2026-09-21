@@ -159,3 +159,22 @@ export interface CommercialAccountStatusDTO {
   cancelAtPeriodEnd: boolean;
   usage?: PracticeUsageDTO;
 }
+
+export interface InitiatePaymentRequestDTO {
+  planCode: string;
+  billingInterval?: BillingInterval;
+}
+
+export interface InitiatePaymentResponseDTO {
+  payment: PaymentDTO;
+  checkoutUrl: string;
+  formParameters: Record<string, string>;
+}
+
+export interface PaymentVerificationResponseDTO {
+  isVerified: boolean;
+  status: PaymentStatus;
+  payment: PaymentDTO;
+  subscription?: SubscriptionDTO | null;
+  message: string;
+}

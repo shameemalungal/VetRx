@@ -237,3 +237,53 @@ commercialRouter.get('/payments/:id', async (req: AuthenticatedRequest, res, nex
     next(err);
   }
 });
+
+const initiatePaymentSchema = z.object({
+  planCode: z.string().min(1, 'Target plan code is required'),
+  billingInterval: z.enum(['MONTHLY', 'THREE_MONTHS', 'ANNUAL', 'ONE_TIME']).optional(),
+});
+
+/**
+ * POST /api/commercial/payments/create
+ * Initiates a payment checkout order with PayU (Phase 13).
+ */
+commercialRouter.post('/payments/create', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authenticated user required.');
+    }
+    const { planCode, billingInterval } = initiatePaymentSchema.parse(req.body);
+    const result = await PaymentService.initiatePaymentOrder({
+      practiceId,
+      userId,
+      planCode,
+      billingInterval,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/commercial/payments/verify
+ * Verifies returning payment callback from PayU (Phase 13).
+ */
+commercialRouter.post('/payments/verify', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      throw new AppError(400, 'BAD_REQUEST', 'Missing payment callback payload.');
+    }
+    const result = await PaymentService.verifyPaymentReturn({
+      practiceId,
+      payload,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});

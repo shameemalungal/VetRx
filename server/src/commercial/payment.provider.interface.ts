@@ -14,6 +14,10 @@ export interface PaymentOrderRequest {
   productInfo: string;
   returnUrl: string;
   cancelUrl: string;
+  internalReference?: string;
+  planCode?: string;
+  billingInterval?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface PaymentOrderResponse {

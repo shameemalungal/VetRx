@@ -12,6 +12,7 @@ import { practiceRouter } from './practice/practice.controller.js';
 import { healthRouter } from './health/health.controller.js';
 import { clinicalRouter } from './clinical/clinical.controller.js';
 import { commercialRouter } from './commercial/commercial.controller.js';
+import { webhookRouter, publicPaymentsRouter } from './commercial/webhook.controller.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
 export function createApp() {
@@ -82,6 +83,8 @@ export function createApp() {
   // Mount API Endpoints
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/commercial/webhooks', webhookRouter);
+  app.use('/api/commercial/payments/return', publicPaymentsRouter);
   app.use('/api/practice', practiceRouter);
   app.use('/api/commercial', commercialRouter);
   app.use('/api', clinicalRouter);
