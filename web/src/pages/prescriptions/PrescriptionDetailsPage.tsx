@@ -27,11 +27,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const rxId = id ? parseInt(id, 10) : undefined;
 
-  const { user, can, isPracticeOwner, hasRole } = useAuth();
+  const { user, can, hasRole } = useAuth();
   const { practitioner: storePractitioner, organisation: storeOrganisation } = useSettingsStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showConfirmIssueModal, setShowConfirmIssueModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showCreatePackageModal, setShowCreatePackageModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -89,26 +88,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const allPractitioners = useLiveQuery(() => db.practitioners.toArray(), []);
 
   // ── Actions ───────────────────────────────────────────────────
-  const handleExecuteIssue = async () => {
-    if (!prescription?.id) return;
-    setIsUpdating(true);
-    setShowConfirmIssueModal(false);
-    try {
-      const now = new Date();
-      await db.prescriptions.update(prescription.id, {
-        status: 'Issued',
-        issuedAt: now,
-        updatedAt: now,
-      });
-      showToast(`Prescription ${prescription.rxNumber} issued and saved to patient record.`);
-    } catch (err) {
-      console.error('Failed to issue prescription:', err);
-      showToast('Error issuing prescription.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
   const handleExecuteCancel = async () => {
     if (!prescription?.id || prescription.status === 'Cancelled') return;
     setIsUpdating(true);
@@ -193,23 +172,24 @@ export const PrescriptionDetailsPage: React.FC = () => {
       }
 
       const now = new Date();
+      const isResubmission = prescription.status === 'Changes Requested';
       const historyItem: PrescriptionWorkflowHistoryItem = {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
         version: prescription.version || 1,
         status: 'Pending Approval',
-        action: 'FORWARDED',
+        action: isResubmission ? 'RESUBMITTED' : 'FORWARDED',
         actorUserId: user?.id || 'current-user',
         actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
-        targetUserId: forwardToUserId,
-        targetUser: targetUser,
-        remarks: forwardRemarks.trim() || null,
+        targetUserId: targetUser.id,
+        targetUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email || '' },
+        remarks: forwardRemarks.trim() || (isResubmission ? 'Resubmitted for clinical approval after addressing changes' : 'Forwarded for clinical approval'),
         createdAt: now,
       };
 
       await db.prescriptions.update(prescription.id, {
         status: 'Pending Approval',
-        forwardedToUserId: forwardToUserId,
-        forwardedToUser: targetUser,
+        forwardedToUserId: targetUser.id,
+        forwardedToUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email || '' },
         forwardedByUserId: user?.id || null,
         forwardedByUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
         forwardingRemarks: forwardRemarks.trim() || null,
@@ -220,7 +200,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
 
       setShowForwardModal(false);
       setForwardRemarks('');
-      showToast(`Prescription ${prescription.rxNumber} forwarded to Dr. ${targetUser.name} for clinical approval.`);
+      showToast(`Prescription ${prescription.rxNumber} submitted for clinical approval by Dr. ${targetUser.name}.`);
     } catch (err) {
       console.error('Failed to forward prescription:', err);
       showToast('Error forwarding prescription.');
@@ -408,20 +388,17 @@ export const PrescriptionDetailsPage: React.FC = () => {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');
       if (!sheet) {
-        showToast('Prescription sheet element not found in DOM.');
+        showToast('Prescription document could not be rendered for export.');
         return;
       }
       const blob = await generatePdfBlob(sheet);
       setCachedPdfBlob(blob);
-      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
-      const result = await savePdfWithFilePicker(blob, filename);
-      if (result.success) {
-        showToast(`Prescription PDF saved: ${filename}`);
-      } else if (result.error) {
-        showToast(`Failed to save PDF: ${result.error}`);
-      }
-    } catch (err: unknown) {
-      console.error('Save PDF failed:', err);
+      if (!prescription) return;
+      const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
+      await savePdfWithFilePicker(blob, filename);
+      showToast('Prescription PDF saved successfully.');
+    } catch (err) {
+      console.error('Failed to save PDF on mobile:', err);
       showToast('Failed to generate PDF. Please try again.');
     } finally {
       setIsGeneratingPdf(false);
@@ -432,63 +409,51 @@ export const PrescriptionDetailsPage: React.FC = () => {
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');
-      if (!sheet) return;
+      if (!sheet || !prescription) return;
       const blob = cachedPdfBlob || (await generatePdfBlob(sheet));
       setCachedPdfBlob(blob);
-      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
+
+      const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
       const file = new File([blob], filename, { type: 'application/pdf' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: `Prescription ${prescription?.rxNumber}`,
-            text: `Veterinary Prescription ${prescription?.rxNumber} for ${patient?.name || 'Patient'}`,
-            files: [file],
-          });
-          return;
-        } catch (err: unknown) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            return;
-          }
-        }
+        await navigator.share({
+          title: `Prescription ${prescription.rxNumber}`,
+          text: `Prescription for ${patient?.name || 'patient'}`,
+          files: [file],
+        });
+      } else {
+        setShareModalOpen(true);
       }
-      setShareModalOpen(true);
-    } catch (err: unknown) {
-      console.error('Share failed:', err);
-      setShareModalOpen(true);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Share failed:', err);
+        setShareModalOpen(true);
+      }
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
-  if (!rxId || prescription === undefined) {
-    return (
-      <div className="rx-page-container">
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div className="spinner" style={{ margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--color-on-surface-variant)' }}>Loading prescription preview…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (prescription === null) {
+  if (!prescription) {
     return (
       <div className="rx-page-container">
         <div className="rx-empty-state">
-          <div className="rx-empty-icon-box">
-            <Icon name="prescription" size={28} />
+          <div className="rx-empty-icon">
+            <Icon name="prescription" size={48} />
           </div>
-          <h3 className="rx-empty-title">Prescription Not Found</h3>
+          <h2 className="rx-empty-title">Prescription Not Found</h2>
           <p className="rx-empty-desc">
-            The requested prescription record does not exist or has been removed.
+            The requested prescription record (ID #{rxId}) could not be located in local storage.
           </p>
-          <div style={{ marginTop: '16px' }}>
-            <Link to="/prescriptions" className="btn btn-primary">
-              <Icon name="chevron-left" size={16} />
-              Return to Prescriptions
-            </Link>
-          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/prescriptions')}
+          >
+            <Icon name="arrow-left" size={16} />
+            <span>Return to Prescriptions</span>
+          </button>
         </div>
       </div>
     );
@@ -509,9 +474,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
   // 2. storePractitioner (active in settings store)
   // 3. first practitioner in DB
   const activePractitioner =
-    rxPractitioner ||
-    storePractitioner ||
-    (allPractitioners && allPractitioners.length > 0 ? allPractitioners[0] : null);
+    rxPractitioner && rxPractitioner.isActive !== false
+      ? rxPractitioner
+      : storePractitioner && storePractitioner.isActive !== false
+      ? storePractitioner
+      : null;
 
   // CRITICAL IDENTITY RULE:
   // The active session organisation from useSettingsStore is the single source of truth.
@@ -530,12 +497,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const isApproved = prescription.status === 'Approved';
   const isDraft = prescription.status === 'Draft' || (!prescription.status as any);
 
+  // Authoritative clinical authority check:
+  // Must possess PRESCRIPTION_APPROVE or have the VETERINARIAN role.
   const canApprove =
     can('PRESCRIPTION_APPROVE') ||
-    isPracticeOwner() ||
-    hasRole('VETERINARIAN') ||
-    hasRole('PRACTICE_ADMIN') ||
-    (Boolean(user?.id) && prescription.forwardedToUserId === user?.id);
+    hasRole('VETERINARIAN');
 
   const canRequestChanges =
     can('PRESCRIPTION_REQUEST_CHANGES') ||
@@ -1013,12 +979,12 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  style={{ width: '100%', height: '40px', fontSize: '13px' }}
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
                   onClick={handleOpenForwardModal}
                   disabled={isUpdating}
                 >
                   <Icon name="share" size={16} />
-                  <span>Re-forward for Approval</span>
+                  <span>Resubmit for Approval</span>
                 </button>
               </div>
             ) : isDraft ? (
@@ -1032,6 +998,15 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 >
                   <Icon name="share" size={20} />
                   <span>Forward for Clinical Approval</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                >
+                  <Icon name="edit" size={16} />
+                  <span>Edit Draft</span>
                 </button>
                 {canApprove && (
                   <button
@@ -1072,10 +1047,10 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 type="button"
                 className="btn btn-primary"
                 style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}
-                onClick={handlePrint}
+                onClick={handleOpenForwardModal}
               >
-                <Icon name="printer" size={20} />
-                <span>Print Prescription</span>
+                <Icon name="share" size={20} />
+                <span>Forward for Clinical Approval</span>
               </button>
             )}
 
@@ -1122,8 +1097,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
               <span>Share Prescription</span>
             </button>
 
-            {/* Cancel Action Button (clearly visible when issued) */}
-            {isIssued && (
+            {/* Cancel Action Button (clearly visible when approved/issued or draft) */}
+            {(isIssued || isApproved || isDraft || isPendingApproval || isChangesRequested) && !isCancelled && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -1149,7 +1124,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             )}
 
             {/* Return / Edit / Clone Action Button */}
-            {!isIssued && !isCancelled && !isApproved ? (
+            {(isDraft || isChangesRequested) ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -1159,17 +1134,17 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <Icon name="arrow-left" size={16} />
                 <span>Back to Medication Editor</span>
               </button>
-            ) : !isCancelled ? (
+            ) : isApproved ? (
               <button
                 type="button"
                 className="btn btn-secondary"
                 style={{ width: '100%', height: '38px', fontSize: '13px' }}
-                onClick={() => (isApproved ? setShowReviseModal(true) : navigate(`/prescriptions/new?cloneFrom=${prescription.id}`))}
+                onClick={() => setShowReviseModal(true)}
               >
                 <Icon name="copy" size={16} />
-                <span>{isApproved ? 'Create New Revision' : 'Clone Prescription'}</span>
+                <span>Create New Revision</span>
               </button>
-            ) : (
+            ) : isCancelled ? (
               <div
                 style={{
                   padding: '10px 12px',
@@ -1184,6 +1159,16 @@ export const PrescriptionDetailsPage: React.FC = () => {
               >
                 <strong>Prescription Cancelled:</strong> This medical record is read-only. Use "Clone Prescription" above to issue a new prescription.
               </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', height: '38px', fontSize: '13px' }}
+                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+              >
+                <Icon name="copy" size={16} />
+                <span>Clone Prescription</span>
+              </button>
             )}
 
             {/* Start New Prescription */}
@@ -1382,57 +1367,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Confirmation Modal before Generating/Issuing */}
-      {showConfirmIssueModal && (
-        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
-          <div className="rx-modal-box" style={{ maxWidth: '460px', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: '#fef3c7',
-                  color: '#d97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Icon name="alert-triangle" size={22} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                Generate Prescription?
-              </h3>
-            </div>
-            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
-              No editing will be allowed after generating. If you want to edit, use Save Draft.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setShowConfirmIssueModal(false)}
-                disabled={isUpdating}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ height: '42px', minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={handleExecuteIssue}
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Generating…' : 'Generate & Issue'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Cancellation Confirmation Modal */}
       {showCancelModal && (

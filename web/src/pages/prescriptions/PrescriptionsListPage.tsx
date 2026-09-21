@@ -476,7 +476,7 @@ export const PrescriptionsListPage: React.FC = () => {
 
                       {/* Status Badge */}
                       <td>
-                        <span className={`rx-status-pill ${rx.status === 'Issued' ? 'issued' : rx.status === 'Cancelled' ? 'cancelled' : 'draft'}`}>
+                        <span className={`rx-status-pill ${rx.status === 'Approved' || rx.status === 'Issued' ? 'issued' : rx.status === 'Cancelled' ? 'cancelled' : rx.status === 'Pending Approval' ? 'pending' : rx.status === 'Changes Requested' ? 'changes-requested' : 'draft'}`}>
                           <span className="status-dot" />
                           <span>{rx.status}</span>
                         </span>
@@ -493,12 +493,12 @@ export const PrescriptionsListPage: React.FC = () => {
                           >
                             View
                           </button>
-                          {rx.status === 'Draft' ? (
+                          {rx.status === 'Draft' || rx.status === 'Changes Requested' ? (
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
                               onClick={() => navigate(`/prescriptions/${rx.id}/edit`)}
-                              title="Edit Draft Prescription"
+                              title={rx.status === 'Changes Requested' ? 'Edit & Fix Prescription' : 'Edit Draft Prescription'}
                             >
                               Edit
                             </button>

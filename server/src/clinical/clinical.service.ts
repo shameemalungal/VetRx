@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma.js';
 import { AuditService } from '../lib/audit.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { AuthorizationService } from '../auth/authorization.service.js';
+import { PERMISSIONS } from '../auth/permissions.js';
 
 // ==============================================================================
 // VetRx Clinical Service
@@ -542,9 +544,39 @@ export class ClinicalService {
       if (!targetClinician) {
         throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
       }
+      const targetCanApprove = await AuthorizationService.hasPermission(
+        data.forwardedToUserId,
+        practiceId,
+        PERMISSIONS.PRESCRIPTION_APPROVE
+      );
+      if (!targetCanApprove) {
+        throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+      }
     }
 
-    const initialStatus = data.forwardedToUserId ? 'Pending Approval' : (data.status || 'Draft');
+    // Clinical Approval Authority Enforcement:
+    // Staff/non-clinicians CANNOT create an already Approved/Final prescription directly.
+    let initialStatus = 'Draft';
+    let isApprovedOnCreate = false;
+
+    if (data.status === 'Approved' || data.status === 'Final') {
+      const canApprove = actorUserId
+        ? await AuthorizationService.hasPermission(actorUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
+        : false;
+      if (!canApprove) {
+        throw new AppError(
+          403,
+          'PRESCRIPTION_APPROVE_FORBIDDEN',
+          'Staff members cannot directly create approved prescriptions. Prescriptions must start as Draft and be submitted for veterinarian approval.'
+        );
+      }
+      initialStatus = 'Approved';
+      isApprovedOnCreate = true;
+    } else if (data.forwardedToUserId) {
+      initialStatus = 'Pending Approval';
+    } else {
+      initialStatus = 'Draft';
+    }
 
     const rx = await prisma.prescription.create({
       data: {
@@ -559,6 +591,10 @@ export class ClinicalService {
         forwardedByUserId: data.forwardedToUserId && actorUserId ? actorUserId : null,
         forwardedAt: data.forwardedToUserId ? new Date() : null,
         forwardingRemarks: data.forwardingRemarks?.trim() || null,
+        approvedByUserId: isApprovedOnCreate && actorUserId ? actorUserId : null,
+        approvedAt: isApprovedOnCreate ? new Date() : null,
+        approvedVersion: isApprovedOnCreate ? 1 : null,
+        approvalRemarks: isApprovedOnCreate ? 'Clinician direct approval upon creation' : null,
         items: {
           create: data.items.map((item) => ({
             medicineId: item.medicineId || null,
@@ -577,26 +613,36 @@ export class ClinicalService {
         items: true,
         forwardedByUser: { select: { id: true, name: true, email: true } },
         forwardedToUser: { select: { id: true, name: true, email: true } },
+        approvedByUser: { select: { id: true, name: true, email: true } },
       },
     });
 
     if (actorUserId) {
+      const actionName = isApprovedOnCreate
+        ? 'APPROVED'
+        : data.forwardedToUserId
+        ? 'FORWARDED'
+        : 'CREATED';
+      const historyRemarks = isApprovedOnCreate
+        ? 'Prescription created and directly approved by clinician'
+        : data.forwardingRemarks?.trim() || (data.forwardedToUserId ? 'Forwarded for clinical approval on creation' : 'Prescription created as draft');
+
       await prisma.prescriptionWorkflowHistory.create({
         data: {
           prescriptionId: rx.id,
           version: 1,
           status: initialStatus,
-          action: data.forwardedToUserId ? 'FORWARDED' : 'CREATED',
+          action: actionName,
           actorUserId,
           targetUserId: data.forwardedToUserId || null,
-          remarks: data.forwardingRemarks?.trim() || (data.forwardedToUserId ? 'Forwarded for clinical approval on creation' : 'Prescription created as draft'),
+          remarks: historyRemarks,
         },
       }).catch(err => console.warn('Could not record initial prescription workflow history:', err));
     }
 
     void AuditService.record({
       practiceId,
-      action: 'PRESCRIPTION_CREATED',
+      action: isApprovedOnCreate ? 'PRESCRIPTION_APPROVED' : 'PRESCRIPTION_CREATED',
       resource: 'Prescription',
       resourceId: rx.id,
       details: { rxNumber: rx.rxNumber, patientId: rx.patientId, itemCount: data.items.length, status: initialStatus },
@@ -626,8 +672,8 @@ export class ClinicalService {
     if (existing.status === 'Approved') {
       throw new AppError(
         400,
-        'APPROVED_PRESCRIPTION_IMMUTABLE',
-        'Approved prescriptions are legally sealed clinical records. To modify treatments, create a new revision.'
+        'PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions are legally sealed clinical records and cannot be modified.'
       );
     }
 
@@ -636,6 +682,52 @@ export class ClinicalService {
         400,
         'PRESCRIPTION_CANCELLED',
         'Cancelled prescriptions cannot be edited.'
+      );
+    }
+
+    // Direct status change to Approved via generic update is strictly forbidden
+    if (data.status === 'Approved' || data.status === 'Final') {
+      throw new AppError(
+        403,
+        'PRESCRIPTION_APPROVE_FORBIDDEN',
+        'Direct status change to Approved via generic update is forbidden. Prescriptions must be approved via the dedicated clinical approval workflow endpoint.'
+      );
+    }
+
+    if (data.status === 'Pending Approval') {
+      throw new AppError(
+        400,
+        'INVALID_STATE_TRANSITION',
+        'Prescriptions must be submitted for approval via the dedicated forward endpoint.'
+      );
+    }
+
+    // State machine check on status changes
+    if (data.status && data.status !== existing.status) {
+      if (data.status === 'Cancelled') {
+        // Any unapproved prescription (Draft, Pending Approval, Changes Requested) can be cancelled
+      } else if (existing.status === 'Changes Requested' && data.status === 'Draft') {
+        // Can remain or transition to Draft
+      } else {
+        throw new AppError(
+          400,
+          'INVALID_STATE_TRANSITION',
+          `Invalid status transition from ${existing.status} to ${data.status}.`
+        );
+      }
+    }
+
+    // If prescription is currently Pending Approval, content edits are locked until reviewed or changes requested
+    const hasContentChanges = Boolean(
+      (data.diagnosis !== undefined && data.diagnosis !== existing.diagnosis) ||
+      (data.notes !== undefined && data.notes !== existing.notes) ||
+      (data.items && data.items.length > 0)
+    );
+    if (existing.status === 'Pending Approval' && hasContentChanges) {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_PENDING_APPROVAL',
+        'Prescription is pending veterinarian review and cannot be edited. A veterinarian must review or request changes before edits can be made.'
       );
     }
 
@@ -693,6 +785,22 @@ export class ClinicalService {
   }) {
     const existing = await this.getPrescriptionById(id, practiceId);
 
+    if (existing.status === 'Approved') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions cannot be forwarded for approval.'
+      );
+    }
+
+    if (existing.status === 'Cancelled') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_CANCELLED',
+        'Cancelled prescriptions cannot be forwarded for approval.'
+      );
+    }
+
     if (existing.status !== 'Draft' && existing.status !== 'Changes Requested') {
       throw new AppError(
         400,
@@ -709,6 +817,18 @@ export class ClinicalService {
     if (!targetMember) {
       throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
     }
+
+    const targetCanApprove = await AuthorizationService.hasPermission(
+      data.forwardedToUserId,
+      practiceId,
+      PERMISSIONS.PRESCRIPTION_APPROVE
+    );
+    if (!targetCanApprove) {
+      throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+    }
+
+    const isResubmission = existing.status === 'Changes Requested';
+    const action = isResubmission ? 'RESUBMITTED' : 'FORWARDED';
 
     const updated = await prisma.prescription.update({
       where: { id },
@@ -732,16 +852,16 @@ export class ClinicalService {
         prescriptionId: id,
         version: existing.version,
         status: 'Pending Approval',
-        action: 'FORWARDED',
+        action,
         actorUserId,
         targetUserId: data.forwardedToUserId,
-        remarks: data.forwardingRemarks?.trim() || 'Forwarded for clinical approval',
+        remarks: data.forwardingRemarks?.trim() || (isResubmission ? 'Resubmitted for clinical approval after addressing changes' : 'Forwarded for clinical approval'),
       },
     });
 
     void AuditService.record({
       practiceId,
-      action: 'PRESCRIPTION_FORWARDED',
+      action: isResubmission ? 'PRESCRIPTION_RESUBMITTED' : 'PRESCRIPTION_FORWARDED',
       resource: 'Prescription',
       resourceId: id,
       details: { forwardedToUserId: data.forwardedToUserId, remarks: data.forwardingRemarks },
@@ -755,11 +875,35 @@ export class ClinicalService {
   }) {
     const existing = await this.getPrescriptionById(id, practiceId);
 
-    if (existing.status !== 'Pending Approval') {
+    if (existing.status === 'Approved') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_ALREADY_APPROVED',
+        'This prescription has already been approved and sealed.'
+      );
+    }
+
+    if (existing.status === 'Cancelled') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_CANCELLED',
+        'Cancelled prescriptions cannot be approved.'
+      );
+    }
+
+    if (existing.status === 'Changes Requested') {
       throw new AppError(
         400,
         'INVALID_PRESCRIPTION_STATUS',
-        'Only prescriptions with Pending Approval status can be approved.'
+        'Prescription has outstanding requested changes and must be resubmitted for approval before it can be approved.'
+      );
+    }
+
+    if (existing.status !== 'Pending Approval' && existing.status !== 'Draft') {
+      throw new AppError(
+        400,
+        'INVALID_PRESCRIPTION_STATUS',
+        'Only Draft or Pending Approval prescriptions can be approved.'
       );
     }
 
@@ -806,6 +950,14 @@ export class ClinicalService {
     changeRequestRemarks: string;
   }) {
     const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status === 'Approved') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions cannot have changes requested.'
+      );
+    }
 
     if (existing.status !== 'Pending Approval') {
       throw new AppError(
@@ -954,7 +1106,15 @@ export class ClinicalService {
   }
 
   static async deletePrescription(id: string, practiceId: string) {
-    await this.getPrescriptionById(id, practiceId);
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    if (existing.status === 'Approved') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions are legally sealed clinical records and cannot be deleted.'
+      );
+    }
 
     const deleted = await prisma.prescription.delete({
       where: { id },

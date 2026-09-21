@@ -110,10 +110,10 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
   return (
     <div className="vetrx-document prescription-sheet-canvas" id={id}>
       {/* Non-Approved Watermark Overlay */}
-      {prescription.status !== 'Approved' && prescription.status !== 'Issued' && (
+      {prescription.status !== 'Approved' && (
         <div className="document-watermark-overlay" aria-hidden="true">
           {prescription.status === 'Pending Approval'
-            ? 'PENDING CLINICAL APPROVAL'
+            ? 'PENDING VETERINARIAN APPROVAL'
             : prescription.status === 'Changes Requested'
             ? 'CHANGES REQUESTED'
             : prescription.status === 'Cancelled'
@@ -135,7 +135,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
             Doc Ref: <strong>{prescription.rxNumber}</strong> {prescription.version ? `(v${prescription.version})` : ''}
           </span>
           <span className={`document-badge-prescription ${prescription.status === 'Approved' ? 'badge-approved' : ''}`}>
-            {prescription.status === 'Approved' ? 'Approved Clinical Rx' : prescription.status === 'Issued' ? 'Issued Prescription' : 'Prescription Preview'}
+            {prescription.status === 'Approved' ? 'Approved Clinical Rx' : 'Prescription Preview'}
           </span>
         </div>
       </div>

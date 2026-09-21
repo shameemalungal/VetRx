@@ -15,6 +15,7 @@ export interface Practitioner {
   address: string;
   photoDataUrl?: string; // base64 image, optional
   signatureDataUrl?: string; // base64 image, optional
+  isActive?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

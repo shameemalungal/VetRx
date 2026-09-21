@@ -16,11 +16,15 @@ import type {
   TreatmentPackage,
   DosingMethod,
   WeightBandRule,
+  PrescriptionWorkflowHistoryItem,
 } from '../../types';
 import { DOSING_METHOD_OPTIONS } from '../../types';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useAuth } from '../../context/AuthContext';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
+
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 import {
   calculateSmartDose,
   validateDoseRange,
@@ -85,6 +89,16 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     : null;
 
   const { practitioner } = useSettingsStore();
+  const { user, can, hasRole } = useAuth();
+  const canApprove = can('PRESCRIPTION_APPROVE') || hasRole('VETERINARIAN');
+
+  // Forwarding & Clinical Approval states
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [forwardToUserId, setForwardToUserId] = useState('');
+  const [forwardRemarks, setForwardRemarks] = useState('');
+  const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [eligibleClinicians, setEligibleClinicians] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [loadingClinicians, setLoadingClinicians] = useState(false);
 
   // ── Database Queries ──────────────────────────────────────────
   const allPatients = useLiveQuery(() => db.patients.toArray(), []);
@@ -1552,24 +1566,51 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     }
   }, [mode, packageIdParam, treatmentPackages]);
 
-  // ── Save Prescription (Draft or Issued) ───────────────────────
-  const handleSave = async (targetStatus: 'Draft' | 'Issued') => {
-    console.log('[VetRx] Generate Prescription requested', {
-      targetStatus,
-      selectedPatientId,
-      patientName: selectedPatient?.name,
-      symptomsLength: symptoms.trim().length,
-      diagnosisLength: diagnosis.trim().length,
-      itemsCount: items.length,
-    });
-
-    if (mode === 'edit' && existingRx && existingRx.status !== 'Draft') {
-      const msg = 'Issued or cancelled prescriptions are read-only. Clone the prescription to create a new clinical record.';
-      setGenerationError(msg);
-      setShowGenerationErrorModal(true);
-      return;
+  // ── Eligible Clinicians Loader ────────────────────────────────
+  const loadEligibleClinicians = async () => {
+    setLoadingClinicians(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/prescriptions/eligible-clinicians`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setEligibleClinicians(data);
+          if (!forwardToUserId && data[0]?.id) {
+            setForwardToUserId(data[0].id);
+          }
+          return;
+        }
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoadingClinicians(false);
     }
 
+    const allPractitioners = await db.practitioners.toArray();
+    if (allPractitioners && allPractitioners.length > 0) {
+      const fallbackList = allPractitioners.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        email: p.email || '',
+      }));
+      setEligibleClinicians(fallbackList);
+      if (!forwardToUserId && fallbackList[0]?.id) {
+        setForwardToUserId(fallbackList[0].id);
+      }
+    }
+  };
+
+  const handleInitiateSendForApproval = async () => {
+    const missing = validateFieldsForSubmission();
+    if (missing) return;
+    await loadEligibleClinicians();
+    setShowForwardModal(true);
+  };
+
+  const validateFieldsForSubmission = (): boolean => {
     const newErrors: {
       patient?: string;
       symptoms?: string;
@@ -1584,66 +1625,103 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       newErrors.patient = 'Please select a patient animal before proceeding.';
       missingList.push({
         field: 'Patient Animal',
-        message: 'A patient animal must be selected to issue a prescription.',
+        message: 'A patient animal must be selected to proceed.',
         refKey: 'patient',
       });
     }
 
-    if (targetStatus === 'Issued') {
-      if (!symptoms.trim()) {
-        newErrors.symptoms = 'Symptoms / clinical presentation is required.';
-        missingList.push({
-          field: 'Symptoms / Clinical Presentation',
-          message: 'Presenting complaints, vitals, or clinical findings are required.',
-          refKey: 'symptoms',
-        });
-      }
-      if (!diagnosis.trim()) {
-        newErrors.diagnosis = 'Diagnosis is required to generate prescription.';
-        missingList.push({
-          field: 'Clinical Diagnosis',
-          message: 'A confirmed or provisional diagnosis is required before generating.',
-          refKey: 'diagnosis',
-        });
-      }
-      if (items.length === 0) {
-        newErrors.medicines = 'Please add at least one prescribed medicine before generating.';
-        missingList.push({
-          field: 'Prescribed Medicines',
-          message: 'Add at least one medicine with approved dosage to the prescription.',
-          refKey: 'medicines',
-        });
-      }
+    if (!symptoms.trim()) {
+      newErrors.symptoms = 'Symptoms / clinical presentation is required.';
+      missingList.push({
+        field: 'Symptoms / Clinical Presentation',
+        message: 'Presenting complaints, vitals, or clinical findings are required.',
+        refKey: 'symptoms',
+      });
+    }
+    if (!diagnosis.trim()) {
+      newErrors.diagnosis = 'Diagnosis is required.';
+      missingList.push({
+        field: 'Clinical Diagnosis',
+        message: 'A confirmed or provisional diagnosis is required before submission.',
+        refKey: 'diagnosis',
+      });
+    }
+    if (items.length === 0) {
+      newErrors.medicines = 'Please add at least one prescribed medicine.';
+      missingList.push({
+        field: 'Prescribed Medicines',
+        message: 'Add at least one medicine with approved dosage to the prescription.',
+        refKey: 'medicines',
+      });
     }
 
     if (missingList.length > 0) {
-      console.warn('[VetRx] Validation prevented generation — missing fields:', missingList);
-      newErrors.general = `Please complete all required fields before generating (${missingList.map((m) => m.field).join(', ')}).`;
+      console.warn('[VetRx] Validation prevented submission — missing fields:', missingList);
+      newErrors.general = `Please complete all required fields (${missingList.map((m) => m.field).join(', ')}).`;
       setErrors(newErrors);
       setErrorMsg(newErrors.general);
       setValidationErrors(missingList);
       setShowValidationModal(true);
-      return;
+      return true;
     }
 
     setErrors({});
     setErrorMsg(null);
     setValidationErrors([]);
+    return false;
+  };
 
-    if (!selectedPatientId) {
+  // ── Save Prescription (Draft, Pending Approval, or Approved) ───────────────────────
+  const handleSave = async (targetStatus: 'Draft' | 'Pending Approval' | 'Approved') => {
+    console.log('[VetRx] Prescription save requested', {
+      targetStatus,
+      selectedPatientId,
+      canApprove,
+    });
+
+    if (mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested') {
+      const msg = `${existingRx.status} prescriptions are read-only. Clone the prescription to create a new clinical record.`;
+      setGenerationError(msg);
+      setShowGenerationErrorModal(true);
       return;
     }
 
-    // UAT Issue 7: Show confirmation warning before issuing
-    if (targetStatus === 'Issued') {
+    if (targetStatus === 'Draft') {
+      if (!selectedPatientId) {
+        setErrors({ patient: 'Please select a patient animal before proceeding.', general: 'Please select a patient animal.' });
+        setErrorMsg('Please select a patient animal before saving draft.');
+        setValidationErrors([{ field: 'Patient Animal', message: 'A patient animal must be selected.', refKey: 'patient' }]);
+        setShowValidationModal(true);
+        return;
+      }
+      await executeSave('Draft');
+      return;
+    }
+
+    // Validation for submission / approval
+    const hasMissing = validateFieldsForSubmission();
+    if (hasMissing) return;
+
+    // Staff cannot approve directly
+    if (targetStatus === 'Approved') {
+      if (!canApprove) {
+        // Redirect to forward workflow for staff
+        await handleInitiateSendForApproval();
+        return;
+      }
       setShowIssueConfirmModal(true);
       return;
     }
 
-    await executeSave('Draft');
+    if (targetStatus === 'Pending Approval') {
+      await handleInitiateSendForApproval();
+    }
   };
 
-  const executeSave = async (targetStatus: 'Draft' | 'Issued') => {
+  const executeSave = async (
+    targetStatus: 'Draft' | 'Pending Approval' | 'Approved',
+    forwardOptions?: { targetClinicianId: string; forwardingRemarks?: string }
+  ) => {
     setIsSaving(true);
     console.log('[VetRx] executeSave running', { targetStatus, patientId: selectedPatientId });
 
@@ -1689,17 +1767,59 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const safePatientId: number = selectedPatientId;
 
       let rxId: number;
+      const isResubmission = existingRx?.status === 'Changes Requested';
+
+      // Setup workflow fields
+      const isApproved = targetStatus === 'Approved';
+      const isPending = targetStatus === 'Pending Approval';
+
+      let targetClinicianUser: { id: string; name: string; email: string } | null = null;
+      if (isPending && forwardOptions?.targetClinicianId) {
+        const found = eligibleClinicians.find((c) => c.id === forwardOptions.targetClinicianId);
+        targetClinicianUser = found || { id: forwardOptions.targetClinicianId, name: 'Veterinarian', email: '' };
+      }
+
+      const approverName = user?.name || practitioner?.name || 'Veterinarian';
 
       if (mode === 'edit' && id) {
-        if (existingRx && existingRx.status !== 'Draft') {
-          const msg = 'Issued or cancelled prescriptions are read-only and cannot be overwritten. Please clone this prescription instead.';
-          console.error('[VetRx] Generate failed:', msg);
+        if (existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested') {
+          const msg = `${existingRx.status} prescriptions are read-only and cannot be modified. Please clone this prescription instead.`;
+          console.error('[VetRx] Save failed:', msg);
           setErrorMsg(msg);
           setGenerationError(msg);
           setShowGenerationErrorModal(true);
           return;
         }
         rxId = parseInt(id, 10);
+
+        const updatedHistory: PrescriptionWorkflowHistoryItem[] = [...(existingRx?.workflowHistory || [])];
+
+        if (isPending && targetClinicianUser) {
+          updatedHistory.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            version: existingRx?.version || 1,
+            status: 'Pending Approval',
+            action: isResubmission ? 'RESUBMITTED' : 'FORWARDED',
+            actorUserId: user?.id || 'current-user',
+            actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+            targetUserId: targetClinicianUser.id,
+            targetUser: targetClinicianUser,
+            remarks: forwardOptions?.forwardingRemarks?.trim() || (isResubmission ? 'Resubmitted for clinical approval after editing' : 'Submitted for clinical approval'),
+            createdAt: now,
+          });
+        } else if (isApproved) {
+          updatedHistory.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            version: existingRx?.version || 1,
+            status: 'Approved',
+            action: 'APPROVED',
+            actorUserId: user?.id || 'current-user',
+            actorUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+            remarks: approvalRemarks.trim() || 'Direct Clinician Approval',
+            createdAt: now,
+          });
+        }
+
         await db.prescriptions.update(rxId, {
           patientId: safePatientId,
           ownerId,
@@ -1711,7 +1831,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           recheckIntervalPreset: recheckIntervalPreset || undefined,
           recheckIntervalCustom: recheckIntervalCustom.trim() || undefined,
           status: targetStatus,
-          issuedAt: targetStatus === 'Issued' ? existingRx?.issuedAt || now : undefined,
+          forwardedToUserId: isPending ? targetClinicianUser?.id : existingRx?.forwardedToUserId,
+          forwardedToUser: isPending ? targetClinicianUser || undefined : existingRx?.forwardedToUser,
+          forwardedByUserId: isPending ? user?.id : existingRx?.forwardedByUserId,
+          forwardedByUser: isPending ? { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' } : existingRx?.forwardedByUser,
+          forwardingRemarks: isPending ? forwardOptions?.forwardingRemarks?.trim() || null : existingRx?.forwardingRemarks,
+          forwardedAt: isPending ? now : existingRx?.forwardedAt,
+          approvedByUserId: isApproved ? user?.id || null : existingRx?.approvedByUserId,
+          approvedByUser: isApproved ? { id: user?.id || 'current-user', name: approverName, email: user?.email || '' } : existingRx?.approvedByUser,
+          approvedAt: isApproved ? now : existingRx?.approvedAt,
+          approvedVersion: isApproved ? existingRx?.version || 1 : existingRx?.approvedVersion,
+          approvalRemarks: isApproved ? approvalRemarks.trim() || null : existingRx?.approvalRemarks,
+          workflowHistory: updatedHistory,
           updatedAt: now,
         });
 
@@ -1729,6 +1860,33 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         }, 0);
         const rxNumber = `${prefix}${String(maxSequence + 1).padStart(4, '0')}`;
 
+        const initialHistory: PrescriptionWorkflowHistoryItem[] = [];
+        if (isPending && targetClinicianUser) {
+          initialHistory.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            version: 1,
+            status: 'Pending Approval',
+            action: 'FORWARDED',
+            actorUserId: user?.id || 'current-user',
+            actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+            targetUserId: targetClinicianUser.id,
+            targetUser: targetClinicianUser,
+            remarks: forwardOptions?.forwardingRemarks?.trim() || 'Submitted for clinical approval upon creation',
+            createdAt: now,
+          });
+        } else if (isApproved) {
+          initialHistory.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            version: 1,
+            status: 'Approved',
+            action: 'APPROVED',
+            actorUserId: user?.id || 'current-user',
+            actorUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+            remarks: approvalRemarks.trim() || 'Direct Clinician Approval',
+            createdAt: now,
+          });
+        }
+
         rxId = (await db.prescriptions.add({
           rxNumber,
           patientId: safePatientId,
@@ -1741,7 +1899,19 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           recheckIntervalPreset: recheckIntervalPreset || undefined,
           recheckIntervalCustom: recheckIntervalCustom.trim() || undefined,
           status: targetStatus,
-          issuedAt: targetStatus === 'Issued' ? now : undefined,
+          version: 1,
+          forwardedToUserId: isPending ? targetClinicianUser?.id : undefined,
+          forwardedToUser: isPending ? targetClinicianUser || undefined : undefined,
+          forwardedByUserId: isPending ? user?.id : undefined,
+          forwardedByUser: isPending ? { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' } : undefined,
+          forwardingRemarks: isPending ? forwardOptions?.forwardingRemarks?.trim() || null : undefined,
+          forwardedAt: isPending ? now : undefined,
+          approvedByUserId: isApproved ? user?.id || null : undefined,
+          approvedByUser: isApproved ? { id: user?.id || 'current-user', name: approverName, email: user?.email || '' } : undefined,
+          approvedAt: isApproved ? now : undefined,
+          approvedVersion: isApproved ? 1 : undefined,
+          approvalRemarks: isApproved ? approvalRemarks.trim() || null : undefined,
+          workflowHistory: initialHistory,
           createdAt: now,
           updatedAt: now,
         })) as number;
@@ -2185,18 +2355,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           <span
             className="rx-crumb-active cursor-pointer font-bold hover:underline"
             style={{ color: 'var(--color-primary)' }}
-            onClick={() => handleSave('Issued')}
+            onClick={() => handleSave(canApprove ? 'Approved' : 'Pending Approval')}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSave('Issued'); }}
-            title="Click to generate and issue prescription"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSave(canApprove ? 'Approved' : 'Pending Approval'); }}
+            title={canApprove ? 'Click to review and approve prescription' : 'Click to submit for veterinarian approval'}
           >
-            4. Generate
+            4. {canApprove ? 'Approve & Sign' : 'Send for Approval'}
           </span>
         </div>
       </div>
 
-      {mode === 'edit' && existingRx && existingRx.status !== 'Draft' && (
+      {mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && (
         <div
           style={{
             background: '#fef2f2',
@@ -2215,12 +2385,12 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             <Icon name="warning" size={24} color="#dc2626" />
             <div>
               <strong style={{ fontSize: '14px', display: 'block' }}>
-                {existingRx.status === 'Issued' ? 'Issued Prescription (Read-Only)' : 'Cancelled Prescription (Read-Only)'}
+                {existingRx.status === 'Approved' ? 'Approved Prescription (Legally Sealed)' : `${existingRx.status} Prescription (Read-Only)`}
               </strong>
               <span style={{ fontSize: '12.5px', color: '#7f1d1d' }}>
-                {existingRx.status === 'Issued'
-                  ? 'Issued prescriptions cannot be overwritten or edited.'
-                  : 'Cancelled prescriptions are permanently archived in history.'}{' '}
+                {existingRx.status === 'Approved'
+                  ? 'Approved prescriptions are sealed clinical records and cannot be edited.'
+                  : `${existingRx.status} prescriptions cannot be modified directly.`}{' '}
                 Clone this prescription to create a new editable version.
               </span>
             </div>
@@ -2701,27 +2871,73 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 </div>
               )}
 
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ height: 46, width: '100%' }}
-                disabled={isSaving}
-                onClick={() => handleSave('Issued')}
-                data-testid="generate-prescription-btn"
-                id="generate-prescription-btn"
-              >
-                {isSaving ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                    <span>Generating Prescription…</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Generate Prescription</span>
-                    <Icon name="arrow-forward" size={18} />
-                  </>
-                )}
-              </button>
+              {!canApprove && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md, 8px)',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#1e40af',
+                    fontSize: '12px',
+                    lineHeight: 1.4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Icon name="information-circle" size={16} color="#2563eb" />
+                  <span>
+                    Staff workflow: Prescriptions must be submitted to a licensed veterinarian for clinical approval and digital signing.
+                  </span>
+                </div>
+              )}
+
+              {canApprove ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ height: 46, width: '100%', background: '#059669', borderColor: '#047857' }}
+                  disabled={isSaving}
+                  onClick={() => handleSave('Approved')}
+                  data-testid="generate-prescription-btn"
+                  id="generate-prescription-btn"
+                >
+                  {isSaving ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      <span>Approving Prescription…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="check-circle" size={18} />
+                      <span>Approve &amp; Sign Prescription</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ height: 46, width: '100%' }}
+                  disabled={isSaving}
+                  onClick={() => handleSave('Pending Approval')}
+                  data-testid="generate-prescription-btn"
+                  id="generate-prescription-btn"
+                >
+                  {isSaving ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      <span>Submitting for Approval…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="arrow-forward" size={18} />
+                      <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit for Veterinarian Approval' : 'Send for Veterinarian Approval'}</span>
+                    </>
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -2735,7 +2951,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               </button>
 
               <p className="text-center text-xs text-outline mt-1">
-                Generates printable medical stationery &amp; digital record
+                {canApprove
+                  ? 'Digitally signs prescription and seals clinical record'
+                  : 'Forwards prescription to licensed veterinarian for review'}
               </p>
             </div>
           </div>
@@ -3526,38 +3744,54 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         </div>
       )}
 
-      {/* ── MODAL: CONFIRM PRESCRIPTION GENERATION (UAT Issue 7) ──── */}
+      {/* ── MODAL: CLINICIAN APPROVE & DIGITALLY SEAL ──── */}
       {showIssueConfirmModal && (
         <div className="rx-modal-backdrop" onClick={() => setShowIssueConfirmModal(false)} style={{ zIndex: 9999 }}>
-          <div className="rx-modal-box" style={{ maxWidth: '460px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <div
                 style={{
                   width: '40px',
                   height: '40px',
                   borderRadius: '50%',
-                  background: '#fef3c7',
-                  color: '#d97706',
+                  background: '#ecfdf5',
+                  color: '#047857',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}
               >
-                <Icon name="warning" size={22} />
+                <Icon name="check-circle" size={22} />
               </div>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                Generate Prescription?
+                Approve &amp; Digitally Seal Prescription?
               </h3>
             </div>
-            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
-              No editing will be allowed after generating. If you want to edit, use Save Draft.
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '16px' }}>
+              You are approving this prescription under your veterinary license. Once approved, this clinical record becomes immutable. Any future changes will require creating a new revision.
             </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="builder-approval-remarks">
+                Approval Remarks / Seal Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="builder-approval-remarks"
+                className="form-textarea"
+                rows={2}
+                placeholder="e.g. Doses confirmed against patient weight and clinical condition."
+                value={approvalRemarks}
+                onChange={(e) => setApprovalRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
-                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ height: '42px', minWidth: '110px' }}
                 onClick={() => setShowIssueConfirmModal(false)}
                 disabled={isSaving}
               >
@@ -3566,15 +3800,115 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               <button
                 type="button"
                 className="btn btn-primary"
-                style={{ height: '42px', minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ height: '42px', minWidth: '160px', background: '#059669', borderColor: '#047857' }}
                 onClick={() => {
                   setShowIssueConfirmModal(false);
-                  void executeSave('Issued');
+                  void executeSave('Approved');
                 }}
                 disabled={isSaving}
               >
                 <Icon name="check-circle" size={16} />
-                <span>{isSaving ? 'Generating...' : 'Generate & Issue'}</span>
+                <span>{isSaving ? 'Approving...' : 'Approve & Sign'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: SEND FOR VETERINARIAN APPROVAL ──── */}
+      {showForwardModal && (
+        <div className="rx-modal-backdrop" onClick={() => setShowForwardModal(false)} style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="arrow-forward" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  {existingRx?.status === 'Changes Requested' ? 'Resubmit for Veterinarian Approval' : 'Send for Veterinarian Approval'}
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Assign to a licensed veterinarian for clinical validation
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label" htmlFor="builder-forward-clinician-select">
+                Select Prescribing Veterinarian *
+              </label>
+              {loadingClinicians ? (
+                <div style={{ fontSize: '13px', color: 'var(--color-outline)', padding: '8px 0' }}>
+                  Loading eligible clinicians…
+                </div>
+              ) : (
+                <select
+                  id="builder-forward-clinician-select"
+                  className="form-input"
+                  value={forwardToUserId}
+                  onChange={(e) => setForwardToUserId(e.target.value)}
+                  style={{ width: '100%', height: '40px', fontSize: '13px' }}
+                >
+                  {eligibleClinicians.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Dr. {c.name} {c.email ? `(${c.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="builder-forward-remarks">
+                Clinical Remarks / Handover Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="builder-forward-remarks"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Prepared under Dr.'s telephone advice; dosage verified against weight..."
+                value={forwardRemarks}
+                onChange={(e) => setForwardRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowForwardModal(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '160px' }}
+                onClick={() => {
+                  setShowForwardModal(false);
+                  void executeSave('Pending Approval', {
+                    targetClinicianId: forwardToUserId,
+                    forwardingRemarks: forwardRemarks,
+                  });
+                }}
+                disabled={isSaving || !forwardToUserId}
+              >
+                {isSaving ? 'Submitting…' : (existingRx?.status === 'Changes Requested' ? 'Resubmit for Approval' : 'Send for Approval')}
               </button>
             </div>
           </div>
@@ -3767,7 +4101,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 style={{ height: '42px', minWidth: '120px' }}
                 onClick={() => {
                   setShowGenerationErrorModal(false);
-                  void handleSave('Issued');
+                  void handleSave(canApprove ? 'Approved' : 'Pending Approval');
                 }}
               >
                 Retry
@@ -3790,26 +4124,50 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           <span>Save Draft</span>
         </button>
 
-        <button
-          type="button"
-          data-testid="mobile-generate-prescription-btn"
-          className="btn btn-primary rx-mobile-gen-btn"
-          onClick={() => handleSave('Issued')}
-          disabled={isSaving}
-          title="Validate and issue finalized prescription"
-        >
-          {isSaving ? (
-            <>
-              <span className="spinner spinner-sm" aria-hidden="true" />
-              <span>Generating...</span>
-            </>
-          ) : (
-            <>
-              <Icon name="check-circle" size={16} />
-              <span>Generate</span>
-            </>
-          )}
-        </button>
+        {canApprove ? (
+          <button
+            type="button"
+            data-testid="mobile-generate-prescription-btn"
+            className="btn btn-primary rx-mobile-gen-btn"
+            style={{ background: '#059669', borderColor: '#047857' }}
+            onClick={() => handleSave('Approved')}
+            disabled={isSaving}
+            title="Approve and digitally seal prescription"
+          >
+            {isSaving ? (
+              <>
+                <span className="spinner spinner-sm" aria-hidden="true" />
+                <span>Approving...</span>
+              </>
+            ) : (
+              <>
+                <Icon name="check-circle" size={16} />
+                <span>Approve &amp; Sign</span>
+              </>
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-testid="mobile-generate-prescription-btn"
+            className="btn btn-primary rx-mobile-gen-btn"
+            onClick={() => handleSave('Pending Approval')}
+            disabled={isSaving}
+            title="Submit prescription for veterinarian approval"
+          >
+            {isSaving ? (
+              <>
+                <span className="spinner spinner-sm" aria-hidden="true" />
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <Icon name="arrow-forward" size={16} />
+                <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit' : 'Send for Approval'}</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
