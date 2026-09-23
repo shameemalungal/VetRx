@@ -47,6 +47,47 @@ enum OverrideEffect {
   DENY
 }
 
+enum PracticeType {
+  INDEPENDENT
+  CLINIC
+  ENTERPRISE
+}
+
+enum PracticeStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum IssueCategory {
+  LOGIN_AUTH
+  INVITATION
+  PRACTICE_SETUP
+  USER_PERMISSIONS
+  PRESCRIPTION
+  PATIENT
+  INVOICE_BILLING
+  SUBSCRIPTION
+  PAYMENT
+  PDF_PRINT
+  TECHNICAL
+  OTHER
+}
+
+enum IssuePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
 // ------------------------------------------------------------------------------
 // User & Authentication Models
 // ------------------------------------------------------------------------------
@@ -81,6 +122,12 @@ model User {
   prescriptionsRequestedChanges      Prescription[]               @relation("PrescriptionRequestedBy")
   prescriptionWorkflowActions        PrescriptionWorkflowHistory[]
   prescriptionWorkflowTargetActions  PrescriptionWorkflowHistory[] @relation("WorkflowHistoryTargetUser")
+
+  // Support and Platform Relations
+  assignedIssues                     PlatformIssue[]              @relation("AssignedIssues")
+  reportedIssues                     PlatformIssue[]              @relation("ReportedIssues")
+  supportSessionsAdmin               SupportAccessSession[]       @relation("SupportAdminSessions")
+  supportSessionsTarget              SupportAccessSession[]       @relation("TargetSupportSessions")
 
   @@index([normalizedEmail])
 }
@@ -124,14 +171,16 @@ model Session {
 // ------------------------------------------------------------------------------
 
 model Practice {
-  id          String           @id @default(uuid())
-  name        String
-  slug        String?          @unique
-  ownerUserId String
-  owner       User             @relation("PracticeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id           String         @id @default(uuid())
+  name         String
+  slug         String?        @unique
+  ownerUserId  String
+  owner        User           @relation("PracticeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  practiceType PracticeType   @default(CLINIC)
+  status       PracticeStatus @default(ACTIVE)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   // Relations
   members     PracticeMember[]
@@ -153,6 +202,10 @@ model Practice {
   // Commercial Relations (Phase 10 Foundation)
   subscriptions     Subscription[]
   payments          Payment[]
+
+  // Platform Relations
+  issues          PlatformIssue[]
+  supportSessions SupportAccessSession[]
 
   @@index([ownerUserId])
 }
@@ -618,5 +671,55 @@ model PaymentEvent {
   @@unique([provider, eventId]) // STRICT IDEMPOTENCY: Duplicate delivery rejected safely
   @@index([paymentId])
   @@index([receivedAt])
+}
+
+// ------------------------------------------------------------------------------
+// Platform SaaS Administration Models (Phase 14 Extension)
+// ------------------------------------------------------------------------------
+
+model PlatformIssue {
+  id               String        @id @default(uuid())
+  practiceId       String?
+  practice         Practice?     @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  userId           String?
+  user             User?         @relation("ReportedIssues", fields: [userId], references: [id], onDelete: SetNull)
+  category         IssueCategory @default(OTHER)
+  priority         IssuePriority @default(NORMAL)
+  status           IssueStatus   @default(OPEN)
+  title            String
+  description      String
+  assignedToUserId String?
+  assignedTo       User?         @relation("AssignedIssues", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  internalNotes    Json?         @default("[]")
+  resolvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+}
+
+model SupportAccessSession {
+  id                  String    @id @default(uuid())
+  platformAdminUserId String
+  platformAdmin       User      @relation("SupportAdminSessions", fields: [platformAdminUserId], references: [id], onDelete: Restrict)
+  targetPracticeId    String
+  targetPractice      Practice  @relation(fields: [targetPracticeId], references: [id], onDelete: Cascade)
+  targetUserId        String?
+  targetUser          User?     @relation("TargetSupportSessions", fields: [targetUserId], references: [id], onDelete: SetNull)
+  reason              String
+  isReadOnly          Boolean   @default(true)
+  status              String    @default("ACTIVE") // "ACTIVE", "ENDED", "EXPIRED"
+  startedAt           DateTime  @default(now())
+  expiresAt           DateTime
+  endedAt             DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([platformAdminUserId])
+  @@index([targetPracticeId])
+  @@index([status])
 }
 

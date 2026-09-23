@@ -718,12 +718,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                         type="button"
                         className="profile-popover-item"
                         onClick={() => {
-                          navigate('/platform/permissions');
+                          navigate('/platform/dashboard');
                           setIsProfileMenuOpen(false);
                         }}
                       >
                         <Icon name="shield" size={16} />
-                        <span>Platform Role &amp; Action Matrix</span>
+                        <span>Platform Super Admin Console</span>
                       </button>
                     )}
 

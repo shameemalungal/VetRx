@@ -245,6 +245,32 @@ export class AuthorizationService {
     permission: Permission | string
   ): Promise<void> {
     const membership = await this.resolveMembership(userId, practiceId);
+    if (membership && membership.isActive) {
+      const effective = await this.getEffectivePermissions(userId, practiceId);
+      if (effective.includes(permission as Permission)) {
+        return;
+      }
+    }
+
+    const isSuperAdmin = await this.isPlatformSuperAdmin(userId);
+    if (isSuperAdmin) {
+      const clinicalPermissions: string[] = [
+        PERMISSIONS.PRESCRIPTION_APPROVE,
+        PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES,
+        'PRESCRIPTION_SIGN',
+        'PRESCRIPTION_ISSUE',
+        'PRESCRIPTION_DISPENSE',
+      ];
+      if (clinicalPermissions.includes(permission as any)) {
+        throw new AppError(
+          403,
+          'CLINICAL_AUTHORITY_RESTRICTED',
+          'Platform Super Admins cannot execute clinical approval actions without being a licensed clinical approver member.'
+        );
+      }
+      return; // Permitted for administrative practice operations
+    }
+
     if (!membership) {
       throw new AppError(
         403,
@@ -259,14 +285,11 @@ export class AuthorizationService {
         'Your membership in this practice has been deactivated.'
       );
     }
-    const effective = await this.getEffectivePermissions(userId, practiceId);
-    if (!effective.includes(permission as Permission)) {
-      throw new AppError(
-        403,
-        'INSUFFICIENT_PERMISSION',
-        `Action requires permission: ${permission}`
-      );
-    }
+    throw new AppError(
+      403,
+      'INSUFFICIENT_PERMISSION',
+      `Action requires permission: ${permission}`
+    );
   }
 
   /**

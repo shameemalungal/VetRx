@@ -126,4 +126,74 @@ export class EmailService {
 
     return result;
   }
+
+  static async sendPasswordResetEmail(data: {
+    recipientEmail: string;
+    recipientName: string;
+    resetUrl: string;
+    expiresInMinutes: number;
+  }): Promise<SendEmailResult> {
+    const subject = 'Reset your VetRx password';
+    const textContent = `Hello ${data.recipientName},\n\nA password reset was requested for your VetRx account. Use the following link within ${data.expiresInMinutes} minutes to reset your password:\n\n${data.resetUrl}\n\nIf you did not request this, please disregard this email.`;
+    const htmlContent = `<p>Hello ${data.recipientName},</p><p>A password reset was requested for your VetRx account. Click the link below within ${data.expiresInMinutes} minutes to set a new password:</p><p><a href="${data.resetUrl}">Reset Password</a></p><p>If you did not request this, please disregard this email.</p>`;
+
+    const isEnabled = this.config?.enabled ?? false;
+    if (!isEnabled || process.env.VETRX_FAST_TEST === '1') {
+      this.mockSentEmails.push({
+        to: data.recipientEmail,
+        subject,
+        htmlContent,
+        textContent,
+        timestamp: new Date(),
+      });
+      return { success: true, messageId: `mock-reset-${Date.now()}` };
+    }
+
+    if (!this.provider) {
+      return { success: false, error: 'NO_EMAIL_PROVIDER_CONFIGURED' };
+    }
+
+    return this.provider.send({
+      to: [{ email: data.recipientEmail }],
+      subject,
+      htmlContent,
+      textContent,
+      tags: ['password-reset'],
+    });
+  }
+
+  static async sendWelcomeEmail(data: {
+    recipientEmail: string;
+    recipientName: string;
+    practiceName?: string;
+    setupUrl?: string;
+  }): Promise<SendEmailResult> {
+    const subject = 'Welcome to VetRx';
+    const textContent = `Hello ${data.recipientName},\n\nWelcome to VetRx! Your account has been created.${data.practiceName ? ` You have been assigned to ${data.practiceName}.` : ''}\n\n${data.setupUrl ? `Set up your password here: ${data.setupUrl}` : ''}`;
+    const htmlContent = `<p>Hello ${data.recipientName},</p><p>Welcome to VetRx! Your account has been created.${data.practiceName ? ` You have been assigned to <strong>${data.practiceName}</strong>.` : ''}</p>${data.setupUrl ? `<p><a href="${data.setupUrl}">Set up your password</a></p>` : ''}`;
+
+    const isEnabled = this.config?.enabled ?? false;
+    if (!isEnabled || process.env.VETRX_FAST_TEST === '1') {
+      this.mockSentEmails.push({
+        to: data.recipientEmail,
+        subject,
+        htmlContent,
+        textContent,
+        timestamp: new Date(),
+      });
+      return { success: true, messageId: `mock-welcome-${Date.now()}` };
+    }
+
+    if (!this.provider) {
+      return { success: false, error: 'NO_EMAIL_PROVIDER_CONFIGURED' };
+    }
+
+    return this.provider.send({
+      to: [{ email: data.recipientEmail }],
+      subject,
+      htmlContent,
+      textContent,
+      tags: ['account-welcome'],
+    });
+  }
 }
