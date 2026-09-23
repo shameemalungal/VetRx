@@ -90,7 +90,10 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   const { practitioner } = useSettingsStore();
   const { user, can, hasRole } = useAuth();
-  const canApprove = can('PRESCRIPTION_APPROVE') || hasRole('VETERINARIAN');
+  const canApprove =
+    can('PRESCRIPTION_APPROVE') ||
+    hasRole('VETERINARIAN') ||
+    hasRole('PRACTICE_OWNER');
 
   // Forwarding & Clinical Approval states
   const [showForwardModal, setShowForwardModal] = useState(false);

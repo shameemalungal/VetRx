@@ -35,21 +35,21 @@ services:
       NODE_ENV: production
       PORT: 4000
       HOST: 0.0.0.0
-      APP_URL: ${APP_URL:-https://vetrx.adcpmalappuram.in}
-      API_URL: ${API_URL:-https://vetrx.adcpmalappuram.in/api}
+      APP_URL: ${APP_URL:-https://vetrx.brightbase.in}
+      API_URL: ${API_URL:-https://vetrx.brightbase.in/api}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       SESSION_SECRET: ${SESSION_SECRET}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       COOKIE_NAME: ${COOKIE_NAME:-vetrx_session}
-      CORS_ORIGIN: ${CORS_ORIGIN:-https://vetrx.adcpmalappuram.in}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://vetrx.brightbase.in}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-https://vetrx.adcpmalappuram.in/api/auth/google/callback}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-https://vetrx.brightbase.in/api/auth/google/callback}
       EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
       EMAIL_FROM: ${EMAIL_FROM:-supportvetrx@gmail.com}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-VetRx}
       BREVO_API_KEY: ${BREVO_API_KEY:-}
-      APP_BASE_URL: ${APP_BASE_URL:-https://vetrx.adcpmalappuram.in}
+      APP_BASE_URL: ${APP_BASE_URL:-https://vetrx.brightbase.in}
     ports:
       # Exposed locally to VPS loopback for NGINX reverse proxy
       - "127.0.0.1:4000:4000"

@@ -498,10 +498,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const isDraft = prescription.status === 'Draft' || (!prescription.status as any);
 
   // Authoritative clinical authority check:
-  // Must possess PRESCRIPTION_APPROVE or have the VETERINARIAN role.
+  // Must possess PRESCRIPTION_APPROVE, or have the VETERINARIAN or PRACTICE_OWNER role.
   const canApprove =
     can('PRESCRIPTION_APPROVE') ||
-    hasRole('VETERINARIAN');
+    hasRole('VETERINARIAN') ||
+    hasRole('PRACTICE_OWNER');
 
   const canRequestChanges =
     can('PRESCRIPTION_REQUEST_CHANGES') ||

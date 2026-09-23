@@ -841,5 +841,70 @@ describe('Prescription Clinical Approval Workflow Suite', () => {
         prisma.prescription.findFirst = originalFindFirst;
       }
     });
+
+    it('38. Practice Owner has PRESCRIPTION_APPROVE authority and can directly create Approved prescription', async () => {
+      const userOwnerAlpha = 'user-owner-alpha-uuid';
+      AuthorizationService.setMockMembership(userOwnerAlpha, practiceAlpha, {
+        id: 'mem-owner-alpha',
+        role: Role.PRACTICE_OWNER,
+        isActive: true,
+      });
+
+      const perms = await AuthorizationService.getEffectivePermissions(userOwnerAlpha, practiceAlpha);
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
+
+      const originalPatient = prisma.patient.findFirst;
+      const originalCreate = prisma.prescription.create;
+      try {
+        prisma.patient.findFirst = (async () => ({ id: 'patient-1', practiceId: practiceAlpha })) as any;
+        prisma.prescription.create = (async (args: any) => ({
+          id: 'rx-owner-1',
+          practiceId: practiceAlpha,
+          status: args.data.status,
+          version: 1,
+          items: [],
+        })) as any;
+
+        const result = await ClinicalService.createPrescription(practiceAlpha, {
+          patientId: 'patient-1',
+          rxNumber: 'RX-OWNER-001',
+          status: 'Approved',
+          items: [{ medicineName: 'Amoxicillin', dosage: '250mg', frequency: 'BID', durationDays: 3, totalQuantity: 6 }],
+        }, userOwnerAlpha);
+
+        assert.strictEqual(result.status, 'Approved');
+      } finally {
+        prisma.patient.findFirst = originalPatient;
+        prisma.prescription.create = originalCreate;
+      }
+    });
+
+    it('39. Practice Owner is eligible in getEligibleClinicians list', async () => {
+      const originalFindMany = prisma.practiceMember.findMany;
+      try {
+        prisma.practiceMember.findMany = (async (args: any) => {
+          return [
+            {
+              userId: 'user-owner-alpha',
+              role: 'PRACTICE_OWNER',
+              user: { id: 'user-owner-alpha', name: 'Dr Owner', email: 'owner@vetrx.test', avatarUrl: null },
+            },
+            {
+              userId: 'user-vet-alpha',
+              role: 'VETERINARIAN',
+              user: { id: 'user-vet-alpha', name: 'Dr Vet', email: 'vet@vetrx.test', avatarUrl: null },
+            },
+          ];
+        }) as any;
+
+        const clinicians = await ClinicalService.getEligibleClinicians(practiceAlpha);
+        assert.strictEqual(clinicians.length, 2);
+        assert.ok(clinicians.some((c: any) => c.role === 'PRACTICE_OWNER' && c.id === 'user-owner-alpha'));
+        assert.ok(clinicians.some((c: any) => c.role === 'VETERINARIAN' && c.id === 'user-vet-alpha'));
+      } finally {
+        prisma.practiceMember.findMany = originalFindMany;
+      }
+    });
   });
 });

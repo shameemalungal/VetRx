@@ -1084,6 +1084,7 @@ export class ClinicalService {
         isActive: true,
         OR: [
           { role: 'VETERINARIAN' },
+          { role: 'PRACTICE_OWNER' },
           { permissionOverrides: { some: { permission: 'PRESCRIPTION_APPROVE', effect: 'ALLOW' } } },
         ],
       },
@@ -1095,6 +1096,7 @@ export class ClinicalService {
     });
 
     return members.map((m) => ({
+      id: m.userId,
       userId: m.userId,
       name: m.user.name,
       email: m.user.email,

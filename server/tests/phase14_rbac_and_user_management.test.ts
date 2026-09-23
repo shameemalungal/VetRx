@@ -119,6 +119,8 @@ describe('Phase 14: User Management, RBAC & Practice Administration Test Suite',
       assert.ok(perms.includes(PERMISSIONS.ROLE_ASSIGN));
       assert.ok(perms.includes(PERMISSIONS.BILLING_MANAGE));
       assert.ok(perms.includes(PERMISSIONS.SUBSCRIPTION_MANAGE));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
       assert.ok(perms.includes(PERMISSIONS.OWNERSHIP_TRANSFER));
       assert.ok(perms.includes(PERMISSIONS.PRACTICE_SETTINGS_MANAGE));
     });
