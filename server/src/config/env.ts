@@ -40,7 +40,7 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().default('supportvetrx@gmail.com'),
   EMAIL_FROM_NAME: z.string().default('VetRx'),
   BREVO_API_KEY: z.string().optional().default(''),
-  APP_BASE_URL: z.string().default('https://vetrx.adcpmalappuram.in'),
+  APP_BASE_URL: z.string().default('https://vetrx.brightbase.in'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

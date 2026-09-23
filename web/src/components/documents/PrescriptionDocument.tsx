@@ -135,7 +135,13 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
             Doc Ref: <strong>{prescription.rxNumber}</strong> {prescription.version ? `(v${prescription.version})` : ''}
           </span>
           <span className={`document-badge-prescription ${prescription.status === 'Approved' ? 'badge-approved' : ''}`}>
-            {prescription.status === 'Approved' ? 'Approved Clinical Rx' : 'Prescription Preview'}
+            {prescription.status === 'Approved'
+              ? 'Approved Clinical Rx'
+              : prescription.status === 'Pending Approval'
+              ? 'Pending Vet Approval'
+              : prescription.status === 'Changes Requested'
+              ? 'Changes Requested'
+              : 'Draft Prescription'}
           </span>
         </div>
       </div>
@@ -446,7 +452,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
       {/* Indivisible Bottom-Right Signature Block */}
       <div className="stationery-signoff-row signature-block avoid-break">
         <div className="stationery-signoff-box">
-          {activePractitioner?.signatureDataUrl ? (
+          {prescription.status === 'Approved' && activePractitioner?.signatureDataUrl ? (
             <div className="stationery-sig-img-container">
               <img
                 src={activePractitioner.signatureDataUrl}
@@ -454,8 +460,24 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
                 style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
               />
             </div>
-          ) : (
+          ) : prescription.status === 'Approved' ? (
             <div className="stationery-sig-line" />
+          ) : (
+            <div className="stationery-sig-unsigned-notice" style={{
+              border: '1px dashed #cbd5e1',
+              borderRadius: '4px',
+              padding: '6px 10px',
+              backgroundColor: '#f8fafc',
+              fontSize: '10px',
+              color: '#64748b',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              textAlign: 'center',
+              marginBottom: '6px'
+            }}>
+              Unsigned — Pending Veterinarian Sign-off
+            </div>
           )}
           <div className="stationery-sig-credentials">
             <div className="stationery-sig-name">

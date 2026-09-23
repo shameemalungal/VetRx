@@ -22,6 +22,8 @@ import {
 import { AuthorizationService } from '../src/auth/authorization.service.js';
 import { MemberService } from '../src/auth/member.service.js';
 import { AuditService } from '../src/lib/audit.service.js';
+import { ClinicalService } from '../src/clinical/clinical.service.js';
+import { prisma } from '../src/lib/prisma.js';
 
 describe('Prescription Clinical Approval Workflow Suite', () => {
   const practiceAlpha = 'practice-alpha-uuid';
@@ -702,6 +704,142 @@ describe('Prescription Clinical Approval Workflow Suite', () => {
           return true;
         }
       );
+    });
+  });
+
+  // ----------------------------------------------------------------------------
+  // Category E: Direct ClinicalService Execution & Anti-Bypass Regression Tests
+  // ----------------------------------------------------------------------------
+  describe('Category E: Direct ClinicalService Execution & Anti-Bypass Regression Tests', () => {
+    it('32. ClinicalService.createPrescription strictly rejects Approved status from Staff with 403 PRESCRIPTION_APPROVE_FORBIDDEN', async () => {
+      await assert.rejects(
+        () => ClinicalService.createPrescription(
+          practiceAlpha,
+          { patientId: 'pat-1', rxNumber: 'RX-TEST-100', status: 'Approved', items: [] },
+          userStaffAlpha
+        ),
+        (err: any) => {
+          assert.strictEqual(err.statusCode, 403);
+          assert.strictEqual(err.code, 'PRESCRIPTION_APPROVE_FORBIDDEN');
+          assert.ok(err.message.includes('Staff members cannot directly create approved prescriptions'));
+          return true;
+        }
+      );
+    });
+
+    it('33. ClinicalService.createPrescription strictly rejects case variations and aliases (approved, Issued, Final, signed) from Staff', async () => {
+      const forbiddenStatuses = ['approved', 'Issued', 'issued', 'Final', 'final', 'Signed', 'signed'];
+      for (const status of forbiddenStatuses) {
+        await assert.rejects(
+          () => ClinicalService.createPrescription(
+            practiceAlpha,
+            { patientId: 'pat-1', rxNumber: 'RX-TEST-101', status, items: [] },
+            userStaffAlpha
+          ),
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 403, `Expected 403 for status ${status}`);
+            assert.strictEqual(err.code, 'PRESCRIPTION_APPROVE_FORBIDDEN');
+            return true;
+          }
+        );
+      }
+    });
+
+    it('34. ClinicalService.createPrescription strictly rejects final status creation from Practice Admin without PRESCRIPTION_APPROVE', async () => {
+      await assert.rejects(
+        () => ClinicalService.createPrescription(
+          practiceAlpha,
+          { patientId: 'pat-1', rxNumber: 'RX-TEST-102', status: 'Approved', items: [] },
+          userAdminAlpha
+        ),
+        (err: any) => {
+          assert.strictEqual(err.statusCode, 403);
+          assert.strictEqual(err.code, 'PRESCRIPTION_APPROVE_FORBIDDEN');
+          return true;
+        }
+      );
+    });
+
+    it('35. ClinicalService.updatePrescription rejects Approved status change via generic update with 403', async () => {
+      const originalFindFirst = prisma.prescription.findFirst;
+      prisma.prescription.findFirst = (async () => ({
+        id: 'rx-draft-1',
+        practiceId: practiceAlpha,
+        status: 'Draft',
+        version: 1,
+        items: [],
+      })) as any;
+
+      try {
+        await assert.rejects(
+          () => ClinicalService.updatePrescription(
+            'rx-draft-1',
+            practiceAlpha,
+            { status: 'Approved' } as any,
+            userStaffAlpha
+          ),
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 403);
+            assert.strictEqual(err.code, 'PRESCRIPTION_APPROVE_FORBIDDEN');
+            assert.ok(err.message.includes('Direct status change to Approved via generic update is forbidden'));
+            return true;
+          }
+        );
+      } finally {
+        prisma.prescription.findFirst = originalFindFirst;
+      }
+    });
+
+    it('36. ClinicalService.updatePrescription rejects any edit to already Approved prescription with 400 PRESCRIPTION_IMMUTABLE', async () => {
+      const originalFindFirst = prisma.prescription.findFirst;
+      prisma.prescription.findFirst = (async () => ({
+        id: 'rx-approved-1',
+        practiceId: practiceAlpha,
+        status: 'Approved',
+        version: 1,
+        items: [],
+      })) as any;
+
+      try {
+        await assert.rejects(
+          () => ClinicalService.updatePrescription(
+            'rx-approved-1',
+            practiceAlpha,
+            { diagnosis: 'Updated diagnosis' },
+            userStaffAlpha
+          ),
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 400);
+            assert.strictEqual(err.code, 'PRESCRIPTION_IMMUTABLE');
+            return true;
+          }
+        );
+      } finally {
+        prisma.prescription.findFirst = originalFindFirst;
+      }
+    });
+
+    it('37. ClinicalService.deletePrescription rejects deletion of Approved prescription with 400 PRESCRIPTION_IMMUTABLE', async () => {
+      const originalFindFirst = prisma.prescription.findFirst;
+      prisma.prescription.findFirst = (async () => ({
+        id: 'rx-approved-1',
+        practiceId: practiceAlpha,
+        status: 'Approved',
+        version: 1,
+      })) as any;
+
+      try {
+        await assert.rejects(
+          () => ClinicalService.deletePrescription('rx-approved-1', practiceAlpha),
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 400);
+            assert.strictEqual(err.code, 'PRESCRIPTION_IMMUTABLE');
+            return true;
+          }
+        );
+      } finally {
+        prisma.prescription.findFirst = originalFindFirst;
+      }
     });
   });
 });

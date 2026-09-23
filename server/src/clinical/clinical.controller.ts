@@ -307,7 +307,7 @@ const createPrescriptionSchema = z.object({
   rxNumber: z.string().min(1).max(50),
   diagnosis: z.string().max(300).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
-  status: z.enum(['Draft', 'Pending Approval', 'Changes Requested', 'Approved', 'Cancelled', 'Final']).optional(),
+  status: z.string().max(50).optional(),
   forwardedToUserId: z.string().uuid().nullable().optional(),
   forwardingRemarks: z.string().max(1000).nullable().optional(),
   items: z.array(
@@ -409,7 +409,7 @@ clinicalRouter.patch(
       const data = z.object({
         diagnosis: z.string().max(300).nullable().optional(),
         notes: z.string().max(1000).nullable().optional(),
-        status: z.enum(['Draft', 'Pending Approval', 'Changes Requested', 'Approved', 'Cancelled', 'Final']).optional(),
+        status: z.string().max(50).optional(),
         items: z.array(
           z.object({
             medicineId: z.string().uuid().nullable().optional(),

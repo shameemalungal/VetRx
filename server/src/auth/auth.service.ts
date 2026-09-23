@@ -1,13 +1,14 @@
 import { Role, InvitationStatus } from '@prisma/client';
 import { InvitationService } from './invitation.service.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
+import { SubscriptionService } from '../commercial/subscription.service.js';
 import { prisma } from '../lib/prisma.js';
 import { PasswordService } from '../lib/password.js';
 import { AuditService } from '../lib/audit.service.js';
 import { SessionService } from './session.service.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { SubscriptionService } from '../commercial/subscription.service.js';
 import { getPermissionsForRole } from './permissions.js';
+import { AuthorizationService } from './authorization.service.js';
 import type {
   AuthenticatedIdentity,
   SafeUserDTO,
@@ -1039,7 +1040,7 @@ export class AuthService {
 
     const practice = membership.practice;
     const settings = practice.settings;
-    const permissions = getPermissionsForRole(membership.role);
+    const permissions = await AuthorizationService.getEffectivePermissions(user.id, practice.id);
 
     return {
       user: {

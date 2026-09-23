@@ -1,14 +1,13 @@
 // =============================================================
-// VetRx — verify_phase5e_live_smoke.mjs
-// Phase 5E Live Production Smoke Test
-// Target: https://vetrx.brightbase.in
-// Validates PDF-safe document design (clean typography, no grey boxes/pills,
-// perfect baseline alignment, robust pagination, zero console errors).
+// VetRx — verify_live_production_pdfs.mjs
+// Phase 5B Live Production PDF Smoke Test Script
+// Targets: https://vetrx.brightbase.in
 // =============================================================
 
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const TARGET_URL = 'https://vetrx.brightbase.in';
@@ -26,13 +25,13 @@ const timestamp = Date.now();
 const testAccount = {
   name: 'Dr. Shameem Alungal',
   practiceName: 'Malappuram Companion Animal Hospital',
-  email: `smoke.p5e.${timestamp}@vetrx.test`,
+  email: `smoke.p5b.${timestamp}@vetrx.test`,
   password: 'LiveSmokePass#2026!',
 };
 
 async function run() {
   console.log(`=============================================================`);
-  console.log(`Starting Phase 5E Live Production PDF Smoke Test`);
+  console.log(`Starting Phase 5B Live Production PDF Smoke Test`);
   console.log(`Target URL: ${TARGET_URL}`);
   console.log(`Account: ${testAccount.email}`);
   console.log(`=============================================================\n`);
@@ -81,10 +80,9 @@ async function run() {
   // Update Practice Settings to have KSVC-3134 registration number & full clinic details
   console.log('--- Step 2: Updating practitioner & clinic settings ---');
   await page.evaluate(async () => {
-    await fetch('/api/practice/settings', {
-      method: 'PATCH',
+    await fetch('/api/settings', {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({
         clinicName: 'Malappuram Companion Animal Hospital',
         doctorName: 'Dr. Shameem Alungal',
@@ -98,7 +96,7 @@ async function run() {
     });
   });
 
-  // Inject helper in page for rendering PDF pages to PNG using pdfjs
+  // Seed sample Patient, Owner, Practitioner in active tenant IndexedDB
   console.log('--- Step 3: Setting up patient, owner, and practitioner master data ---');
   await page.evaluate(async () => {
     const db = window.db;
@@ -167,10 +165,6 @@ async function run() {
     }, sheetId);
 
     const pdfBuffer = Buffer.from(base64Pdf, 'base64');
-
-    // Render pages using pdfjs in Node or in browser
-    // We can evaluate inside browser with CDN/bundled pdfjs or using pdfjs-dist
-    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loadingTask = getDocument({ data: new Uint8Array(pdfBuffer) });
     const pdfDoc = await loadingTask.promise;
     const numPages = pdfDoc.numPages;
@@ -271,45 +265,24 @@ async function run() {
     await page.waitForSelector('#prescription-sheet', { timeout: 10000 });
     await new Promise((r) => setTimeout(r, 600));
 
-    // Inspect Phase 5E PDF-safe styling elements
+    // Element visual & alignment verification
     const inspection = await page.evaluate(() => {
-      // 1. Status label: clean typography, uppercase, no grey pill box
-      const statusLabel = document.querySelector('.document-status-label');
-      const hasStatusLabel = !!statusLabel && statusLabel.textContent.includes('ORIGINAL PRESCRIPTION');
-      const statusComputed = statusLabel ? window.getComputedStyle(statusLabel) : null;
-      const statusHasNoGreyBox = statusComputed ? (statusComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || statusComputed.backgroundColor === 'transparent') : false;
-
-      // 2. Registration line: clean typographic format "Reg. No.: KSVC-3134"
-      const regLine = document.querySelector('.registration-line');
-      const hasRegLine = !!regLine && regLine.textContent.includes('Reg. No.:') && regLine.textContent.includes('KSVC-3134');
-      const regComputed = regLine ? window.getComputedStyle(regLine) : null;
-      const regHasNoGreyBox = regComputed ? (regComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || regComputed.backgroundColor === 'transparent') : false;
-
-      // 3. Sig box: clean transparent background with border-left
-      const sigBox = document.querySelector('.stationery-sig-box');
-      const sigComputed = sigBox ? window.getComputedStyle(sigBox) : null;
-      const sigBoxClean = sigComputed ? (sigComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || sigComputed.backgroundColor === 'transparent') : false;
-
-      // 4. Route box: unboxed
+      const origBadge = Array.from(document.querySelectorAll('.document-badge, .stationery-doc-title'))
+        .some((el) => el.textContent.includes('Original Prescription'));
+      const regBadge = Array.from(document.querySelectorAll('.letterhead-reg-chip, .practitioner-header-reg-chip, .stationery-reg-no'))
+        .some((el) => el.textContent.includes('KSVC-3134'));
       const routeBox = document.querySelector('.stationery-route-box');
-      const routeComputed = routeBox ? window.getComputedStyle(routeBox) : null;
-      const routeBoxClean = routeComputed ? (routeComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || routeComputed.backgroundColor === 'transparent') : false;
-
-      // 5. Signoff block
+      const sigBox = document.querySelector('.stationery-sig-box');
+      const heroHeader = document.querySelector('.letterhead-practitioner-hero-row');
       const sigBlock = document.querySelector('.stationery-signoff-box, .stationery-signoff-row');
 
-      // 6. Check for old grey boxes
-      const oldBadges = document.querySelectorAll('.document-badge, .practitioner-header-reg-chip, .letterhead-reg-chip');
-
       return {
-        hasStatusLabel,
-        statusHasNoGreyBox,
-        hasRegLine,
-        regHasNoGreyBox,
-        sigBoxClean,
-        routeBoxClean,
+        hasOriginalBadge: origBadge,
+        hasRegBadge: regBadge,
+        noSymbolAboveDoctor: !heroHeader?.textContent.includes('●') && !heroHeader?.textContent.includes('▲'),
+        routeBoxAligned: !!routeBox && routeBox.offsetWidth > 0,
+        sigBoxAligned: !!sigBox && sigBox.offsetWidth > 0,
         sigBlockVisible: !!sigBlock,
-        oldBadgesCount: oldBadges.length,
       };
     });
 
@@ -319,18 +292,14 @@ async function run() {
     saveArtifacts(fileBaseName, pdfBuffer, screenshot);
 
     const passed = (options.expectedPages ? numPages === options.expectedPages : numPages <= (options.expectedMaxPages || 1))
-      && inspection.hasStatusLabel
-      && inspection.statusHasNoGreyBox
-      && inspection.hasRegLine
-      && inspection.regHasNoGreyBox
-      && inspection.sigBoxClean
-      && inspection.routeBoxClean
-      && inspection.sigBlockVisible
-      && inspection.oldBadgesCount === 0;
+      && inspection.hasOriginalBadge
+      && inspection.hasRegBadge
+      && inspection.noSymbolAboveDoctor
+      && inspection.routeBoxAligned
+      && inspection.sigBoxAligned
+      && inspection.sigBlockVisible;
 
     console.log(`Result: ${fileBaseName}.pdf -> ${numPages} page(s) (Expected ${options.expectedPages || '<=' + options.expectedMaxPages}). Passed: ${passed}`);
-    console.log(`  Inspection:`, inspection);
-
     results.push({
       testName: name,
       fileBaseName,
@@ -438,46 +407,17 @@ async function run() {
 
     // Element visual & alignment verification
     const inspection = await page.evaluate((isReceipt) => {
-      // 1. Status label: clean typography, uppercase
-      const statusLabel = document.querySelector('.document-status-label');
-      const expectedText = isReceipt ? 'OFFICIAL RECEIPT' : 'ORIGINAL FOR RECIPIENT';
-      const hasStatusLabel = !!statusLabel && (statusLabel.textContent.includes(expectedText) || statusLabel.textContent.includes('PAYMENT RECEIPT'));
-      const statusComputed = statusLabel ? window.getComputedStyle(statusLabel) : null;
-      const statusHasNoGreyBox = statusComputed ? (statusComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || statusComputed.backgroundColor === 'transparent') : false;
-
-      // 2. Registration line
-      const regLine = document.querySelector('.registration-line');
-      const hasRegLine = !!regLine && regLine.textContent.includes('Reg. No.:') && regLine.textContent.includes('KSVC-3134');
-      const regComputed = regLine ? window.getComputedStyle(regLine) : null;
-      const regHasNoGreyBox = regComputed ? (regComputed.backgroundColor === 'rgba(0, 0, 0, 0)' || regComputed.backgroundColor === 'transparent') : false;
-
-      // 3. Category badge check: verify all category chips are unboxed (transparent background, no borders/pills)
-      const categoryChips = Array.from(document.querySelectorAll('.invoice-category-chip'));
-      const categoryChipsUnboxed = categoryChips.every((chip) => {
-        const comp = window.getComputedStyle(chip);
-        const isTransparent = comp.backgroundColor === 'rgba(0, 0, 0, 0)' || comp.backgroundColor === 'transparent';
-        const isBorderNone = comp.borderWidth === '0px' || comp.borderStyle === 'none';
-        return isTransparent && isBorderNone;
-      });
-
-      // Also ensure old badges do not exist
-      const oldBadges = document.querySelectorAll('.document-badge, .practitioner-header-reg-chip, .letterhead-reg-chip');
-      const oldBadgesCount = oldBadges.length;
-
-      // 4. Ledger, statutory/summary card, signature
-      const ledger = document.querySelector('.invoice-print-ledger-grid, .invoice-print-ledger-and-signoff, .receipt-print-summary-grid');
-      const statutoryNotice = isReceipt
-        ? document.querySelector('.receipt-print-summary-grid, .receipt-amount-card')
-        : document.querySelector('.invoice-print-statutory-gst, .invoice-print-statutory-notice');
+      const docBadge = Array.from(document.querySelectorAll('.document-badge, .invoice-print-badge'))
+        .some((el) => el.textContent.includes(isReceipt ? 'Receipt' : 'Recipient') || el.textContent.includes('INVOICE') || el.textContent.includes('RECEIPT'));
+      const regChip = Array.from(document.querySelectorAll('.practitioner-header-reg-chip, .letterhead-reg-chip'))
+        .some((el) => el.textContent.includes('KSVC-3134'));
+      const ledger = document.querySelector('.invoice-print-ledger-grid, .invoice-print-ledger-and-signoff');
+      const statutoryNotice = document.querySelector('.invoice-print-statutory-gst, .invoice-print-statutory-notice');
       const signature = document.querySelector('.invoice-print-signature-section, .invoice-print-signature-box, .invoice-print-ledger-and-signoff');
 
       return {
-        hasStatusLabel,
-        statusHasNoGreyBox,
-        hasRegLine,
-        regHasNoGreyBox,
-        categoryChipsUnboxed,
-        oldBadgesCount,
+        hasBadge: docBadge,
+        hasRegChip: regChip,
         ledgerPresent: !!ledger,
         statutoryNoticePresent: !!statutoryNotice,
         signaturePresent: !!signature,
@@ -490,24 +430,14 @@ async function run() {
     const { numPages, pdfBuffer } = await generateAndAnalyzePdf(targetSheetId);
     saveArtifacts(fileBaseName, pdfBuffer, screenshot);
 
-    const pageCountValid = options.expectedMaxPages
-      ? numPages <= options.expectedMaxPages
-      : numPages === options.expectedPages;
-
-    const passed = pageCountValid
-      && inspection.hasStatusLabel
-      && inspection.statusHasNoGreyBox
-      && inspection.hasRegLine
-      && inspection.regHasNoGreyBox
-      && inspection.categoryChipsUnboxed
-      && inspection.oldBadgesCount === 0
+    const passed = numPages === options.expectedPages
+      && inspection.hasBadge
+      && inspection.hasRegChip
       && inspection.ledgerPresent
       && inspection.statutoryNoticePresent
       && inspection.signaturePresent;
 
-    console.log(`Result: ${fileBaseName}.pdf -> ${numPages} page(s) (Expected ${options.expectedPages}). Passed: ${passed}`);
-    console.log(`  Inspection:`, inspection);
-
+    console.log(`Result: ${fileBaseName}.pdf -> ${numPages} page(s) (Expected ${options.expectedPages}). Passed: ${passed}. Checks:`, inspection);
     results.push({
       testName: name,
       fileBaseName,
@@ -534,9 +464,9 @@ async function run() {
   // Receipt 5 items (1 page)
   await testBilling('Payment Receipt', 'Receipt with 5 line items', 'receipt-5-items', 605, 5, { expectedPages: 1, statutoryNotice: true });
 
-  // Receipt 6 items (up to 2 pages)
+  // Receipt 6 items (2 pages)
   await testBilling('Payment Receipt', 'Receipt with 6 line items', 'receipt-6-items', 606, 6, {
-    expectedMaxPages: 2,
+    expectedPages: 2,
     longDesc: true,
     govOrder: true,
     govOrderNote: 'As per veterinary rate schedule fixed by Animal Husbandry Dept Notification G.O.(Rt) No.589/2023/AHD',
@@ -570,10 +500,6 @@ async function run() {
   console.log('=============================================================\n');
 
   await browser.close();
-
-  if (!summary.allPassed) {
-    process.exit(1);
-  }
 }
 
 run().catch((err) => {

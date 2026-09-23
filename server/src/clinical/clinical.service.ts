@@ -513,6 +513,12 @@ export class ClinicalService {
     return rx;
   }
 
+  static isFinalOrApprovedStatus(status?: string | null): boolean {
+    if (!status) return false;
+    const s = status.trim().toLowerCase();
+    return s === 'approved' || s === 'final' || s === 'issued' || s === 'signed';
+  }
+
   static async createPrescription(practiceId: string, data: {
     patientId: string;
     rxNumber: string;
@@ -532,6 +538,21 @@ export class ClinicalService {
       instructions?: string | null;
     }>;
   }, actorUserId?: string) {
+    // Clinical Approval Authority Enforcement:
+    // Staff/non-clinicians CANNOT create an already Approved/Final/Issued/Signed prescription directly.
+    const requestedFinal = ClinicalService.isFinalOrApprovedStatus(data.status);
+    const canApprove = actorUserId
+      ? await AuthorizationService.hasPermission(actorUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
+      : false;
+
+    if (requestedFinal && !canApprove) {
+      throw new AppError(
+        403,
+        'PRESCRIPTION_APPROVE_FORBIDDEN',
+        'Staff members cannot directly create approved prescriptions. Prescriptions must start as Draft and be submitted for veterinarian approval.'
+      );
+    }
+
     // Ensure patient belongs to same practice
     await this.getPatientById(data.patientId, practiceId);
 
@@ -554,27 +575,16 @@ export class ClinicalService {
       }
     }
 
-    // Clinical Approval Authority Enforcement:
-    // Staff/non-clinicians CANNOT create an already Approved/Final prescription directly.
     let initialStatus = 'Draft';
     let isApprovedOnCreate = false;
 
-    if (data.status === 'Approved' || data.status === 'Final') {
-      const canApprove = actorUserId
-        ? await AuthorizationService.hasPermission(actorUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
-        : false;
-      if (!canApprove) {
-        throw new AppError(
-          403,
-          'PRESCRIPTION_APPROVE_FORBIDDEN',
-          'Staff members cannot directly create approved prescriptions. Prescriptions must start as Draft and be submitted for veterinarian approval.'
-        );
-      }
+    if (requestedFinal && canApprove) {
       initialStatus = 'Approved';
       isApprovedOnCreate = true;
     } else if (data.forwardedToUserId) {
       initialStatus = 'Pending Approval';
     } else {
+      // Force Draft for staff and default creations
       initialStatus = 'Draft';
     }
 
@@ -666,27 +676,8 @@ export class ClinicalService {
       instructions?: string | null;
     }>;
   }>, actorUserId?: string) {
-    const existing = await this.getPrescriptionById(id, practiceId);
-
-    // Immutability Check: Approved prescriptions CANNOT be directly edited
-    if (existing.status === 'Approved') {
-      throw new AppError(
-        400,
-        'PRESCRIPTION_IMMUTABLE',
-        'Approved prescriptions are legally sealed clinical records and cannot be modified.'
-      );
-    }
-
-    if (existing.status === 'Cancelled') {
-      throw new AppError(
-        400,
-        'PRESCRIPTION_CANCELLED',
-        'Cancelled prescriptions cannot be edited.'
-      );
-    }
-
-    // Direct status change to Approved via generic update is strictly forbidden
-    if (data.status === 'Approved' || data.status === 'Final') {
+    // Direct status change to Approved/Final/Issued/Signed via generic update is strictly forbidden
+    if (ClinicalService.isFinalOrApprovedStatus(data.status)) {
       throw new AppError(
         403,
         'PRESCRIPTION_APPROVE_FORBIDDEN',
@@ -699,6 +690,25 @@ export class ClinicalService {
         400,
         'INVALID_STATE_TRANSITION',
         'Prescriptions must be submitted for approval via the dedicated forward endpoint.'
+      );
+    }
+
+    const existing = await this.getPrescriptionById(id, practiceId);
+
+    // Immutability Check: Approved/Final/Issued prescriptions CANNOT be directly edited
+    if (ClinicalService.isFinalOrApprovedStatus(existing.status)) {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_IMMUTABLE',
+        'Approved prescriptions are legally sealed clinical records and cannot be modified.'
+      );
+    }
+
+    if (existing.status === 'Cancelled') {
+      throw new AppError(
+        400,
+        'PRESCRIPTION_CANCELLED',
+        'Cancelled prescriptions cannot be edited.'
       );
     }
 
@@ -1108,7 +1118,7 @@ export class ClinicalService {
   static async deletePrescription(id: string, practiceId: string) {
     const existing = await this.getPrescriptionById(id, practiceId);
 
-    if (existing.status === 'Approved') {
+    if (ClinicalService.isFinalOrApprovedStatus(existing.status)) {
       throw new AppError(
         400,
         'PRESCRIPTION_IMMUTABLE',

@@ -474,14 +474,14 @@ export async function runPhase6Tests() {
   console.log('\n--- Executing Section 39: Live Production Smoke Validation ---');
 
   try {
-    const res = await fetch('https://vetrx.adcpmalappuram.in/');
+    const res = await fetch('https://vetrx.brightbase.in/');
     const prodPass = res.status === 200;
     record({
       testId: 'PROD-SMOKE-01',
       module: 'Production Smoke',
       scenario: 'Live production domain accessibility and SSL status',
       preconditions: 'Production host 109.122.56.148 active',
-      steps: '1. Request GET https://vetrx.adcpmalappuram.in/. 2. Verify HTTP response code.',
+      steps: '1. Request GET https://vetrx.brightbase.in/. 2. Verify HTTP response code.',
       expectedResult: 'HTTP 200 OK, valid HTTPS certificate, NGINX reverse proxy operational.',
       actualResult: `Production responded with HTTP ${res.status} OK over TLS/HTTPS.`,
       status: prodPass ? 'PASS' : 'FAIL',
@@ -493,7 +493,7 @@ export async function runPhase6Tests() {
       module: 'Production Smoke',
       scenario: 'Live production domain accessibility and SSL status',
       preconditions: 'Production host 109.122.56.148 active',
-      steps: '1. Request GET https://vetrx.adcpmalappuram.in/.',
+      steps: '1. Request GET https://vetrx.brightbase.in/.',
       expectedResult: 'HTTP 200 OK',
       actualResult: `Connection failed: ${err.message}`,
       status: 'FAIL',

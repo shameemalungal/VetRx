@@ -1723,6 +1723,10 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     forwardOptions?: { targetClinicianId: string; forwardingRemarks?: string }
   ) => {
     setIsSaving(true);
+    if (targetStatus === 'Approved' && !canApprove) {
+      console.warn('[VetRx] executeSave blocked: Actor lacks approval permission. Falling back to Pending Approval.');
+      targetStatus = 'Pending Approval';
+    }
     console.log('[VetRx] executeSave running', { targetStatus, patientId: selectedPatientId });
 
     try {
@@ -2049,7 +2053,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               <span>→</span>
               <span>3. Medicines</span>
               <span>→</span>
-              <span>4. Generate</span>
+              <span>{canApprove ? '4. Approve & Sign' : '4. Send for Approval'}</span>
             </div>
           </div>
 
@@ -2922,8 +2926,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   style={{ height: 46, width: '100%' }}
                   disabled={isSaving}
                   onClick={() => handleSave('Pending Approval')}
-                  data-testid="generate-prescription-btn"
-                  id="generate-prescription-btn"
+                  data-testid="send-for-approval-btn"
+                  id="send-for-approval-btn"
                 >
                   {isSaving ? (
                     <>
@@ -4149,7 +4153,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         ) : (
           <button
             type="button"
-            data-testid="mobile-generate-prescription-btn"
+            data-testid="mobile-send-for-approval-btn"
             className="btn btn-primary rx-mobile-gen-btn"
             onClick={() => handleSave('Pending Approval')}
             disabled={isSaving}

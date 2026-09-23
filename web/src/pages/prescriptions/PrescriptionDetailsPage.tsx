@@ -569,7 +569,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
           <span className="rx-preview-step-connector active" />
           <div className="rx-preview-step-badge active">
             <Icon name="sparkles" size={16} color="#ffffff" />
-            <span className="rx-preview-step-text">4 Generate</span>
+            <span className="rx-preview-step-text">{isApproved ? '4 Review & Sign' : '4 Review & Approval'}</span>
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ import path from 'path';
 // ==============================================================================
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const TARGET_URL = 'https://vetrx.adcpmalappuram.in';
+const TARGET_URL = 'https://vetrx.brightbase.in';
 
 const testDoctor = {
   email: 'dr.shameem.test@vetrx.test',

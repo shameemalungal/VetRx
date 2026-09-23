@@ -1,6 +1,6 @@
 # VetRx Production Deployment Guide
 
-Target Deployment Host: `https://vetrx.adcpmalappuram.in`  
+Target Deployment Host: `https://vetrx.brightbase.in`  
 Application Type: Single Page Application (SPA) / Progressive Web Application  
 Storage Model: Offline-First Client-Side (IndexedDB via Dexie.js) — **No cloud database synchronization required**.
 
@@ -36,7 +36,7 @@ c:\Antigravity\VetRx\web\dist
 ## 3. Web Server Configuration
 
 ### 3.1 Domain & HTTPS Requirement
-* **Domain**: `vetrx.adcpmalappuram.in`
+* **Domain**: `vetrx.brightbase.in`
 * **Base URL Path**: `/` (Root domain/subdomain deployment)
 * **HTTPS**: **Mandatory**. Modern browser security requires HTTPS for secure IndexedDB storage persistence (`navigator.storage.persist()`) and modern web APIs.
 
@@ -47,7 +47,7 @@ VetRx uses client-side routing via React Router. The web server **must serve `in
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name vetrx.adcpmalappuram.in;
+    server_name vetrx.brightbase.in;
 
     ssl_certificate /path/to/fullchain.pem;
     ssl_certificate_key /path/to/privkey.pem;
@@ -83,7 +83,7 @@ server {
 # Redirect HTTP to HTTPS
 server {
     listen 80;
-    server_name vetrx.adcpmalappuram.in;
+    server_name vetrx.brightbase.in;
     return 301 https://$host$request_uri;
 }
 ```
@@ -102,7 +102,7 @@ server {
 
 #### Example Caddyfile:
 ```caddy
-vetrx.adcpmalappuram.in {
+vetrx.brightbase.in {
     root * /var/www/vetrx/dist
     file_server
     try_files {path} /index.html
@@ -128,10 +128,10 @@ vetrx.adcpmalappuram.in {
 
 ## 5. Post-Deployment Smoke-Test Checklist
 
-After deploying the `dist/` directory to `https://vetrx.adcpmalappuram.in`, verify:
+After deploying the `dist/` directory to `https://vetrx.brightbase.in`, verify:
 
-1. **Root Load**: `https://vetrx.adcpmalappuram.in/` loads the Dashboard with green/teal branding and zero console errors.
-2. **SPA Direct Route Reload**: Navigate to `https://vetrx.adcpmalappuram.in/settings` and press browser Refresh (`Ctrl+R` / `Cmd+R`). Confirm that the server serves `index.html` and does not return 404.
+1. **Root Load**: `https://vetrx.brightbase.in/` loads the Dashboard with green/teal branding and zero console errors.
+2. **SPA Direct Route Reload**: Navigate to `https://vetrx.brightbase.in/settings` and press browser Refresh (`Ctrl+R` / `Cmd+R`). Confirm that the server serves `index.html` and does not return 404.
 3. **Backup & Restore Card**: Open **Settings → Practitioner & Clinic**, confirm the **Data Management (Backup & Restore)** card appears, and verify the Browser Storage Status pill is visible.
 4. **Data Export Test**: Click **Download Full Backup (.json)** and confirm a `.json` backup file is downloaded with correct record structures.
 5. **Prescription Builder**: Navigate to `/prescriptions/new`, select a patient, add a medication, and verify dosage calculations and smart dosing helpers function properly.

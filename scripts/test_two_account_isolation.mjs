@@ -10,7 +10,7 @@ import puppeteer from 'puppeteer-core';
 // ==============================================================================
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const TARGET_URL = process.argv[2] || 'https://vetrx.adcpmalappuram.in';
+const TARGET_URL = process.argv[2] || 'https://vetrx.brightbase.in';
 
 const timestamp = Date.now();
 const accountA = {
