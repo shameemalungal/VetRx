@@ -77,6 +77,24 @@ export const DashboardPage: React.FC = () => {
     };
   }, []);
 
+  // ── Pending Prescription Approvals Count ──────────────────────
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+
+  useEffect(() => {
+    let unmounted = false;
+    fetch(`${API_BASE}/api/prescriptions/pending-approvals-count`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data && typeof data.count === 'number') {
+          setPendingApprovalsCount(data.count);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, []);
+
   // ── Metric Counts ───────────────────────────────────────────
   const rxCount      = useLiveQuery(() => db.prescriptions.count(), []);
   const patientCount = useLiveQuery(() => db.patients.count(), []);
@@ -320,6 +338,69 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── PENDING APPROVALS ACTION BANNER ────────────────────── */}
+      {pendingApprovalsCount > 0 && (
+        <div
+          style={{
+            margin: '0 0 20px 0',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, rgba(234, 134, 0, 0.12) 0%, rgba(234, 134, 0, 0.04) 100%)',
+            border: '1px solid rgba(234, 134, 0, 0.35)',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            boxShadow: '0 2px 8px rgba(234, 134, 0, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                background: '#ea8600',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="clock" size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                {pendingApprovalsCount} Prescription{pendingApprovalsCount > 1 ? 's' : ''} Awaiting Veterinarian Approval
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
+                Staff members have forwarded clinical drafts for your review, digital confirmation, and signature.
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/prescriptions?status=Pending+Approval"
+            className="btn btn-primary"
+            style={{
+              height: '40px',
+              padding: '0 18px',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              background: '#b25e00',
+              borderColor: '#995000',
+            }}
+          >
+            <Icon name="check-circle" size={16} />
+            <span>Review & Approve ({pendingApprovalsCount})</span>
+          </Link>
+        </div>
+      )}
 
       {/* ── TOP HERO & CLINICAL ACTION SECTION (Gradient Ribbon) ─ */}
       <div className="hero-action-hub">

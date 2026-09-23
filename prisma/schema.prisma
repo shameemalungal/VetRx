@@ -164,9 +164,10 @@ model PracticeMember {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role       Role      @default(PRACTICE_OWNER)
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  isActive           Boolean   @default(true)
+  isClinicalApprover Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   permissionOverrides MemberPermissionOverride[]
 

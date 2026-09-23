@@ -16,6 +16,7 @@ export interface MemberListItemDTO {
   practiceId: string;
   userId: string;
   role: Role;
+  isClinicalApprover: boolean;
   isActive: boolean;
   user: {
     id: string;
@@ -32,13 +33,21 @@ export class MemberService {
   private static mockMembers: Map<string, MemberListItemDTO> = new Map();
 
   static setMockMember(member: MemberListItemDTO): void {
-    this.mockMembers.set(member.id, member);
-    AuthorizationService.setMockMembership(member.userId, member.practiceId, {
-      id: member.id,
-      practiceId: member.practiceId,
-      userId: member.userId,
-      role: member.role,
-      isActive: member.isActive,
+    const isClinicalApprover = member.isClinicalApprover !== undefined
+      ? member.isClinicalApprover
+      : member.role === Role.VETERINARIAN;
+    const fullMember: MemberListItemDTO = {
+      ...member,
+      isClinicalApprover,
+    };
+    this.mockMembers.set(fullMember.id, fullMember);
+    AuthorizationService.setMockMembership(fullMember.userId, fullMember.practiceId, {
+      id: fullMember.id,
+      practiceId: fullMember.practiceId,
+      userId: fullMember.userId,
+      role: fullMember.role,
+      isClinicalApprover: fullMember.isClinicalApprover,
+      isActive: fullMember.isActive,
     });
   }
 
@@ -82,6 +91,7 @@ export class MemberService {
       practiceId: m.practiceId,
       userId: m.userId,
       role: m.role,
+      isClinicalApprover: m.isClinicalApprover || m.role === Role.VETERINARIAN,
       isActive: m.isActive,
       user: m.user,
       createdAt: m.createdAt.toISOString(),
@@ -129,6 +139,7 @@ export class MemberService {
           practiceId: dbMember.practiceId,
           userId: dbMember.userId,
           role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
           isActive: dbMember.isActive,
           user: dbMember.user,
           createdAt: dbMember.createdAt.toISOString(),
@@ -178,24 +189,36 @@ export class MemberService {
       }
     }
 
-    // 5. Commercial veterinarian seat check if upgrading to VETERINARIAN
-    if (newRole === Role.VETERINARIAN && targetMember.role !== Role.VETERINARIAN) {
-      await EntitlementService.assertCanAddSeat(practiceId, Role.VETERINARIAN);
-    }
+    // 5. Commercial veterinarian seat check using projected net change
+    const targetIsClinical = newRole === Role.VETERINARIAN
+      ? true
+      : (newRole === Role.STAFF || newRole === Role.PRACTICE_STAFF || newRole === Role.READ_ONLY ? false : targetMember.isClinicalApprover);
+    await EntitlementService.assertCanAssignClinicalSeat(
+      practiceId,
+      { role: targetMember.role, isClinicalApprover: targetMember.isClinicalApprover },
+      { role: newRole, isClinicalApprover: targetIsClinical }
+    );
 
     const previousRole = targetMember.role;
     targetMember.role = newRole;
+    targetMember.isClinicalApprover = targetIsClinical;
     targetMember.updatedAt = new Date().toISOString();
 
     if (process.env.VETRX_FAST_TEST === '1') {
       this.mockMembers.set(targetMember.id, targetMember);
       AuthorizationService.setMockMembership(targetMember.userId, practiceId, {
+        id: targetMember.id,
         role: newRole,
+        isClinicalApprover: targetIsClinical,
+        isActive: targetMember.isActive,
       });
     } else {
       await prisma.practiceMember.update({
         where: { id: targetMember.id },
-        data: { role: newRole },
+        data: {
+          role: newRole,
+          isClinicalApprover: targetIsClinical,
+        },
       });
     }
 
@@ -210,6 +233,112 @@ export class MemberService {
         targetUserId: targetMember.userId,
         previousRole,
         newRole,
+      },
+    });
+
+    return targetMember;
+  }
+
+  /**
+   * Updates a member's clinical approver status (e.g. designating Practice Owner as clinical veterinarian).
+   */
+  static async updateClinicalStatus(
+    actorUserId: string,
+    practiceId: string,
+    targetMemberId: string,
+    isClinicalApprover: boolean
+  ): Promise<MemberListItemDTO> {
+    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+
+    let targetMember: MemberListItemDTO | null = null;
+    if (process.env.VETRX_FAST_TEST === '1') {
+      targetMember = this.mockMembers.get(targetMemberId) || null;
+    } else {
+      const dbMember = await prisma.practiceMember.findUnique({
+        where: { id: targetMemberId },
+        include: {
+          user: {
+            select: { id: true, email: true, name: true, avatarUrl: true },
+          },
+        },
+      });
+      if (dbMember) {
+        targetMember = {
+          id: dbMember.id,
+          practiceId: dbMember.practiceId,
+          userId: dbMember.userId,
+          role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
+          isActive: dbMember.isActive,
+          user: dbMember.user,
+          createdAt: dbMember.createdAt.toISOString(),
+          updatedAt: dbMember.updatedAt.toISOString(),
+        };
+      }
+    }
+
+    if (!targetMember || targetMember.practiceId !== practiceId) {
+      throw new AppError(404, 'MEMBER_NOT_FOUND', 'Practice member not found.');
+    }
+
+    if (!targetMember.isActive) {
+      throw new AppError(400, 'MEMBER_INACTIVE', 'Cannot update clinical status of a deactivated member.');
+    }
+
+    // Only VETERINARIAN, PRACTICE_OWNER, and PRACTICE_ADMIN can be clinical approvers
+    if (targetMember.role !== Role.VETERINARIAN && targetMember.role !== Role.PRACTICE_OWNER && targetMember.role !== Role.PRACTICE_ADMIN) {
+      throw new AppError(
+        400,
+        'CLINICAL_ROLE_FORBIDDEN',
+        'Staff members cannot be designated as clinical approvers. To enable clinical approvals, change their role to Veterinarian.'
+      );
+    }
+
+    // Role VETERINARIAN is always clinical
+    if (targetMember.role === Role.VETERINARIAN && !isClinicalApprover) {
+      throw new AppError(
+        400,
+        'CANNOT_REVOKE_VET_CLINICAL',
+        'Members with the VETERINARIAN role must remain clinical approvers. To remove clinical authority, change their role to Staff or Administrator.'
+      );
+    }
+
+    // Validate seat allocation
+    await EntitlementService.assertCanAssignClinicalSeat(
+      practiceId,
+      { role: targetMember.role, isClinicalApprover: targetMember.isClinicalApprover },
+      { role: targetMember.role, isClinicalApprover }
+    );
+
+    const previousStatus = targetMember.isClinicalApprover;
+    targetMember.isClinicalApprover = isClinicalApprover;
+    targetMember.updatedAt = new Date().toISOString();
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      this.mockMembers.set(targetMember.id, targetMember);
+      AuthorizationService.setMockMembership(targetMember.userId, practiceId, {
+        id: targetMember.id,
+        role: targetMember.role,
+        isClinicalApprover,
+        isActive: targetMember.isActive,
+      });
+    } else {
+      await prisma.practiceMember.update({
+        where: { id: targetMember.id },
+        data: { isClinicalApprover },
+      });
+    }
+
+    await AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'MEMBER_CLINICAL_STATUS_UPDATED',
+      resource: 'PracticeMember',
+      resourceId: targetMember.id,
+      details: {
+        targetUserId: targetMember.userId,
+        previousStatus,
+        newStatus: isClinicalApprover,
       },
     });
 

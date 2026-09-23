@@ -214,7 +214,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
     setIsUpdating(true);
     try {
       try {
-        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/approve`, {
+        const res = await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -222,8 +222,14 @@ export const PrescriptionDetailsPage: React.FC = () => {
             approvalRemarks: approvalRemarks.trim() || undefined,
           }),
         });
-      } catch (err) {
-        console.warn('Server approve sync failed, updating local DB:', err);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || 'Server rejected approval.');
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Server approve failed.');
+        setIsUpdating(false);
+        return;
       }
 
       const now = new Date();
@@ -266,7 +272,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
     setIsUpdating(true);
     try {
       try {
-        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/request-changes`, {
+        const res = await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/request-changes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -274,8 +280,14 @@ export const PrescriptionDetailsPage: React.FC = () => {
             changeRequestRemarks: changeRequestRemarks.trim(),
           }),
         });
-      } catch (err) {
-        console.warn('Server request-changes sync failed, updating local DB:', err);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || 'Server rejected request for changes.');
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Server request-changes failed.');
+        setIsUpdating(false);
+        return;
       }
 
       const now = new Date();
@@ -501,8 +513,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
   // Must possess PRESCRIPTION_APPROVE, or have the VETERINARIAN or PRACTICE_OWNER role.
   const canApprove =
     can('PRESCRIPTION_APPROVE') ||
-    hasRole('VETERINARIAN') ||
-    hasRole('PRACTICE_OWNER');
+    hasRole('VETERINARIAN');
 
   const canRequestChanges =
     can('PRESCRIPTION_REQUEST_CHANGES') ||

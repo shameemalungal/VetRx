@@ -8,6 +8,7 @@
 import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { AuthorizationService } from '../auth/authorization.service.js';
 import { AUTHORITATIVE_PLANS, TRIAL_LIMITS } from './plan.config.js';
 import type {
   PracticeEntitlementsDTO,
@@ -193,21 +194,24 @@ export class EntitlementService {
     let patientsCount = 0;
     let packagesCount = 0;
     let customMedicinesCount = 0;
-    let veterinarianSeatsCount = 1;
+    let veterinarianSeatsCount = 0;
     let staffSeatsCount = 0;
 
     if (mockUsage) {
       patientsCount = mockUsage.patientsCount ?? 0;
       packagesCount = mockUsage.packagesCount ?? 0;
       customMedicinesCount = mockUsage.customMedicinesCount ?? 0;
-      veterinarianSeatsCount = mockUsage.veterinarianSeatsCount ?? 1;
+      veterinarianSeatsCount = mockUsage.veterinarianSeatsCount !== undefined
+        ? mockUsage.veterinarianSeatsCount
+        : 0;
       staffSeatsCount = mockUsage.staffSeatsCount ?? 0;
     } else if (process.env.VETRX_FAST_TEST === '1') {
       patientsCount = 0;
       packagesCount = 0;
       customMedicinesCount = 0;
-      veterinarianSeatsCount = 1;
-      staffSeatsCount = 0;
+      const memCounts = AuthorizationService.getMockMemberCounts(practiceId);
+      veterinarianSeatsCount = memCounts.vets;
+      staffSeatsCount = memCounts.staff;
     } else {
       try {
         const [patients, pkgs, meds, vets, staff] = await Promise.all([
@@ -215,25 +219,38 @@ export class EntitlementService {
           prisma.treatmentPackage.count({ where: { practiceId, isActive: true } }),
           prisma.medicine.count({ where: { practiceId, isActive: true } }),
           prisma.practiceMember.count({
-            where: { practiceId, isActive: true, role: { in: [Role.PRACTICE_OWNER, Role.VETERINARIAN] } },
+            where: {
+              practiceId,
+              isActive: true,
+              OR: [
+                { role: Role.VETERINARIAN },
+                { isClinicalApprover: true },
+              ],
+            },
           }),
           prisma.practiceMember.count({
-            where: { practiceId, isActive: true, role: { notIn: [Role.PRACTICE_OWNER, Role.VETERINARIAN] } },
+            where: {
+              practiceId,
+              isActive: true,
+              role: { not: Role.VETERINARIAN },
+              isClinicalApprover: false,
+            },
           }),
         ]);
 
         patientsCount = patients;
         packagesCount = pkgs;
         customMedicinesCount = meds;
-        veterinarianSeatsCount = vets || 1;
+        veterinarianSeatsCount = vets;
         staffSeatsCount = staff;
       } catch {
         // Fallback for isolated unit tests
         patientsCount = 0;
         packagesCount = 0;
         customMedicinesCount = 0;
-        veterinarianSeatsCount = 1;
-        staffSeatsCount = 0;
+        const memCounts = AuthorizationService.getMockMemberCounts(practiceId);
+        veterinarianSeatsCount = memCounts.vets;
+        staffSeatsCount = memCounts.staff;
       }
     }
 
@@ -392,31 +409,49 @@ export class EntitlementService {
   }
 
   /**
+   * Asserts whether a member's role or clinical approver status transition is permitted within plan limits.
+   * Calculates projected net change in veterinarian seat consumption.
+   */
+  static async assertCanAssignClinicalSeat(
+    practiceId: string,
+    currentMember?: { role: Role; isClinicalApprover?: boolean },
+    target?: { role: Role; isClinicalApprover?: boolean }
+  ): Promise<void> {
+    const entitlements = await this.resolvePracticeEntitlements(practiceId);
+    const usage = await this.getPracticeUsage(practiceId);
+
+    const currentConsumes = currentMember
+      ? (currentMember.role === Role.VETERINARIAN || Boolean(currentMember.isClinicalApprover))
+      : false;
+    const targetConsumes = target
+      ? (target.role === Role.VETERINARIAN || (target.role === Role.PRACTICE_OWNER && target.isClinicalApprover === undefined ? true : Boolean(target.isClinicalApprover)))
+      : false;
+
+    const netChange = (targetConsumes ? 1 : 0) - (currentConsumes ? 1 : 0);
+    const projectedSeats = usage.veterinarianSeatsCount + netChange;
+
+    if (projectedSeats > entitlements.limits.maxVeterinarianSeats) {
+      throw new AppError(
+        403,
+        'SEAT_LIMIT_REACHED',
+        `Veterinarian seat limit reached. Your ${entitlements.planName} allows up to ${entitlements.limits.maxVeterinarianSeats} veterinarian seat(s). Currently using ${usage.veterinarianSeatsCount} seat(s). Please upgrade to Clinic plan to add more veterinarians.`
+      );
+    }
+  }
+
+  /**
    * Asserts whether the practice can add a practice member based on role.
    * Individual plan: 1 veterinarian max.
    * Clinic plan: 5 veterinarians max. Unlimited staff.
    */
-  static async assertCanAddSeat(practiceId: string, role: Role): Promise<void> {
-    const entitlements = await this.resolvePracticeEntitlements(practiceId);
-
-    if (role === Role.PRACTICE_OWNER || role === Role.VETERINARIAN) {
-      // Veterinarian seat
-      const usage = await this.getPracticeUsage(practiceId);
-      if (usage.veterinarianSeatsCount >= entitlements.limits.maxVeterinarianSeats) {
-        throw new AppError(
-          403,
-          'SEAT_LIMIT_REACHED',
-          `Your ${entitlements.planName} allows up to ${entitlements.limits.maxVeterinarianSeats} veterinarian seat(s). Please upgrade to Clinic plan to add more veterinarians.`
-        );
-      }
-    }
-    // Administrative/staff/read-only members are unlimited on both Individual and Clinic
+  static async assertCanAddSeat(practiceId: string, role: Role, isClinicalApprover?: boolean): Promise<void> {
+    return this.assertCanAssignClinicalSeat(practiceId, undefined, { role, isClinicalApprover });
   }
 
   /**
    * Asserts whether the practice can add an additional veterinarian seat.
    */
   static async assertCanAddVeterinarianSeat(practiceId: string): Promise<void> {
-    return this.assertCanAddSeat(practiceId, Role.PRACTICE_OWNER);
+    return this.assertCanAddSeat(practiceId, Role.VETERINARIAN, true);
   }
 }

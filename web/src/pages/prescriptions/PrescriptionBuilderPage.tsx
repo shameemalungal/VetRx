@@ -1578,9 +1578,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setEligibleClinicians(data);
-          if (!forwardToUserId && data[0]?.id) {
+          if (data.length === 1 && data[0]?.id) {
+            setForwardToUserId(data[0].id);
+          } else if (data.length > 1 && !forwardToUserId && data[0]?.id) {
             setForwardToUserId(data[0].id);
           }
           return;
@@ -1603,6 +1605,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       if (!forwardToUserId && fallbackList[0]?.id) {
         setForwardToUserId(fallbackList[0].id);
       }
+    } else {
+      setEligibleClinicians([]);
     }
   };
 
@@ -1728,7 +1732,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   const executeSave = async (
     targetStatus: 'Draft' | 'Pending Approval' | 'Approved',
-    forwardOptions?: { targetClinicianId: string; forwardingRemarks?: string }
+    forwardOptions?: { targetClinicianId?: string; forwardingRemarks?: string }
   ) => {
     setIsSaving(true);
     if (targetStatus === 'Approved' && !canApprove) {
@@ -3918,30 +3922,48 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               </div>
             </div>
 
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label" htmlFor="builder-forward-clinician-select">
-                Select Prescribing Veterinarian *
-              </label>
-              {loadingClinicians ? (
-                <div style={{ fontSize: '13px', color: 'var(--color-outline)', padding: '8px 0' }}>
-                  Loading eligible clinicians…
+            {eligibleClinicians.length === 0 ? (
+              <div style={{ padding: '14px 16px', background: 'rgba(234, 134, 0, 0.1)', border: '1px solid rgba(234, 134, 0, 0.3)', borderRadius: '8px', marginBottom: '20px', color: '#b25e00', fontSize: '13px' }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>No Active Veterinarian Available</div>
+                <div>No active veterinarian is available to review this prescription. A Practice Owner or Administrator must designate a practicing veterinarian in Practice Users & Roles before prescriptions can be submitted for approval.</div>
+                <div style={{ marginTop: '8px', color: 'var(--color-on-surface-variant)' }}>
+                  You can safely <strong>Save as Draft</strong> now and submit for approval once a clinician is designated.
                 </div>
-              ) : (
-                <select
-                  id="builder-forward-clinician-select"
-                  className="form-input"
-                  value={forwardToUserId}
-                  onChange={(e) => setForwardToUserId(e.target.value)}
-                  style={{ width: '100%', height: '40px', fontSize: '13px' }}
-                >
-                  {eligibleClinicians.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      Dr. {c.name} {c.email ? `(${c.email})` : ''}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+              </div>
+            ) : eligibleClinicians.length === 1 ? (
+              <div style={{ padding: '12px 14px', background: 'rgba(19, 115, 51, 0.08)', border: '1px solid rgba(19, 115, 51, 0.25)', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginBottom: '2px' }}>Assigned Reviewing Clinician:</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: '#137333' }}>
+                  Dr. {eligibleClinicians[0].name} {eligibleClinicians[0].email ? `(${eligibleClinicians[0].email})` : ''}
+                </div>
+              </div>
+            ) : (
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" htmlFor="builder-forward-clinician-select">
+                  Select Prescribing Veterinarian *
+                </label>
+                {loadingClinicians ? (
+                  <div style={{ fontSize: '13px', color: 'var(--color-outline)', padding: '8px 0' }}>
+                    Loading eligible clinicians…
+                  </div>
+                ) : (
+                  <select
+                    id="builder-forward-clinician-select"
+                    className="form-input"
+                    value={forwardToUserId}
+                    onChange={(e) => setForwardToUserId(e.target.value)}
+                    style={{ width: '100%', height: '40px', fontSize: '13px' }}
+                  >
+                    <option value="">Any available veterinarian (Practice Queue)</option>
+                    {eligibleClinicians.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Dr. {c.name} {c.email ? `(${c.email})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
 
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label className="form-label" htmlFor="builder-forward-remarks">
@@ -3968,21 +3990,36 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ height: '40px', minWidth: '160px' }}
-                onClick={() => {
-                  setShowForwardModal(false);
-                  void executeSave('Pending Approval', {
-                    targetClinicianId: forwardToUserId,
-                    forwardingRemarks: forwardRemarks,
-                  });
-                }}
-                disabled={isSaving || !forwardToUserId}
-              >
-                {isSaving ? 'Submitting…' : (existingRx?.status === 'Changes Requested' ? 'Resubmit for Approval' : 'Send for Approval')}
-              </button>
+              {eligibleClinicians.length === 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ height: '40px', minWidth: '150px' }}
+                  onClick={() => {
+                    setShowForwardModal(false);
+                    void executeSave('Draft');
+                  }}
+                  disabled={isSaving}
+                >
+                  Save as Draft
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ height: '40px', minWidth: '160px' }}
+                  onClick={() => {
+                    setShowForwardModal(false);
+                    void executeSave('Pending Approval', {
+                      targetClinicianId: forwardToUserId || undefined,
+                      forwardingRemarks: forwardRemarks,
+                    });
+                  }}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Submitting…' : (existingRx?.status === 'Changes Requested' ? 'Resubmit for Approval' : 'Send for Approval')}
+                </button>
+              )}
             </div>
           </div>
         </div>

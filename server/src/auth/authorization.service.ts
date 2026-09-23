@@ -19,6 +19,7 @@ export interface MembershipRecord {
   practiceId: string;
   userId: string;
   role: Role;
+  isClinicalApprover?: boolean;
   isActive: boolean;
 }
 
@@ -31,13 +32,42 @@ export class AuthorizationService {
 
   static setMockMembership(userId: string, practiceId: string, record: Partial<MembershipRecord>): void {
     const key = `${userId}:${practiceId}`;
+    const role = record.role || Role.STAFF;
     this.mockMemberships.set(key, {
       id: record.id || `mem-${userId}-${practiceId}`,
       practiceId,
       userId,
-      role: record.role || Role.STAFF,
+      role,
+      isClinicalApprover: record.isClinicalApprover !== undefined
+        ? record.isClinicalApprover
+        : (role === Role.VETERINARIAN),
       isActive: record.isActive !== undefined ? record.isActive : true,
     });
+  }
+
+  static getMockMembers(practiceId?: string): MembershipRecord[] {
+    const list: MembershipRecord[] = [];
+    for (const m of this.mockMemberships.values()) {
+      if (!practiceId || m.practiceId === practiceId) {
+        list.push({ ...m });
+      }
+    }
+    return list;
+  }
+
+  static getMockMemberCounts(practiceId: string): { vets: number; staff: number } {
+    let vets = 0;
+    let staff = 0;
+    for (const m of this.mockMemberships.values()) {
+      if (m.practiceId === practiceId && m.isActive) {
+        if (m.role === Role.VETERINARIAN || m.isClinicalApprover) {
+          vets++;
+        } else {
+          staff++;
+        }
+      }
+    }
+    return { vets, staff };
   }
 
   static setMockOverride(practiceMemberId: string, permission: string, effect: 'ALLOW' | 'DENY'): void {
@@ -108,6 +138,7 @@ export class AuthorizationService {
         practiceId: member.practiceId,
         userId: member.userId,
         role: member.role,
+        isClinicalApprover: member.isClinicalApprover || member.role === Role.VETERINARIAN,
         isActive: member.isActive,
       };
     } catch {
@@ -135,6 +166,12 @@ export class AuthorizationService {
       return [];
     }
     const rolePermissions = new Set<Permission>(getPermissionsForRole(membership.role));
+
+    // Clinical approval authority is attached if member is a designated clinical approver or Veterinarian
+    if (membership.isClinicalApprover || membership.role === Role.VETERINARIAN) {
+      rolePermissions.add(PERMISSIONS.PRESCRIPTION_APPROVE);
+      rolePermissions.add(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES);
+    }
 
     // Check mock overrides first
     const mockMemberOverrides = this.mockOverrides.get(membership.id);

@@ -842,22 +842,37 @@ describe('Prescription Clinical Approval Workflow Suite', () => {
       }
     });
 
-    it('38. Practice Owner has PRESCRIPTION_APPROVE authority and can directly create Approved prescription', async () => {
-      const userOwnerAlpha = 'user-owner-alpha-uuid';
-      AuthorizationService.setMockMembership(userOwnerAlpha, practiceAlpha, {
-        id: 'mem-owner-alpha',
+    it('38. Practice Owner with clinical designation has PRESCRIPTION_APPROVE authority, while non-clinical Owner is rejected', async () => {
+      const userNonClinicalOwner = 'user-owner-non-clinical-uuid';
+      AuthorizationService.setMockMembership(userNonClinicalOwner, practiceAlpha, {
+        id: 'mem-owner-non-clinical',
         role: Role.PRACTICE_OWNER,
+        isClinicalApprover: false,
         isActive: true,
       });
 
-      const perms = await AuthorizationService.getEffectivePermissions(userOwnerAlpha, practiceAlpha);
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
+      const nonClinicalPerms = await AuthorizationService.getEffectivePermissions(userNonClinicalOwner, practiceAlpha);
+      assert.strictEqual(nonClinicalPerms.includes(PERMISSIONS.PRESCRIPTION_APPROVE), false);
+      assert.strictEqual(nonClinicalPerms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES), false);
+
+      const userClinicalOwner = 'user-owner-clinical-uuid';
+      AuthorizationService.setMockMembership(userClinicalOwner, practiceAlpha, {
+        id: 'mem-owner-clinical',
+        role: Role.PRACTICE_OWNER,
+        isClinicalApprover: true,
+        isActive: true,
+      });
+
+      const clinicalPerms = await AuthorizationService.getEffectivePermissions(userClinicalOwner, practiceAlpha);
+      assert.ok(clinicalPerms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(clinicalPerms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
 
       const originalPatient = prisma.patient.findFirst;
       const originalCreate = prisma.prescription.create;
+      const originalHistory = prisma.prescriptionWorkflowHistory.create;
       try {
         prisma.patient.findFirst = (async () => ({ id: 'patient-1', practiceId: practiceAlpha })) as any;
+        prisma.prescriptionWorkflowHistory.create = (async () => ({})) as any;
         prisma.prescription.create = (async (args: any) => ({
           id: 'rx-owner-1',
           practiceId: practiceAlpha,
@@ -866,45 +881,56 @@ describe('Prescription Clinical Approval Workflow Suite', () => {
           items: [],
         })) as any;
 
+        // Non-clinical owner cannot directly approve
+        await assert.rejects(
+          async () => {
+            await ClinicalService.createPrescription(practiceAlpha, {
+              patientId: 'patient-1',
+              rxNumber: 'RX-OWNER-001',
+              status: 'Approved',
+              items: [{ medicineName: 'Amoxicillin', dosage: '250mg', frequency: 'BID', durationDays: 3, totalQuantity: 6 }],
+            }, userNonClinicalOwner);
+          },
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 403);
+            assert.strictEqual(err.code, 'PRESCRIPTION_APPROVE_FORBIDDEN');
+            return true;
+          }
+        );
+
+        // Clinical owner CAN directly approve
         const result = await ClinicalService.createPrescription(practiceAlpha, {
           patientId: 'patient-1',
-          rxNumber: 'RX-OWNER-001',
+          rxNumber: 'RX-OWNER-002',
           status: 'Approved',
           items: [{ medicineName: 'Amoxicillin', dosage: '250mg', frequency: 'BID', durationDays: 3, totalQuantity: 6 }],
-        }, userOwnerAlpha);
+        }, userClinicalOwner);
 
         assert.strictEqual(result.status, 'Approved');
       } finally {
         prisma.patient.findFirst = originalPatient;
         prisma.prescription.create = originalCreate;
+        prisma.prescriptionWorkflowHistory.create = originalHistory;
       }
     });
 
-    it('39. Practice Owner is eligible in getEligibleClinicians list', async () => {
-      const originalFindMany = prisma.practiceMember.findMany;
-      try {
-        prisma.practiceMember.findMany = (async (args: any) => {
-          return [
-            {
-              userId: 'user-owner-alpha',
-              role: 'PRACTICE_OWNER',
-              user: { id: 'user-owner-alpha', name: 'Dr Owner', email: 'owner@vetrx.test', avatarUrl: null },
-            },
-            {
-              userId: 'user-vet-alpha',
-              role: 'VETERINARIAN',
-              user: { id: 'user-vet-alpha', name: 'Dr Vet', email: 'vet@vetrx.test', avatarUrl: null },
-            },
-          ];
-        }) as any;
+    it('39. Practice Owner with clinical designation is eligible in getEligibleClinicians list', async () => {
+      AuthorizationService.setMockMembership('user-owner-alpha', practiceAlpha, {
+        id: 'mem-owner-clin',
+        role: Role.PRACTICE_OWNER,
+        isClinicalApprover: true,
+        isActive: true,
+      });
+      AuthorizationService.setMockMembership('user-vet-alpha', practiceAlpha, {
+        id: 'mem-vet-clin',
+        role: Role.VETERINARIAN,
+        isActive: true,
+      });
 
-        const clinicians = await ClinicalService.getEligibleClinicians(practiceAlpha);
-        assert.strictEqual(clinicians.length, 2);
-        assert.ok(clinicians.some((c: any) => c.role === 'PRACTICE_OWNER' && c.id === 'user-owner-alpha'));
-        assert.ok(clinicians.some((c: any) => c.role === 'VETERINARIAN' && c.id === 'user-vet-alpha'));
-      } finally {
-        prisma.practiceMember.findMany = originalFindMany;
-      }
+      const clinicians = await ClinicalService.getEligibleClinicians(practiceAlpha);
+      assert.ok(clinicians.length >= 2);
+      assert.ok(clinicians.some((c: any) => c.role === 'PRACTICE_OWNER' && c.id === 'user-owner-alpha'));
+      assert.ok(clinicians.some((c: any) => c.role === 'VETERINARIAN' && c.id === 'user-vet-alpha'));
     });
 
     it('40. Veterinarian / Practice Owner can update content of Pending Approval prescription before approval', async () => {

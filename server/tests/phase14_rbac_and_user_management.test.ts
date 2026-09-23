@@ -111,7 +111,7 @@ describe('Phase 14: User Management, RBAC & Practice Administration Test Suite',
   // Category A: Role Resolution & Granular Permission Matrix
   // ----------------------------------------------------------------------------
   describe('Category A: Role Resolution & Granular Permission Matrix', () => {
-    it('1. PRACTICE_OWNER has all clinical, administration, billing, and ownership permissions', () => {
+    it('1. PRACTICE_OWNER has administration, billing, and ownership permissions, and clinical approval when designated', async () => {
       const perms = getPermissionsForRole(Role.PRACTICE_OWNER);
       assert.ok(perms.includes(PERMISSIONS.PATIENT_CREATE));
       assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_CREATE));
@@ -119,10 +119,18 @@ describe('Phase 14: User Management, RBAC & Practice Administration Test Suite',
       assert.ok(perms.includes(PERMISSIONS.ROLE_ASSIGN));
       assert.ok(perms.includes(PERMISSIONS.BILLING_MANAGE));
       assert.ok(perms.includes(PERMISSIONS.SUBSCRIPTION_MANAGE));
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
       assert.ok(perms.includes(PERMISSIONS.OWNERSHIP_TRANSFER));
       assert.ok(perms.includes(PERMISSIONS.PRACTICE_SETTINGS_MANAGE));
+
+      // Effective permissions attach PRESCRIPTION_APPROVE when designated as clinical approver
+      AuthorizationService.setMockMembership(userOwner, practiceAlpha, {
+        role: Role.PRACTICE_OWNER,
+        isClinicalApprover: true,
+        isActive: true,
+      });
+      const effective = await AuthorizationService.getEffectivePermissions(userOwner, practiceAlpha);
+      assert.ok(effective.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(effective.includes(PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES));
     });
 
     it('2. PRACTICE_ADMIN has clinical/operational admin, but explicitly lacks OWNERSHIP_TRANSFER & BILLING_MANAGE', () => {

@@ -163,6 +163,37 @@ practiceMemberRouter.patch(
 );
 
 /**
+ * PATCH /api/practice/members/:id/clinical-status
+ * Updates a member's clinical approver status.
+ */
+practiceMemberRouter.patch(
+  '/members/:id/clinical-status',
+  requirePracticePermission(PERMISSIONS.ROLE_ASSIGN),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = getUserId(req);
+      const memberId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!memberId) throw new AppError(400, 'BAD_REQUEST', 'Member ID required.');
+
+      const { isClinicalApprover } = z.object({
+        isClinicalApprover: z.boolean(),
+      }).parse(req.body);
+
+      const updated = await MemberService.updateClinicalStatus(
+        actorUserId,
+        practiceId,
+        memberId,
+        isClinicalApprover
+      );
+      res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * POST /api/practice/members/:id/deactivate
  * Deactivates a member in the practice.
  */

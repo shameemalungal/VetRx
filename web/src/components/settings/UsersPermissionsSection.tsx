@@ -16,6 +16,7 @@ interface MemberItem {
   practiceId: string;
   userId: string;
   role: 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'VETERINARIAN' | 'STAFF' | 'PRACTICE_STAFF' | 'READ_ONLY';
+  isClinicalApprover?: boolean;
   isActive: boolean;
   user: {
     id: string;
@@ -59,6 +60,11 @@ export const UsersPermissionsSection: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<string>('STAFF');
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
   const [roleError, setRoleError] = useState<string | null>(null);
+
+  // Clinical Status Modal State
+  const [clinicalModalMember, setClinicalModalMember] = useState<MemberItem | null>(null);
+  const [isUpdatingClinical, setIsUpdatingClinical] = useState(false);
+  const [clinicalError, setClinicalError] = useState<string | null>(null);
 
   // Deactivate Confirm State
   const [deactivatingMember, setDeactivatingMember] = useState<MemberItem | null>(null);
@@ -175,6 +181,32 @@ export const UsersPermissionsSection: React.FC = () => {
       await fetchData();
     } catch (err: any) {
       alert(err.message || 'Error reactivating member.');
+    }
+  };
+
+  // Handle Toggle Clinical Approver Status
+  const handleToggleClinicalStatus = async (member: MemberItem, targetStatus: boolean) => {
+    setIsUpdatingClinical(true);
+    setClinicalError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/practice/members/${member.id}/clinical-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ isClinicalApprover: targetStatus }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Failed to update clinical approver status.');
+      }
+
+      setClinicalModalMember(null);
+      await fetchData();
+    } catch (err: any) {
+      setClinicalError(err.message || 'Error updating clinical status.');
+    } finally {
+      setIsUpdatingClinical(false);
     }
   };
 
@@ -354,9 +386,56 @@ export const UsersPermissionsSection: React.FC = () => {
                       </div>
                     </td>
                     <td>
-                      <span className={getRoleBadgeClass(m.role)}>
-                        {formatRoleName(m.role)}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                        <span className={getRoleBadgeClass(m.role)}>
+                          {formatRoleName(m.role)}
+                        </span>
+                        {isOwner && (
+                          m.isClinicalApprover ? (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#0d652d',
+                                background: '#e6f4ea',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              <Icon name="check-circle" size={11} />
+                              Clinical Approver (Practicing Vet)
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                color: '#5f6368',
+                                background: '#f1f3f4',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              Non-clinical Administrator
+                            </span>
+                          )
+                        )}
+                        {m.role === 'VETERINARIAN' && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              color: '#1a73e8',
+                              background: '#e8f0fe',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            1 Vet Seat
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`status-badge ${m.isActive ? 'active' : 'disabled'}`}>
@@ -368,6 +447,22 @@ export const UsersPermissionsSection: React.FC = () => {
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="user-actions-cell" style={{ justifyContent: 'flex-end' }}>
+                        {/* Clinical Designation Toggle for Practice Owner */}
+                        {isOwner && isPracticeOwner() && m.isActive && (
+                          <button
+                            type="button"
+                            className="action-btn-sm"
+                            style={{ color: m.isClinicalApprover ? '#c5221f' : '#137333' }}
+                            onClick={() => {
+                              setClinicalModalMember(m);
+                              setClinicalError(null);
+                            }}
+                          >
+                            <Icon name="stethoscope" size={14} />
+                            <span>{m.isClinicalApprover ? 'Remove Clinical Designation' : 'Designate as Practicing Vet'}</span>
+                          </button>
+                        )}
+
                         {/* Edit Role Button */}
                         <PermissionGate permission="ROLE_ASSIGN">
                           {!isOwner && !isSelf && m.isActive && (
@@ -543,6 +638,12 @@ export const UsersPermissionsSection: React.FC = () => {
               </select>
             </div>
 
+            {selectedRole === 'VETERINARIAN' && editingMember.role !== 'VETERINARIAN' && (
+              <div style={{ padding: '8px 12px', background: '#e8f0fe', color: '#1a73e8', borderRadius: '6px', fontSize: '12.5px', marginBottom: '14px' }}>
+                Assigning the Veterinarian role consumes 1 veterinarian seat ({usedVets} / {maxVets ?? '∞'} currently used).
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 type="button"
@@ -559,6 +660,84 @@ export const UsersPermissionsSection: React.FC = () => {
                 disabled={isUpdatingRole}
               >
                 {isUpdatingRole ? 'Updating...' : 'Save Role'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clinical Approver Designation Modal */}
+      {clinicalModalMember && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clinical-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px',
+          }}
+        >
+          <div className="card" style={{ maxWidth: '460px', width: '100%', padding: '24px', background: '#fff' }}>
+            <h2 id="clinical-modal-title" style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px 0', color: 'var(--color-on-surface)' }}>
+              {clinicalModalMember.isClinicalApprover ? 'Remove Clinical Designation' : 'Designate as Practicing Veterinarian'}
+            </h2>
+
+            {clinicalError && (
+              <div style={{ padding: '8px 12px', background: 'rgba(186, 26, 26, 0.1)', color: '#ba1a1a', borderRadius: '6px', fontSize: '13px', marginBottom: '14px' }}>
+                {clinicalError}
+              </div>
+            )}
+
+            <p style={{ fontSize: '13.5px', color: 'var(--color-on-surface)', lineHeight: 1.5, marginBottom: '16px' }}>
+              {clinicalModalMember.isClinicalApprover ? (
+                <>
+                  Removing clinical designation from <strong>{clinicalModalMember.user.name}</strong> will return their role to a non-clinical practice administrator. They will no longer be eligible to review or approve prescriptions, and <strong>1 veterinarian seat</strong> will be released back to your practice.
+                </>
+              ) : (
+                <>
+                  Designating <strong>{clinicalModalMember.user.name}</strong> as a practicing veterinarian grants them clinical authority to directly review, create, request changes on, and approve prescriptions.
+                  <br /><br />
+                  This action consumes <strong>1 Veterinarian Seat</strong> under your <strong>{planName}</strong> plan ({usedVets} of {maxVets ?? '∞'} currently used).
+                </>
+              )}
+            </p>
+
+            {!clinicalModalMember.isClinicalApprover && maxVets !== null && usedVets >= maxVets && (
+              <div style={{ padding: '8px 12px', background: '#fef7e0', color: '#b06000', borderRadius: '6px', fontSize: '12.5px', marginBottom: '16px' }}>
+                <strong>Warning:</strong> All {maxVets} veterinarian seat(s) on your plan are currently occupied. If you proceed, this action may fail unless you upgrade or free up a seat.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setClinicalModalMember(null)}
+                disabled={isUpdatingClinical}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  background: clinicalModalMember.isClinicalApprover ? '#c5221f' : 'var(--color-primary)',
+                  borderColor: clinicalModalMember.isClinicalApprover ? '#c5221f' : 'var(--color-primary)',
+                }}
+                onClick={() => handleToggleClinicalStatus(clinicalModalMember, !clinicalModalMember.isClinicalApprover)}
+                disabled={isUpdatingClinical}
+              >
+                {isUpdatingClinical
+                  ? 'Saving...'
+                  : clinicalModalMember.isClinicalApprover
+                  ? 'Remove Designation'
+                  : 'Confirm Designation'}
               </button>
             </div>
           </div>

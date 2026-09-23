@@ -1,3 +1,4 @@
+import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { AuditService } from '../lib/audit.service.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -542,7 +543,7 @@ export class ClinicalService {
     // Staff/non-clinicians CANNOT create an already Approved/Final/Issued/Signed prescription directly.
     const requestedFinal = ClinicalService.isFinalOrApprovedStatus(data.status);
     const canApprove = actorUserId
-      ? await AuthorizationService.hasPermission(actorUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
+      ? await this.isEligiblePrescriptionApprover(actorUserId, practiceId)
       : false;
 
     if (requestedFinal && !canApprove) {
@@ -556,22 +557,28 @@ export class ClinicalService {
     // Ensure patient belongs to same practice
     await this.getPatientById(data.patientId, practiceId);
 
-    // If forwarded directly upon creation
-    let targetClinician = null;
-    if (data.forwardedToUserId) {
-      targetClinician = await prisma.practiceMember.findFirst({
-        where: { practiceId, userId: data.forwardedToUserId, isActive: true },
-      });
-      if (!targetClinician) {
-        throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
-      }
-      const targetCanApprove = await AuthorizationService.hasPermission(
-        data.forwardedToUserId,
-        practiceId,
-        PERMISSIONS.PRESCRIPTION_APPROVE
-      );
-      if (!targetCanApprove) {
+    // If forwarded directly upon creation or status is Pending Approval
+    let targetClinicianUserId = data.forwardedToUserId || null;
+
+    if (targetClinicianUserId) {
+      const isEligible = await this.isEligiblePrescriptionApprover(targetClinicianUserId, practiceId);
+      if (!isEligible) {
+        const member = await AuthorizationService.resolveMembership(targetClinicianUserId, practiceId);
+        if (!member || !member.isActive) {
+          throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+        }
         throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+      }
+    } else if (data.status === 'Pending Approval') {
+      const eligible = await this.getEligibleClinicians(practiceId);
+      if (eligible.length === 0) {
+        throw new AppError(
+          400,
+          'NO_CLINICAL_APPROVER_AVAILABLE',
+          'No active veterinarian is available to review this prescription. Please designate a veterinarian before sending for approval.'
+        );
+      } else if (eligible.length === 1) {
+        targetClinicianUserId = eligible[0].id;
       }
     }
 
@@ -581,7 +588,7 @@ export class ClinicalService {
     if (requestedFinal && canApprove) {
       initialStatus = 'Approved';
       isApprovedOnCreate = true;
-    } else if (data.forwardedToUserId) {
+    } else if (targetClinicianUserId || data.status === 'Pending Approval') {
       initialStatus = 'Pending Approval';
     } else {
       // Force Draft for staff and default creations
@@ -597,9 +604,9 @@ export class ClinicalService {
         notes: data.notes?.trim() || null,
         status: initialStatus,
         version: 1,
-        forwardedToUserId: data.forwardedToUserId || null,
-        forwardedByUserId: data.forwardedToUserId && actorUserId ? actorUserId : null,
-        forwardedAt: data.forwardedToUserId ? new Date() : null,
+        forwardedToUserId: targetClinicianUserId || null,
+        forwardedByUserId: targetClinicianUserId && actorUserId ? actorUserId : null,
+        forwardedAt: targetClinicianUserId ? new Date() : null,
         forwardingRemarks: data.forwardingRemarks?.trim() || null,
         approvedByUserId: isApprovedOnCreate && actorUserId ? actorUserId : null,
         approvedAt: isApprovedOnCreate ? new Date() : null,
@@ -825,22 +832,28 @@ export class ClinicalService {
       );
     }
 
-    const targetMember = await prisma.practiceMember.findFirst({
-      where: { practiceId, userId: data.forwardedToUserId, isActive: true },
-      include: { user: true },
-    });
+    let targetUserId = data.forwardedToUserId || null;
 
-    if (!targetMember) {
-      throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
-    }
-
-    const targetCanApprove = await AuthorizationService.hasPermission(
-      data.forwardedToUserId,
-      practiceId,
-      PERMISSIONS.PRESCRIPTION_APPROVE
-    );
-    if (!targetCanApprove) {
-      throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+    if (targetUserId) {
+      const isTargetEligible = await this.isEligiblePrescriptionApprover(targetUserId, practiceId);
+      if (!isTargetEligible) {
+        const targetMember = await AuthorizationService.resolveMembership(targetUserId, practiceId);
+        if (!targetMember || !targetMember.isActive) {
+          throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+        }
+        throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+      }
+    } else {
+      const eligible = await this.getEligibleClinicians(practiceId);
+      if (eligible.length === 0) {
+        throw new AppError(
+          400,
+          'NO_CLINICAL_APPROVER_AVAILABLE',
+          'No active veterinarian is available to review this prescription. Please designate a veterinarian before sending for approval.'
+        );
+      } else if (eligible.length === 1) {
+        targetUserId = eligible[0].id;
+      }
     }
 
     const isResubmission = existing.status === 'Changes Requested';
@@ -850,7 +863,7 @@ export class ClinicalService {
       where: { id },
       data: {
         status: 'Pending Approval',
-        forwardedToUserId: data.forwardedToUserId,
+        forwardedToUserId: targetUserId || null,
         forwardedByUserId: actorUserId,
         forwardedAt: new Date(),
         forwardingRemarks: data.forwardingRemarks?.trim() || null,
@@ -870,7 +883,7 @@ export class ClinicalService {
         status: 'Pending Approval',
         action,
         actorUserId,
-        targetUserId: data.forwardedToUserId,
+        targetUserId: targetUserId || null,
         remarks: data.forwardingRemarks?.trim() || (isResubmission ? 'Resubmitted for clinical approval after addressing changes' : 'Forwarded for clinical approval'),
       },
     });
@@ -880,7 +893,7 @@ export class ClinicalService {
       action: isResubmission ? 'PRESCRIPTION_RESUBMITTED' : 'PRESCRIPTION_FORWARDED',
       resource: 'Prescription',
       resourceId: id,
-      details: { forwardedToUserId: data.forwardedToUserId, remarks: data.forwardingRemarks },
+      details: { forwardedToUserId: targetUserId, remarks: data.forwardingRemarks },
     });
 
     return updated;
@@ -889,6 +902,15 @@ export class ClinicalService {
   static async approvePrescription(id: string, practiceId: string, actorUserId: string, data?: {
     approvalRemarks?: string | null;
   }) {
+    const canApprove = await this.isEligiblePrescriptionApprover(actorUserId, practiceId);
+    if (!canApprove) {
+      throw new AppError(
+        403,
+        'PRESCRIPTION_APPROVE_FORBIDDEN',
+        'Only veterinarians or designated clinical approvers have authority to approve prescriptions.'
+      );
+    }
+
     const existing = await this.getPrescriptionById(id, practiceId);
 
     if (existing.status === 'Approved') {
@@ -962,9 +984,50 @@ export class ClinicalService {
     return updated;
   }
 
+  static async isEligiblePrescriptionApprover(userId: string, practiceId: string): Promise<boolean> {
+    const membership = await AuthorizationService.resolveMembership(userId, practiceId);
+    if (!membership || !membership.isActive) {
+      return false;
+    }
+
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { isActive: true },
+        });
+        if (user && !user.isActive) {
+          return false;
+        }
+      } catch {}
+    }
+
+    // Role must be VETERINARIAN or member must be designated as isClinicalApprover
+    const isClinical = membership.role === Role.VETERINARIAN || !!membership.isClinicalApprover;
+    if (!isClinical) {
+      return false;
+    }
+
+    const hasApprovePerm = await AuthorizationService.hasPermission(
+      userId,
+      practiceId,
+      PERMISSIONS.PRESCRIPTION_APPROVE
+    );
+    return hasApprovePerm;
+  }
+
   static async requestChangesPrescription(id: string, practiceId: string, actorUserId: string, data: {
     changeRequestRemarks: string;
   }) {
+    const canRequest = await this.isEligiblePrescriptionApprover(actorUserId, practiceId);
+    if (!canRequest) {
+      throw new AppError(
+        403,
+        'PRESCRIPTION_REQUEST_CHANGES_FORBIDDEN',
+        'Only veterinarians or designated clinical approvers have authority to request prescription changes.'
+      );
+    }
+
     const existing = await this.getPrescriptionById(id, practiceId);
 
     if (existing.status === 'Approved') {
@@ -1084,40 +1147,71 @@ export class ClinicalService {
   }
 
   static async getEligibleClinicians(practiceId: string) {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const results: Array<{ id: string; userId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
+      const members = AuthorizationService.getMockMembers(practiceId);
+      for (const m of members) {
+        if (m.isActive && (m.role === Role.VETERINARIAN || m.isClinicalApprover)) {
+          results.push({
+            id: m.userId,
+            userId: m.userId,
+            name: `User ${m.userId}`,
+            email: `${m.userId}@practice.test`,
+            avatarUrl: null,
+            role: m.role,
+            isClinicalApprover: !!m.isClinicalApprover,
+          });
+        }
+      }
+      return results;
+    }
+
     const members = await prisma.practiceMember.findMany({
       where: {
         practiceId,
         isActive: true,
         OR: [
           { role: 'VETERINARIAN' },
-          { role: 'PRACTICE_OWNER' },
-          { permissionOverrides: { some: { permission: 'PRESCRIPTION_APPROVE', effect: 'ALLOW' } } },
+          { isClinicalApprover: true },
         ],
       },
       include: {
         user: {
-          select: { id: true, name: true, email: true, avatarUrl: true },
+          select: { id: true, name: true, email: true, avatarUrl: true, isActive: true },
         },
       },
     });
 
-    return members.map((m) => ({
-      id: m.userId,
-      userId: m.userId,
-      name: m.user.name,
-      email: m.user.email,
-      avatarUrl: m.user.avatarUrl,
-      role: m.role,
-    }));
+    const eligible: Array<{ id: string; userId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
+    for (const m of members) {
+      if (m.user.isActive && await this.isEligiblePrescriptionApprover(m.userId, practiceId)) {
+        eligible.push({
+          id: m.userId,
+          userId: m.userId,
+          name: m.user.name,
+          email: m.user.email,
+          avatarUrl: m.user.avatarUrl,
+          role: m.role,
+          isClinicalApprover: m.isClinicalApprover,
+        });
+      }
+    }
+    return eligible;
   }
 
   static async getPendingApprovalsCount(practiceId: string, clinicianUserId?: string) {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      return { count: 0 };
+    }
     const where: any = {
       practiceId,
       status: 'Pending Approval',
     };
     if (clinicianUserId) {
-      where.forwardedToUserId = clinicianUserId;
+      where.OR = [
+        { forwardedToUserId: clinicianUserId },
+        { forwardedToUserId: null },
+      ];
     }
     const count = await prisma.prescription.count({ where });
     return { count };

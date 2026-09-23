@@ -4,8 +4,8 @@
 // Follows Stitch clinical history / list visual benchmarks
 // =============================================================
 
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Prescription, Patient, Owner } from '../../types';
@@ -17,9 +17,19 @@ type StatusFilter = 'all' | 'Pending Approval' | 'Draft' | 'Changes Requested' |
 
 export const PrescriptionsListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    (searchParams.get('status') as StatusFilter) || 'all'
+  );
+
+  useEffect(() => {
+    const paramStatus = searchParams.get('status') as StatusFilter | null;
+    if (paramStatus) {
+      setStatusFilter(paramStatus);
+    }
+  }, [searchParams]);
 
   // ── Database Queries ──────────────────────────────────────────
   const prescriptions = useLiveQuery(

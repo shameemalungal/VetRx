@@ -438,7 +438,7 @@ clinicalRouter.post(
     try {
       const practiceId = getPracticeId(req);
       const body = z.object({
-        forwardedToUserId: z.string().uuid(),
+        forwardedToUserId: z.string().uuid().optional().nullable(),
         forwardingRemarks: z.string().max(1000).nullable().optional(),
       }).parse(req.body);
       const updated = await ClinicalService.forwardPrescription(getId(req), practiceId, req.user!.id, body);
