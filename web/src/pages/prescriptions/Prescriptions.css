@@ -1711,15 +1711,33 @@
 /* ── Step 4: Realistic Printable Stationery (#prescription-sheet) */
 .rx-preview-workspace {
   display: grid;
-  grid-template-columns: 8fr 4fr;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: var(--space-xl);
   align-items: start;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .prescription-sheet-wrapper {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.rx-action-card {
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 #prescription-sheet {
@@ -3433,7 +3451,7 @@ tr {
 }
 
 /* ── Prescription Preview / Details Screen Responsive Layout ── */
-@media screen and (max-width: 1023px) {
+@media screen and (max-width: 1200px) {
   .rx-preview-workspace {
     display: flex;
     flex-direction: column;
@@ -4025,6 +4043,9 @@ tr {
   align-items: flex-start;
   gap: 14px;
   border: 1px solid;
+  width: 100%;
+  max-width: 794px;
+  box-sizing: border-box;
 }
 
 .rx-workflow-banner.pending {

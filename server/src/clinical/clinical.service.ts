@@ -712,12 +712,18 @@ export class ClinicalService {
       );
     }
 
+    const canApprove = actorUserId
+      ? await AuthorizationService.hasPermission(actorUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
+      : false;
+
     // State machine check on status changes
     if (data.status && data.status !== existing.status) {
       if (data.status === 'Cancelled') {
         // Any unapproved prescription (Draft, Pending Approval, Changes Requested) can be cancelled
       } else if (existing.status === 'Changes Requested' && data.status === 'Draft') {
         // Can remain or transition to Draft
+      } else if (existing.status === 'Pending Approval' && data.status === 'Draft' && canApprove) {
+        // Veterinarian can revert pending prescription to Draft
       } else {
         throw new AppError(
           400,
@@ -727,17 +733,17 @@ export class ClinicalService {
       }
     }
 
-    // If prescription is currently Pending Approval, content edits are locked until reviewed or changes requested
+    // If prescription is currently Pending Approval, content edits are locked for non-approving staff
     const hasContentChanges = Boolean(
       (data.diagnosis !== undefined && data.diagnosis !== existing.diagnosis) ||
       (data.notes !== undefined && data.notes !== existing.notes) ||
       (data.items && data.items.length > 0)
     );
-    if (existing.status === 'Pending Approval' && hasContentChanges) {
+    if (existing.status === 'Pending Approval' && hasContentChanges && !canApprove) {
       throw new AppError(
         400,
         'PRESCRIPTION_PENDING_APPROVAL',
-        'Prescription is pending veterinarian review and cannot be edited. A veterinarian must review or request changes before edits can be made.'
+        'Prescription is pending veterinarian review and cannot be edited by staff. A veterinarian must review or request changes before staff can make edits.'
       );
     }
 

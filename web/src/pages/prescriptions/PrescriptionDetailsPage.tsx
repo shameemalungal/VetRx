@@ -761,6 +761,16 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     type="button"
                     className="btn btn-secondary"
                     style={{ height: '36px', fontSize: '12px', background: '#fff' }}
+                    onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                    title="Edit medications, dosage, or instructions before approval"
+                  >
+                    <Icon name="edit" size={14} />
+                    <span>Edit Prescription</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ height: '36px', fontSize: '12px', background: '#fff' }}
                     onClick={() => setShowRequestChangesModal(true)}
                   >
                     Request Changes
@@ -932,6 +942,19 @@ export const PrescriptionDetailsPage: React.FC = () => {
                     >
                       <Icon name="check-circle" size={20} />
                       <span>Approve &amp; Sign Prescription</span>
+                    </button>
+                  )}
+                  {canApprove && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                      onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                      disabled={isUpdating}
+                      title="Edit prescription medications or clinical details before approval"
+                    >
+                      <Icon name="edit" size={16} />
+                      <span>Edit Prescription</span>
                     </button>
                   )}
                   {canRequestChanges && (
@@ -1125,7 +1148,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             )}
 
             {/* Return / Edit / Clone Action Button */}
-            {(isDraft || isChangesRequested) ? (
+            {(isDraft || isChangesRequested || (isPendingApproval && canApprove)) ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -1133,7 +1156,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
               >
                 <Icon name="arrow-left" size={16} />
-                <span>Back to Medication Editor</span>
+                <span>{isPendingApproval ? 'Edit Prescription Medications' : 'Back to Medication Editor'}</span>
               </button>
             ) : isApproved ? (
               <button

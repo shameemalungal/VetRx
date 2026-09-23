@@ -906,5 +906,108 @@ describe('Prescription Clinical Approval Workflow Suite', () => {
         prisma.practiceMember.findMany = originalFindMany;
       }
     });
+
+    it('40. Veterinarian / Practice Owner can update content of Pending Approval prescription before approval', async () => {
+      const originalFindFirst = prisma.prescription.findFirst;
+      const originalDeleteMany = prisma.prescriptionItem.deleteMany;
+      const originalCreateMany = prisma.prescriptionItem.createMany;
+      const originalUpdate = prisma.prescription.update;
+
+      try {
+        AuthorizationService.setMockMembership(userVetAlpha, practiceAlpha, {
+          id: 'pm-vet',
+          role: Role.VETERINARIAN,
+          isActive: true,
+        });
+
+        prisma.prescription.findFirst = (async () => ({
+          id: 'rx-pending-1',
+          practiceId: practiceAlpha,
+          patientId: 'patient-1',
+          status: 'Pending Approval',
+          diagnosis: 'Initial staff diagnosis',
+          notes: 'Initial notes',
+          items: [],
+        })) as any;
+
+        let deleteCalled = false;
+        let createdItems: any[] = [];
+        prisma.prescriptionItem.deleteMany = (async () => { deleteCalled = true; }) as any;
+        prisma.prescriptionItem.createMany = (async (args: any) => { createdItems = args.data; }) as any;
+        prisma.prescription.update = (async (args: any) => ({
+          id: 'rx-pending-1',
+          status: 'Pending Approval',
+          diagnosis: args.data.diagnosis,
+          notes: args.data.notes,
+        })) as any;
+
+        const updated = await ClinicalService.updatePrescription(
+          'rx-pending-1',
+          practiceAlpha,
+          {
+            diagnosis: 'Refined veterinarian diagnosis',
+            items: [
+              {
+                medicineName: 'Amoxicillin 250mg',
+                dosage: '1 tablet',
+                frequency: 'BID',
+                durationDays: 5,
+              },
+            ],
+          },
+          userVetAlpha
+        );
+
+        assert.strictEqual(updated.diagnosis, 'Refined veterinarian diagnosis');
+        assert.strictEqual(deleteCalled, true);
+        assert.strictEqual(createdItems.length, 1);
+        assert.strictEqual(createdItems[0].medicineName, 'Amoxicillin 250mg');
+      } finally {
+        prisma.prescription.findFirst = originalFindFirst;
+        prisma.prescriptionItem.deleteMany = originalDeleteMany;
+        prisma.prescriptionItem.createMany = originalCreateMany;
+        prisma.prescription.update = originalUpdate;
+      }
+    });
+
+    it('41. Staff member cannot edit content of Pending Approval prescription (400 PRESCRIPTION_PENDING_APPROVAL)', async () => {
+      const originalFindFirst = prisma.prescription.findFirst;
+
+      try {
+        AuthorizationService.setMockMembership(userStaffAlpha, practiceAlpha, {
+          id: 'pm-staff',
+          role: Role.STAFF,
+          isActive: true,
+        });
+
+        prisma.prescription.findFirst = (async () => ({
+          id: 'rx-pending-1',
+          practiceId: practiceAlpha,
+          patientId: 'patient-1',
+          status: 'Pending Approval',
+          diagnosis: 'Initial staff diagnosis',
+          notes: 'Initial notes',
+          items: [],
+        })) as any;
+
+        await assert.rejects(
+          async () => {
+            await ClinicalService.updatePrescription(
+              'rx-pending-1',
+              practiceAlpha,
+              { diagnosis: 'Staff trying to modify' },
+              userStaffAlpha
+            );
+          },
+          (err: any) => {
+            assert.strictEqual(err.statusCode, 400);
+            assert.strictEqual(err.code, 'PRESCRIPTION_PENDING_APPROVAL');
+            return true;
+          }
+        );
+      } finally {
+        prisma.prescription.findFirst = originalFindFirst;
+      }
+    });
   });
 });

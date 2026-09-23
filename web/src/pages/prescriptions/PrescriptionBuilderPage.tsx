@@ -495,7 +495,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   // ── Populate State for Edit Mode ──────────────────────────────
   useEffect(() => {
     if (mode === 'edit' && existingRx) {
-      if (existingRx.status === 'Issued' || existingRx.status === 'Cancelled') {
+      if (existingRx.status === 'Issued' || existingRx.status === 'Cancelled' || (existingRx.status === 'Pending Approval' && !canApprove)) {
         navigate(`/prescriptions/${existingRx.id}`);
         return;
       }
@@ -513,7 +513,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       }
       setRecheckIntervalCustom(existingRx.recheckIntervalCustom || '');
     }
-  }, [mode, existingRx, navigate]);
+  }, [mode, existingRx, navigate, canApprove]);
 
   useEffect(() => {
     if (mode === 'edit' && existingRxItems && existingRxItems.length > 0) {
@@ -1682,7 +1682,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       canApprove,
     });
 
-    if (mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested') {
+    if (mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && !(existingRx.status === 'Pending Approval' && canApprove)) {
       const msg = `${existingRx.status} prescriptions are read-only. Clone the prescription to create a new clinical record.`;
       setGenerationError(msg);
       setShowGenerationErrorModal(true);
@@ -1717,6 +1717,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     }
 
     if (targetStatus === 'Pending Approval') {
+      if (mode === 'edit' && existingRx?.status === 'Pending Approval' && canApprove) {
+        // Clinician saving modifications to already pending prescription without re-routing
+        await executeSave('Pending Approval');
+        return;
+      }
       await handleInitiateSendForApproval();
     }
   };
@@ -1789,7 +1794,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const approverName = user?.name || practitioner?.name || 'Veterinarian';
 
       if (mode === 'edit' && id) {
-        if (existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested') {
+        if (existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && !(existingRx.status === 'Pending Approval' && canApprove)) {
           const msg = `${existingRx.status} prescriptions are read-only and cannot be modified. Please clone this prescription instead.`;
           console.error('[VetRx] Save failed:', msg);
           setErrorMsg(msg);
@@ -1801,7 +1806,18 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
         const updatedHistory: PrescriptionWorkflowHistoryItem[] = [...(existingRx?.workflowHistory || [])];
 
-        if (isPending && targetClinicianUser) {
+        if (isPending && existingRx?.status === 'Pending Approval') {
+          updatedHistory.push({
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            version: existingRx?.version || 1,
+            status: 'Pending Approval',
+            action: 'EDITED_BY_CLINICIAN',
+            actorUserId: user?.id || 'current-user',
+            actorUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+            remarks: 'Prescription details and medications updated by clinician prior to approval',
+            createdAt: now,
+          });
+        } else if (isPending && targetClinicianUser) {
           updatedHistory.push({
             id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
             version: existingRx?.version || 1,
@@ -2373,7 +2389,44 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         </div>
       </div>
 
-      {mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && (
+      {mode === 'edit' && existingRx && existingRx.status === 'Pending Approval' && canApprove && (
+        <div
+          style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: 'var(--radius-xl)',
+            padding: '16px 20px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            color: '#92400e',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Icon name="edit" size={24} color="#d97706" />
+            <div>
+              <strong style={{ fontSize: '14px', display: 'block' }}>
+                Reviewing &amp; Editing Pending Staff Prescription ({existingRx.rxNumber})
+              </strong>
+              <span style={{ fontSize: '12.5px', color: '#78350f' }}>
+                You have clinical authority to adjust medications, dosages, or clinical notes before digitally sealing and approving this prescription.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigate(`/prescriptions/${existingRx.id}`)}
+            style={{ flexShrink: 0, background: '#fff' }}
+          >
+            <span>Back to Details</span>
+          </button>
+        </div>
+      )}
+
+      {mode === 'edit' && existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && !(existingRx.status === 'Pending Approval' && canApprove) && (
         <div
           style={{
             background: '#fef2f2',
@@ -2943,6 +2996,19 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit for Veterinarian Approval' : 'Send for Veterinarian Approval'}</span>
                     </>
                   )}
+                </button>
+              )}
+
+              {mode === 'edit' && existingRx?.status === 'Pending Approval' && canApprove && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ height: 42, width: '100%' }}
+                  disabled={isSaving}
+                  onClick={() => handleSave('Pending Approval')}
+                >
+                  <Icon name="save" size={16} />
+                  <span>Save Changes (Keep Pending)</span>
                 </button>
               )}
 
