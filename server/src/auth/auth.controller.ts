@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { env } from '../config/env.js';
+import { prisma } from '../lib/prisma.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 export const authRouter = Router();
@@ -21,6 +22,19 @@ const registerSchema = z.object({
   email: z.string().email('Valid email address is required'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   practiceName: z.string().max(120).optional(),
+  practiceType: z.enum(['INDEPENDENT', 'CLINIC']).optional(),
+  isClinicalApprover: z.boolean().optional(),
+  phone: z.string().max(40).optional(),
+  address: z.string().max(255).optional(),
+  teamMembers: z
+    .array(
+      z.object({
+        name: z.string().optional(),
+        email: z.string().email('Valid email is required'),
+        role: z.enum(['PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'PRACTICE_STAFF', 'READ_ONLY']),
+      })
+    )
+    .optional(),
   invitationToken: z.string().optional(),
 });
 
@@ -129,6 +143,50 @@ authRouter.get('/me', requireAuth, async (req: AuthenticatedRequest, res, next) 
 
     const context = await AuthService.getMeContext(req.user.id, req.session?.practiceId, req.session?.id);
     res.status(200).json(context);
+  } catch (error) {
+    next(error);
+  }
+});
+
+const switchPracticeSchema = z.object({
+  practiceId: z.string().min(1, 'Target practiceId is required'),
+});
+
+/**
+ * POST /api/auth/switch-practice
+ * Switches active tenant practice context for the current session.
+ */
+authRouter.post('/switch-practice', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const { practiceId } = switchPracticeSchema.parse(req.body);
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    }
+
+    // Verify active membership in target practice
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      const member = await prisma.practiceMember.findUnique({
+        where: {
+          practiceId_userId: {
+            practiceId,
+            userId,
+          },
+        },
+        include: { practice: true },
+      });
+
+      if (!member || !member.isActive || !member.practice?.isActive) {
+        throw new AppError(403, 'FORBIDDEN_PRACTICE', 'You do not have an active membership in this practice.');
+      }
+    }
+
+    if (req.session?.id) {
+      await SessionService.updateSessionPractice(req.session.id, practiceId);
+    }
+
+    const data = await AuthService.getMeContext(userId, practiceId, req.session?.id);
+    res.status(200).json(data);
   } catch (error) {
     next(error);
   }

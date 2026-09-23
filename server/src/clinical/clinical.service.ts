@@ -803,7 +803,7 @@ export class ClinicalService {
   }
 
   static async forwardPrescription(id: string, practiceId: string, actorUserId: string, data: {
-    forwardedToUserId: string;
+    forwardedToUserId?: string | null;
     forwardingRemarks?: string | null;
   }) {
     const existing = await this.getPrescriptionById(id, practiceId);

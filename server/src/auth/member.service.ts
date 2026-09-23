@@ -3,10 +3,16 @@
 // Safe role updates, member activation/deactivation, and atomic ownership transfer.
 // ==============================================================================
 
-import { Role } from '@prisma/client';
+import { Role, OverrideEffect } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { PERMISSIONS } from './permissions.js';
+import {
+  PERMISSIONS,
+  ALL_ASSIGNABLE_PERMISSIONS,
+  PLATFORM_ONLY_PERMISSIONS,
+  getPermissionsForRole,
+  type Permission,
+} from './permissions.js';
 import { AuthorizationService } from './authorization.service.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
 import { AuditService } from '../lib/audit.service.js';
@@ -106,11 +112,24 @@ export class MemberService {
     actorUserId: string,
     practiceId: string,
     targetMemberId: string,
-    rawRole: Role | string
+    rawRole: Role | string | { role: Role | string; isClinicalApprover?: boolean },
+    rawIsClinicalApprover?: boolean
   ): Promise<MemberListItemDTO> {
     await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
 
-    const newRole = (rawRole === 'PRACTICE_STAFF' ? Role.STAFF : rawRole) as Role;
+    let parsedRole: string;
+    let explicitClinicalApprover: boolean | undefined = rawIsClinicalApprover;
+
+    if (typeof rawRole === 'object' && rawRole !== null) {
+      parsedRole = (rawRole as any).role;
+      if ((rawRole as any).isClinicalApprover !== undefined) {
+        explicitClinicalApprover = Boolean((rawRole as any).isClinicalApprover);
+      }
+    } else {
+      parsedRole = rawRole;
+    }
+
+    const newRole = (parsedRole === 'PRACTICE_STAFF' ? Role.STAFF : parsedRole) as Role;
 
     // 1. Direct promotion to PRACTICE_OWNER is strictly forbidden (must use transfer)
     if (newRole === Role.PRACTICE_OWNER) {
@@ -118,6 +137,15 @@ export class MemberService {
         400,
         'OWNER_TRANSFER_REQUIRED',
         'Practice Owner role cannot be assigned directly. Use practice ownership transfer.'
+      );
+    }
+
+    // 1b. Non-clinician roles cannot be clinical approvers
+    if (explicitClinicalApprover === true && (newRole === Role.STAFF || newRole === Role.READ_ONLY)) {
+      throw new AppError(
+        400,
+        'INVALID_CLINICAL_APPROVER',
+        'Staff members and Read Only members cannot be designated as clinical approvers. To enable clinical approvals, change their role to Veterinarian.'
       );
     }
 
@@ -190,9 +218,17 @@ export class MemberService {
     }
 
     // 5. Commercial veterinarian seat check using projected net change
-    const targetIsClinical = newRole === Role.VETERINARIAN
-      ? true
-      : (newRole === Role.STAFF || newRole === Role.PRACTICE_STAFF || newRole === Role.READ_ONLY ? false : targetMember.isClinicalApprover);
+    let targetIsClinical: boolean;
+    if (newRole === Role.VETERINARIAN) {
+      targetIsClinical = true;
+    } else if (newRole === Role.STAFF || newRole === Role.READ_ONLY) {
+      targetIsClinical = false;
+    } else if (explicitClinicalApprover !== undefined) {
+      targetIsClinical = explicitClinicalApprover;
+    } else {
+      targetIsClinical = targetMember.isClinicalApprover;
+    }
+
     await EntitlementService.assertCanAssignClinicalSeat(
       practiceId,
       { role: targetMember.role, isClinicalApprover: targetMember.isClinicalApprover },
@@ -373,6 +409,7 @@ export class MemberService {
           practiceId: dbMember.practiceId,
           userId: dbMember.userId,
           role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
           isActive: dbMember.isActive,
           user: dbMember.user,
           createdAt: dbMember.createdAt.toISOString(),
@@ -469,6 +506,7 @@ export class MemberService {
           practiceId: dbMember.practiceId,
           userId: dbMember.userId,
           role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
           isActive: dbMember.isActive,
           user: dbMember.user,
           createdAt: dbMember.createdAt.toISOString(),
@@ -553,6 +591,7 @@ export class MemberService {
           practiceId: dbMember.practiceId,
           userId: dbMember.userId,
           role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
           isActive: dbMember.isActive,
           user: dbMember.user,
           createdAt: dbMember.createdAt.toISOString(),
@@ -651,5 +690,257 @@ export class MemberService {
       success: true,
       newOwnerUserId: targetMember.userId,
     };
+  }
+
+  /**
+   * Retrieves permissions and active overrides for a specific practice member.
+   */
+  static async getMemberPermissions(
+    actorUserId: string,
+    practiceId: string,
+    memberId: string
+  ): Promise<{
+    member: MemberListItemDTO;
+    defaultPermissions: Permission[];
+    overrides: Array<{ permission: string; effect: string }>;
+    effectivePermissions: Permission[];
+  }> {
+    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_VIEW);
+
+    let member: MemberListItemDTO | null = null;
+    let overrides: Array<{ permission: string; effect: string }> = [];
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      member = this.mockMembers.get(memberId) || null;
+      if (member) {
+        const mockMap = (AuthorizationService as any).mockOverrides?.get(member.id);
+        if (mockMap) {
+          for (const [perm, eff] of mockMap.entries()) {
+            overrides.push({ permission: perm, effect: eff });
+          }
+        }
+      }
+    } else {
+      const dbMember = await prisma.practiceMember.findFirst({
+        where: { id: memberId, practiceId },
+        include: {
+          user: { select: { id: true, email: true, name: true, avatarUrl: true } },
+          permissionOverrides: true,
+        },
+      });
+
+      if (dbMember) {
+        member = {
+          id: dbMember.id,
+          practiceId: dbMember.practiceId,
+          userId: dbMember.userId,
+          role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
+          isActive: dbMember.isActive,
+          user: dbMember.user,
+          createdAt: dbMember.createdAt.toISOString(),
+          updatedAt: dbMember.updatedAt.toISOString(),
+        };
+        overrides = dbMember.permissionOverrides.map((ov) => ({
+          permission: ov.permission,
+          effect: ov.effect,
+        }));
+      }
+    }
+
+    if (!member || member.practiceId !== practiceId) {
+      throw new AppError(404, 'MEMBER_NOT_FOUND', 'Practice member not found.');
+    }
+
+    const defaultPermissions = getPermissionsForRole(member.role);
+    const effectivePermissions = await AuthorizationService.getEffectivePermissions(member.userId, practiceId);
+
+    return {
+      member,
+      defaultPermissions,
+      overrides,
+      effectivePermissions,
+    };
+  }
+
+  /**
+   * Updates custom permission overrides for a practice member.
+   */
+  static async updateMemberPermissions(
+    actorUserId: string,
+    practiceId: string,
+    memberId: string,
+    overrides: Array<{ permission: string; effect: 'ALLOW' | 'DENY' | 'DEFAULT' }>
+  ): Promise<{
+    member: MemberListItemDTO;
+    defaultPermissions: Permission[];
+    overrides: Array<{ permission: string; effect: string }>;
+    effectivePermissions: Permission[];
+  }> {
+    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+
+    let targetMember: MemberListItemDTO | null = null;
+    if (process.env.VETRX_FAST_TEST === '1') {
+      targetMember = this.mockMembers.get(memberId) || null;
+    } else {
+      const dbMember = await prisma.practiceMember.findFirst({
+        where: { id: memberId, practiceId },
+        include: {
+          user: { select: { id: true, email: true, name: true, avatarUrl: true } },
+        },
+      });
+      if (dbMember) {
+        targetMember = {
+          id: dbMember.id,
+          practiceId: dbMember.practiceId,
+          userId: dbMember.userId,
+          role: dbMember.role,
+          isClinicalApprover: dbMember.isClinicalApprover || dbMember.role === Role.VETERINARIAN,
+          isActive: dbMember.isActive,
+          user: dbMember.user,
+          createdAt: dbMember.createdAt.toISOString(),
+          updatedAt: dbMember.updatedAt.toISOString(),
+        };
+      }
+    }
+
+    if (!targetMember || targetMember.practiceId !== practiceId) {
+      throw new AppError(404, 'MEMBER_NOT_FOUND', 'Practice member not found.');
+    }
+
+    if (!targetMember.isActive) {
+      throw new AppError(400, 'MEMBER_INACTIVE', 'Cannot modify permissions of a deactivated member.');
+    }
+
+    // Role protection
+    const actorRole = await AuthorizationService.getMembershipRole(actorUserId, practiceId);
+    if (actorRole === Role.PRACTICE_ADMIN) {
+      if (targetMember.role === Role.PRACTICE_OWNER || targetMember.role === Role.PRACTICE_ADMIN) {
+        throw new AppError(
+          403,
+          'ROLE_ASSIGNMENT_FORBIDDEN',
+          'Practice Admin cannot modify permissions for Practice Owner or other Practice Admins.'
+        );
+      }
+    }
+
+    const validPermissions = ALL_ASSIGNABLE_PERMISSIONS as readonly string[];
+    const platformPermissions = PLATFORM_ONLY_PERMISSIONS as readonly string[];
+
+    for (const ov of overrides) {
+      if (ov.permission.startsWith('PLATFORM_') || platformPermissions.includes(ov.permission)) {
+        throw new AppError(
+          400,
+          'PLATFORM_PERMISSION_RESTRICTED',
+          'Platform Super Admin permissions cannot be modified at the practice level.'
+        );
+      }
+
+      if (!validPermissions.includes(ov.permission)) {
+        throw new AppError(400, 'INVALID_PERMISSION', `Unknown permission: ${ov.permission}`);
+      }
+
+      // Clinical approval safety guard
+      if (
+        (ov.permission === PERMISSIONS.PRESCRIPTION_APPROVE ||
+          ov.permission === PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES) &&
+        ov.effect === 'ALLOW'
+      ) {
+        const isClinicallyEligible =
+          targetMember.role === Role.VETERINARIAN ||
+          ((targetMember.role === Role.PRACTICE_OWNER || targetMember.role === Role.PRACTICE_ADMIN) &&
+            targetMember.isClinicalApprover);
+
+        if (!isClinicallyEligible) {
+          throw new AppError(
+            400,
+            'CLINICAL_ELIGIBILITY_REQUIRED',
+            'Clinical prescription approval permission requires clinical practitioner eligibility. Only qualified practicing veterinarians may be granted this permission.'
+          );
+        }
+      }
+
+      if (process.env.VETRX_FAST_TEST === '1') {
+        if (ov.effect === 'DEFAULT') {
+          AuthorizationService.removeMockOverride(targetMember.id, ov.permission);
+        } else {
+          AuthorizationService.setMockOverride(targetMember.id, ov.permission, ov.effect);
+        }
+      } else {
+        if (ov.effect === 'DEFAULT') {
+          await prisma.memberPermissionOverride.deleteMany({
+            where: {
+              practiceMemberId: targetMember.id,
+              permission: ov.permission,
+            },
+          });
+        } else {
+          await prisma.memberPermissionOverride.upsert({
+            where: {
+              practiceMemberId_permission: {
+                practiceMemberId: targetMember.id,
+                permission: ov.permission,
+              },
+            },
+            create: {
+              practiceMemberId: targetMember.id,
+              permission: ov.permission,
+              effect: ov.effect as OverrideEffect,
+              createdByUserId: actorUserId,
+            },
+            update: {
+              effect: ov.effect as OverrideEffect,
+              createdByUserId: actorUserId,
+            },
+          });
+        }
+      }
+    }
+
+    await AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'MEMBER_PERMISSIONS_OVERRIDDEN',
+      resource: 'PracticeMember',
+      resourceId: targetMember.id,
+      details: {
+        targetUserId: targetMember.userId,
+        overridesCount: overrides.length,
+      },
+    });
+
+    return this.getMemberPermissions(actorUserId, practiceId, memberId);
+  }
+
+  /**
+   * Resets all permission overrides for a practice member back to role defaults.
+   */
+  static async resetMemberPermissions(
+    actorUserId: string,
+    practiceId: string,
+    memberId: string
+  ): Promise<{ success: boolean }> {
+    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const mockMap = (AuthorizationService as any).mockOverrides?.get(memberId);
+      if (mockMap) {
+        mockMap.clear();
+      }
+    } else {
+      await prisma.memberPermissionOverride.deleteMany({
+        where: { practiceMemberId: memberId },
+      });
+    }
+
+    await AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'MEMBER_PERMISSIONS_RESET',
+      resource: 'PracticeMember',
+      resourceId: memberId,
+    });
+
+    return { success: true };
   }
 }

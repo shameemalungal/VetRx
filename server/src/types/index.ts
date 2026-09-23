@@ -34,6 +34,7 @@ export interface SafeMembershipDTO {
   practiceId: string;
   userId: string;
   role: UserRole;
+  isClinicalApprover?: boolean;
   isActive: boolean;
   permissions?: string[];
 }
@@ -55,12 +56,21 @@ export interface SafePracticeSettingsDTO {
   mykgvoaMemberId: string | null;
 }
 
+export interface PracticeMembershipSummaryDTO {
+  practiceId: string;
+  practiceName: string;
+  role: UserRole;
+  isClinicalApprover: boolean;
+  isCurrent: boolean;
+}
+
 export interface AuthMeResponse {
   user: SafeUserDTO;
   practice: SafePracticeDTO;
   membership: SafeMembershipDTO;
   permissions: string[];
   settings: SafePracticeSettingsDTO | null;
+  practices?: PracticeMembershipSummaryDTO[];
 }
 
 export interface ApiErrorResponse {

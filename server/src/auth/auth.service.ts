@@ -27,11 +27,29 @@ export class AuthService {
     email: string;
     password: string;
     practiceName?: string;
+    practiceType?: 'INDEPENDENT' | 'CLINIC';
+    isClinicalApprover?: boolean;
+    phone?: string;
+    address?: string;
+    teamMembers?: Array<{ name?: string; email: string; role: Role | string }>;
     invitationToken?: string;
     ipAddress?: string;
     userAgent?: string;
   }): Promise<{ token: string; data: AuthMeResponse }> {
-    const { name, email, password, practiceName, invitationToken, ipAddress, userAgent } = params;
+    const {
+      name,
+      email,
+      password,
+      practiceName,
+      practiceType,
+      isClinicalApprover,
+      phone,
+      address,
+      teamMembers,
+      invitationToken,
+      ipAddress,
+      userAgent,
+    } = params;
 
     const normalizedEmail = email.toLowerCase().trim();
 
@@ -132,6 +150,7 @@ export class AuthService {
             practiceId: invitation.practiceId,
             userId: user.id,
             role: invitation.role,
+            isClinicalApprover: invitation.role === Role.VETERINARIAN,
             isActive: true,
           },
         });
@@ -153,12 +172,20 @@ export class AuthService {
           },
         });
 
+        // For Independent Practitioner, automatically designate as clinical veterinarian (consumes 1 seat).
+        // For Veterinary Clinic, use explicit designation (default false unless requested).
+        const clinicalApproverDesignation =
+          practiceType === 'INDEPENDENT'
+            ? true
+            : Boolean(isClinicalApprover);
+
         // Create Practice Membership as PRACTICE_OWNER
         const membership = await tx.practiceMember.create({
           data: {
             practiceId: practice.id,
             userId: user.id,
             role: Role.PRACTICE_OWNER,
+            isClinicalApprover: clinicalApproverDesignation,
           },
         });
 
@@ -166,8 +193,11 @@ export class AuthService {
         const settings = await tx.practiceSettings.create({
           data: {
             practiceId: practice.id,
+            clinicName: defaultPracticeName,
             doctorName: user.name,
             email: user.email,
+            phone: phone || null,
+            address: address || null,
           },
         });
 
@@ -185,6 +215,24 @@ export class AuthService {
       ipAddress,
       userAgent,
     });
+
+    // 5.5 If teamMembers provided during clinic onboarding, send invitations
+    if (!result.isInvitation && teamMembers && Array.isArray(teamMembers) && teamMembers.length > 0) {
+      for (const member of teamMembers) {
+        if (member.email && member.role) {
+          try {
+            await InvitationService.createInvitation(
+              result.user.id,
+              result.practice.id,
+              member.email,
+              member.role as Role
+            );
+          } catch (err: any) {
+            console.warn(`[Onboarding] Failed to invite team member ${member.email}:`, err?.message || err);
+          }
+        }
+      }
+    }
 
     // 6. Record audit log asynchronously
     if (result.isInvitation) {
@@ -234,10 +282,20 @@ export class AuthService {
           practiceId: result.membership.practiceId,
           userId: result.membership.userId,
           role: result.membership.role,
+          isClinicalApprover: Boolean(result.membership.isClinicalApprover || result.membership.role === Role.VETERINARIAN),
           isActive: result.membership.isActive,
           permissions: getPermissionsForRole(result.membership.role),
         },
         permissions: getPermissionsForRole(result.membership.role),
+        practices: [
+          {
+            practiceId: result.practice.id,
+            practiceName: result.practice.name,
+            role: result.membership.role as any,
+            isClinicalApprover: Boolean(result.membership.isClinicalApprover || result.membership.role === Role.VETERINARIAN),
+            isCurrent: true,
+          },
+        ],
         settings: {
           id: result.settings.id,
           practiceId: result.settings.practiceId,
@@ -1042,6 +1100,16 @@ export class AuthService {
     const settings = practice.settings;
     const permissions = await AuthorizationService.getEffectivePermissions(user.id, practice.id);
 
+    const practices = user.memberships
+      .filter((m) => m.isActive && m.practice?.isActive)
+      .map((m) => ({
+        practiceId: m.practiceId,
+        practiceName: m.practice.name,
+        role: m.role as any,
+        isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
+        isCurrent: m.practiceId === practice.id,
+      }));
+
     return {
       user: {
         id: user.id,
@@ -1065,10 +1133,12 @@ export class AuthService {
         practiceId: membership.practiceId,
         userId: membership.userId,
         role: membership.role,
+        isClinicalApprover: Boolean(membership.isClinicalApprover || membership.role === Role.VETERINARIAN),
         isActive: membership.isActive,
         permissions,
       },
       permissions,
+      practices,
       settings: settings
         ? {
             id: settings.id,

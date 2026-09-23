@@ -31,6 +31,7 @@ export interface AuthMembership {
   practiceId: string;
   userId: string;
   role: 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'VETERINARIAN' | 'STAFF' | 'PRACTICE_STAFF' | 'READ_ONLY';
+  isClinicalApprover?: boolean;
   isActive: boolean;
   permissions?: string[];
 }
@@ -52,12 +53,34 @@ export interface AuthPracticeSettings {
   mykgvoaMemberId: string | null;
 }
 
+export interface AuthPracticeSummary {
+  practiceId: string;
+  practiceName: string;
+  role: string;
+  isClinicalApprover: boolean;
+  isCurrent: boolean;
+}
+
+export interface RegisterParams {
+  name: string;
+  email: string;
+  password: string;
+  practiceName?: string;
+  practiceType?: 'INDEPENDENT' | 'CLINIC';
+  isClinicalApprover?: boolean;
+  phone?: string;
+  address?: string;
+  teamMembers?: Array<{ name?: string; email: string; role: string }>;
+  invitationToken?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   practice: AuthPractice | null;
   membership: AuthMembership | null;
   settings: AuthPracticeSettings | null;
   permissions: string[];
+  practices: AuthPracticeSummary[];
   isLoading: boolean;
   error: string | null;
   can: (permission: string) => boolean;
@@ -65,7 +88,14 @@ interface AuthContextType {
   isPracticeOwner: () => boolean;
   isPlatformAdmin: () => boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, practiceName?: string, invitationToken?: string) => Promise<void>;
+  register: (
+    nameOrParams: string | RegisterParams,
+    email?: string,
+    password?: string,
+    practiceName?: string,
+    invitationToken?: string
+  ) => Promise<void>;
+  switchPractice: (practiceId: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updatePracticeSettings: (updates: Partial<AuthPracticeSettings>) => Promise<void>;
@@ -82,6 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [membership, setMembership] = useState<AuthMembership | null>(null);
   const [settings, setSettings] = useState<AuthPracticeSettings | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [practices, setPractices] = useState<AuthPracticeSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMembership(data.membership);
         setSettings(data.settings);
         setPermissions(data.permissions || data.membership?.permissions || []);
+        if (data.practices) setPractices(data.practices);
         switchTenantDb(data.practice?.id);
         await ensureSeeded();
         void useSettingsStore.getState().loadSettings(data.settings, data.user);
@@ -135,6 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMembership(null);
         setSettings(null);
         setPermissions([]);
+        setPractices([]);
         switchTenantDb(null);
         useSettingsStore.getState().reset();
       }
@@ -145,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMembership(null);
       setSettings(null);
       setPermissions([]);
+      setPractices([]);
       switchTenantDb(null);
       useSettingsStore.getState().reset();
     } finally {
@@ -175,18 +209,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMembership(data.membership);
     setSettings(data.settings);
     setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
     switchTenantDb(data.practice?.id);
     await ensureSeeded();
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
-  const register = async (name: string, email: string, password: string, practiceName?: string, invitationToken?: string) => {
+  const register = async (
+    nameOrParams: string | RegisterParams,
+    email?: string,
+    password?: string,
+    practiceName?: string,
+    invitationToken?: string
+  ) => {
     setError(null);
+    const payload =
+      typeof nameOrParams === 'object'
+        ? nameOrParams
+        : {
+            name: nameOrParams,
+            email: email!,
+            password: password!,
+            practiceName,
+            invitationToken,
+          };
+
     const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name, email, password, practiceName, invitationToken }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -199,6 +251,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setMembership(data.membership);
     setSettings(data.settings);
     setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
+  };
+
+  const switchPractice = async (practiceId: string) => {
+    setError(null);
+    const res = await fetch(`${API_BASE}/api/auth/switch-practice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ practiceId }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Failed to switch practice.');
+    }
+
+    setUser(data.user);
+    setPractice(data.practice);
+    setMembership(data.membership);
+    setSettings(data.settings);
+    setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
     switchTenantDb(data.practice?.id);
     await ensureSeeded();
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
@@ -217,6 +295,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMembership(null);
       setSettings(null);
       setPermissions([]);
+      setPractices([]);
       switchTenantDb(null);
       useSettingsStore.getState().reset();
     }
@@ -246,6 +325,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         membership,
         settings,
         permissions,
+        practices,
         isLoading,
         error,
         can,
@@ -254,6 +334,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isPlatformAdmin,
         login,
         register,
+        switchPractice,
         logout,
         refreshSession,
         updatePracticeSettings,

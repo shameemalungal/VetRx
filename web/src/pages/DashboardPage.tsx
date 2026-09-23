@@ -43,7 +43,7 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, practice } = useAuth();
+  const { user, practice, membership } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +94,49 @@ export const DashboardPage: React.FC = () => {
       unmounted = true;
     };
   }, []);
+
+  // ── Onboarding Checklist (Section 30) ────────────────────────
+  const [checklistDismissed, setChecklistDismissed] = useState<boolean>(() => {
+    return localStorage.getItem(`vetrx_dismissed_onboarding_${practice?.id}`) === 'true';
+  });
+  const [teamMembersCount, setTeamMembersCount] = useState<number>(1);
+  const [hasClinicalApprover, setHasClinicalApprover] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!practice?.id) return;
+    let unmounted = false;
+    fetch(`${API_BASE}/api/practice/members`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data) {
+          const members = data.members || [];
+          const invites = data.invitations || [];
+          setTeamMembersCount(members.length + invites.length);
+          const hasApprover = members.some((m: any) => m.isClinicalApprover || m.role === 'VETERINARIAN');
+          setHasClinicalApprover(hasApprover);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, [practice?.id]);
+
+  const isPracticeSetup = Boolean(practice?.name && practice.name.trim());
+  const isTeamAdded = teamMembersCount > 1;
+  const isProfileComplete = Boolean(practitioner?.registrationNumber?.trim() || organisation?.licenseNumber?.trim());
+  const isClinicalSetup = Boolean(membership?.isClinicalApprover || membership?.role === 'VETERINARIAN' || hasClinicalApprover);
+  const completedChecklistCount = [isPracticeSetup, isTeamAdded, isProfileComplete, isClinicalSetup].filter(Boolean).length;
+  const isChecklistAllComplete = completedChecklistCount === 4;
+  const canManagePractice = membership?.role === 'PRACTICE_OWNER' || membership?.role === 'PRACTICE_ADMIN' || user?.platformRole === 'SUPER_ADMIN';
+  const showChecklist = canManagePractice && !checklistDismissed && !isChecklistAllComplete;
+
+  const handleDismissChecklist = () => {
+    setChecklistDismissed(true);
+    if (practice?.id) {
+      localStorage.setItem(`vetrx_dismissed_onboarding_${practice.id}`, 'true');
+    }
+  };
 
   // ── Metric Counts ───────────────────────────────────────────
   const rxCount      = useLiveQuery(() => db.prescriptions.count(), []);
@@ -399,6 +442,119 @@ export const DashboardPage: React.FC = () => {
             <Icon name="check-circle" size={16} />
             <span>Review & Approve ({pendingApprovalsCount})</span>
           </Link>
+        </div>
+      )}
+
+      {/* ── ONBOARDING CHECKLIST BANNER (Section 30) ─────────────── */}
+      {showChecklist && (
+        <div className="onboarding-checklist-card">
+          <div className="onboarding-checklist-header">
+            <div className="onboarding-checklist-title-group">
+              <span className="onboarding-badge">Setup Guide</span>
+              <h2 className="onboarding-checklist-title">Practice Setup Checklist</h2>
+              <span className="onboarding-checklist-progress">
+                {completedChecklistCount} of 4 tasks complete
+              </span>
+            </div>
+            <button
+              type="button"
+              className="onboarding-dismiss-btn"
+              onClick={handleDismissChecklist}
+              title="Dismiss checklist"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          <div className="onboarding-checklist-grid">
+            {/* Task 1 */}
+            <div className={`onboarding-task-item ${isPracticeSetup ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isPracticeSetup ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Set up your practice</span>
+                <span className="onboarding-task-desc">Practice name, address, and phone</span>
+              </div>
+              {isPracticeSetup ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=practice')}
+                >
+                  Configure
+                </button>
+              )}
+            </div>
+
+            {/* Task 2 */}
+            <div className={`onboarding-task-item ${isTeamAdded ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isTeamAdded ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Add your team</span>
+                <span className="onboarding-task-desc">Invite colleagues or clinic staff</span>
+              </div>
+              {isTeamAdded ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=team')}
+                >
+                  Add Team
+                </button>
+              )}
+            </div>
+
+            {/* Task 3 */}
+            <div className={`onboarding-task-item ${isProfileComplete ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isProfileComplete ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Complete your profile</span>
+                <span className="onboarding-task-desc">Veterinary registration or license</span>
+              </div>
+              {isProfileComplete ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=profile')}
+                >
+                  Complete Profile
+                </button>
+              )}
+            </div>
+
+            {/* Task 4 */}
+            <div className={`onboarding-task-item ${isClinicalSetup ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isClinicalSetup ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Set up clinical practitioner</span>
+                <span className="onboarding-task-desc">Designate a practicing veterinarian</span>
+              </div>
+              {isClinicalSetup ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=team')}
+                >
+                  Set Up Clinician
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

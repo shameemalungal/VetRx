@@ -343,6 +343,78 @@ export const PERMISSION_METADATA: Record<Permission, PermissionDefinition> = {
   [PERMISSIONS.PLATFORM_AUDIT_VIEW]: { key: PERMISSIONS.PLATFORM_AUDIT_VIEW, label: 'Platform Audit View', description: 'Global platform security log review', category: 'PLATFORM' },
 };
 
+export interface PermissionGroup {
+  id: 'CLINICAL' | 'PRACTICE' | 'ADMINISTRATION' | 'BILLING' | 'SECURITY';
+  name: string;
+  description: string;
+  permissions: Array<{
+    key: Permission;
+    label: string;
+    description: string;
+    isClinicalSafetyCritical?: boolean;
+  }>;
+}
+
+export const PERMISSION_GROUPS: PermissionGroup[] = [
+  {
+    id: 'CLINICAL',
+    name: 'Clinical',
+    description: 'Patient records, formulary, treatments, and prescription workflows',
+    permissions: [
+      { key: PERMISSIONS.PATIENT_VIEW, label: 'View Patients', description: 'View patient records and history' },
+      { key: PERMISSIONS.PATIENT_CREATE, label: 'Create Patients', description: 'Register new patients' },
+      { key: PERMISSIONS.PATIENT_UPDATE, label: 'Edit Patients', description: 'Modify patient details and vitals' },
+      { key: PERMISSIONS.PRESCRIPTION_VIEW, label: 'View Prescriptions', description: 'View prescriptions and draft orders' },
+      { key: PERMISSIONS.PRESCRIPTION_CREATE, label: 'Create Prescription Drafts', description: 'Prepare draft prescriptions' },
+      { key: PERMISSIONS.PRESCRIPTION_FORWARD_FOR_APPROVAL, label: 'Send Prescriptions for Approval', description: 'Send draft prescriptions to veterinarians for review' },
+      { key: PERMISSIONS.PRESCRIPTION_APPROVE, label: 'Approve Prescriptions', description: 'Review, approve and digitally sign clinical prescriptions', isClinicalSafetyCritical: true },
+      { key: PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES, label: 'Request Prescription Changes', description: 'Reject or request revisions on prescriptions with remarks', isClinicalSafetyCritical: true },
+    ],
+  },
+  {
+    id: 'PRACTICE',
+    name: 'Practice',
+    description: 'Practice overview, general settings, reports, and invoices',
+    permissions: [
+      { key: PERMISSIONS.PRACTICE_VIEW, label: 'View Practice', description: 'View practice profile and branch details' },
+      { key: PERMISSIONS.PRACTICE_SETTINGS_MANAGE, label: 'Manage Practice Settings', description: 'Configure clinic branding, templates, and preferences' },
+      { key: PERMISSIONS.REPORT_VIEW, label: 'View Reports', description: 'Access practice analytics and operational reports' },
+      { key: PERMISSIONS.INVOICE_VIEW, label: 'View Invoices', description: 'View invoices and receipts' },
+      { key: PERMISSIONS.INVOICE_CREATE, label: 'Manage Invoices', description: 'Generate and manage client invoices' },
+    ],
+  },
+  {
+    id: 'ADMINISTRATION',
+    name: 'Administration',
+    description: 'Team management, invitations, user activation, and role assignments',
+    permissions: [
+      { key: PERMISSIONS.USER_VIEW, label: 'View Team', description: 'View team members and pending invitations' },
+      { key: PERMISSIONS.USER_INVITE, label: 'Invite Team Members', description: 'Send email invitations to new team members' },
+      { key: PERMISSIONS.USER_UPDATE, label: 'Edit Team Members', description: 'Update team member information' },
+      { key: PERMISSIONS.USER_DEACTIVATE, label: 'Deactivate Team Members', description: 'Deactivate or reactivate member access' },
+      { key: PERMISSIONS.ROLE_ASSIGN, label: 'Assign Roles', description: 'Assign roles and configure member permissions' },
+    ],
+  },
+  {
+    id: 'BILLING',
+    name: 'Billing',
+    description: 'Commercial subscription plans, invoices, and payment management',
+    permissions: [
+      { key: PERMISSIONS.BILLING_VIEW, label: 'View Billing', description: 'View billing history and payment methods' },
+      { key: PERMISSIONS.BILLING_MANAGE, label: 'Manage Billing', description: 'Update payment methods and pay invoices' },
+      { key: PERMISSIONS.SUBSCRIPTION_MANAGE, label: 'Manage Subscription', description: 'Upgrade, downgrade, or change subscription tier' },
+    ],
+  },
+  {
+    id: 'SECURITY',
+    name: 'Security',
+    description: 'Audit logs and activity history',
+    permissions: [
+      { key: PERMISSIONS.AUDIT_LOG_VIEW, label: 'View Activity History', description: 'Review tamper-evident security audit logs' },
+    ],
+  },
+];
+
 /**
  * Resolves effective permissions for a given practice role.
  */
@@ -358,3 +430,4 @@ export function roleHasPermission(role: Role | string, permission: Permission | 
   const permissions = getPermissionsForRole(role);
   return permissions.includes(permission as Permission);
 }
+

@@ -158,6 +158,14 @@ export class AuthorizationService {
   }
 
   /**
+   * Returns whether a user is an active member of a specific practice.
+   */
+  static async isPracticeMember(userId: string, practiceId: string): Promise<boolean> {
+    const membership = await this.resolveMembership(userId, practiceId);
+    return Boolean(membership && membership.isActive);
+  }
+
+  /**
    * Returns effective permissions for a user in a practice, incorporating role defaults and overrides.
    */
   static async getEffectivePermissions(userId: string, practiceId: string): Promise<Permission[]> {

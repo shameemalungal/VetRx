@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePractice } from '../middleware/tenant.js';
 import { requirePracticePermission } from '../middleware/authorization.js';
-import { PERMISSIONS, ROLE_PERMISSIONS, getPermissionsForRole } from './permissions.js';
+import { PERMISSIONS, ROLE_PERMISSIONS, PERMISSION_GROUPS, getPermissionsForRole } from './permissions.js';
 import { MemberService } from './member.service.js';
 import { InvitationService } from './invitation.service.js';
 import { AuthorizationService } from './authorization.service.js';
@@ -102,6 +102,18 @@ practiceMemberRouter.get('/roles', async (req: AuthenticatedRequest, res, next) 
 });
 
 /**
+ * GET /api/practice/permission-groups
+ * Lists human-readable permission groups for customized permission administration.
+ */
+practiceMemberRouter.get('/permission-groups', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    res.status(200).json(PERMISSION_GROUPS);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/practice/permissions
  * Returns current user's effective permissions in this practice.
  */
@@ -187,6 +199,87 @@ practiceMemberRouter.patch(
         isClinicalApprover
       );
       res.status(200).json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/practice/members/:id/permissions
+ * Retrieves member defaults, overrides, and effective permissions.
+ */
+practiceMemberRouter.get(
+  '/members/:id/permissions',
+  requirePracticePermission(PERMISSIONS.ROLE_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = getUserId(req);
+      const memberId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!memberId) throw new AppError(400, 'BAD_REQUEST', 'Member ID required.');
+
+      const result = await MemberService.getMemberPermissions(actorUserId, practiceId, memberId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const updateMemberPermissionsSchema = z.object({
+  overrides: z.array(
+    z.object({
+      permission: z.string().min(1),
+      effect: z.enum(['ALLOW', 'DENY', 'DEFAULT']),
+    })
+  ),
+});
+
+/**
+ * PATCH /api/practice/members/:id/permissions
+ * Customizes member permission overrides.
+ */
+practiceMemberRouter.patch(
+  '/members/:id/permissions',
+  requirePracticePermission(PERMISSIONS.ROLE_ASSIGN),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = getUserId(req);
+      const memberId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!memberId) throw new AppError(400, 'BAD_REQUEST', 'Member ID required.');
+
+      const { overrides } = updateMemberPermissionsSchema.parse(req.body);
+      const result = await MemberService.updateMemberPermissions(
+        actorUserId,
+        practiceId,
+        memberId,
+        overrides
+      );
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/practice/members/:id/permissions/reset
+ * Resets member permission overrides back to role defaults.
+ */
+practiceMemberRouter.post(
+  '/members/:id/permissions/reset',
+  requirePracticePermission(PERMISSIONS.ROLE_ASSIGN),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = getUserId(req);
+      const memberId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!memberId) throw new AppError(400, 'BAD_REQUEST', 'Member ID required.');
+
+      const result = await MemberService.resetMemberPermissions(actorUserId, practiceId, memberId);
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }
@@ -309,6 +402,28 @@ practiceMemberRouter.post(
  */
 practiceMemberRouter.post(
   '/invitations/:id/revoke',
+  requirePracticePermission(PERMISSIONS.USER_INVITE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = getUserId(req);
+      const invitationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!invitationId) throw new AppError(400, 'BAD_REQUEST', 'Invitation ID required.');
+
+      const result = await InvitationService.revokeInvitation(actorUserId, practiceId, invitationId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * DELETE /api/practice/invitations/:id
+ * Alias to revoke an existing invitation.
+ */
+practiceMemberRouter.delete(
+  '/invitations/:id',
   requirePracticePermission(PERMISSIONS.USER_INVITE),
   async (req: AuthenticatedRequest, res, next) => {
     try {

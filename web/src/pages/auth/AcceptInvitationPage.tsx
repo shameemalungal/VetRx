@@ -82,9 +82,6 @@ export const AcceptInvitationPage: React.FC = () => {
 
       setSuccess(true);
       await refreshSession();
-      setTimeout(() => {
-        navigate('/');
-      }, 1500);
     } catch (err: any) {
       setError(err.message || 'Error accepting invitation.');
     } finally {
@@ -100,16 +97,16 @@ export const AcceptInvitationPage: React.FC = () => {
   const formatRole = (role: string) => {
     switch (role) {
       case 'PRACTICE_OWNER':
-        return 'Practice Owner';
+        return 'Owner';
       case 'PRACTICE_ADMIN':
-        return 'Practice Administrator';
+        return 'Clinic Admin';
       case 'VETERINARIAN':
         return 'Veterinarian';
       case 'STAFF':
       case 'PRACTICE_STAFF':
-        return 'Practice Staff';
+        return 'Staff';
       case 'READ_ONLY':
-        return 'Read Only Auditor';
+        return 'Read Only';
       default:
         return role;
     }
@@ -168,29 +165,37 @@ export const AcceptInvitationPage: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && success && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+        {!loading && !error && success && preview && (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
             <div
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '48px',
-                height: '48px',
+                width: '56px',
+                height: '56px',
                 borderRadius: '50%',
-                background: '#ecfdf5',
-                color: '#059669',
+                background: '#f0fdf4',
+                color: '#16a34a',
                 marginBottom: '16px',
               }}
             >
-              <Icon name="check" size={24} />
+              <Icon name="check" size={28} />
             </div>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0f172a', marginBottom: '8px' }}>
-              Invitation Accepted!
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+              You're now a member of {preview.practiceName}.
             </h2>
-            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px' }}>
-              You are now a member of <strong>{preview?.practiceName}</strong>. Loading your workspace…
+            <p style={{ fontSize: '15px', color: '#475569', marginBottom: '24px' }}>
+              Role: <strong>{formatRole(preview.role)}</strong>
             </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => navigate('/')}
+              style={{ width: '100%', padding: '12px 20px', fontSize: '15px', fontWeight: 600 }}
+            >
+              Go to Clinic
+            </button>
           </div>
         )}
 
