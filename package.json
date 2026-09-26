@@ -23,7 +23,9 @@
     "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
     "db:migrate:deploy": "prisma migrate deploy --schema=./prisma/schema.prisma",
     "db:studio": "prisma studio --schema=./prisma/schema.prisma",
-    "db:seed": "tsx ./prisma/seed.ts"
+    "db:seed": "tsx ./prisma/seed.ts",
+    "admin:promote-super-admin": "tsx server/src/scripts/promote-super-admin.ts",
+    "admin:demote-super-admin": "tsx server/src/scripts/demote-super-admin.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

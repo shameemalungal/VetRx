@@ -10,7 +10,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "oxlint src || eslint src --ext .ts || echo 'Lint passed'",
-    "test": "node --max-old-space-size=4096 --import tsx/esm --test --test-concurrency=1 tests/**/*.test.ts"
+    "test": "node --max-old-space-size=4096 --import tsx/esm --test --test-concurrency=1 tests/**/*.test.ts",
+    "admin:promote-super-admin": "node dist/scripts/promote-super-admin.js",
+    "admin:demote-super-admin": "node dist/scripts/demote-super-admin.js"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
