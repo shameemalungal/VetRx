@@ -6,16 +6,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Icon } from '../../components/ui/Icon';
-
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
+import { platformAdminApi } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 interface PracticeSummary {
   id: string;
   name: string;
-  slug: string | null;
-  ownerUserId: string;
+  slug?: string | null;
+  ownerUserId?: string;
   isActive: boolean;
-  createdAt: string;
+  createdAt?: string;
   _count?: {
     members: number;
     patients: number;
@@ -26,6 +26,9 @@ interface PracticeSummary {
     name: string;
     email: string;
   } | null;
+  ownerName?: string;
+  ownerEmail?: string;
+  memberCount?: number;
 }
 
 interface PracticeMember {
@@ -122,25 +125,33 @@ export const RolePermissionManagementPage: React.FC = () => {
     const bootstrap = async () => {
       setIsLoading(true);
       try {
-        const [practicesRes, matrixRes] = await Promise.all([
-          fetch(`${API_BASE}/api/platform/admin/practices`, { credentials: 'include' }),
-          fetch(`${API_BASE}/api/platform/admin/permission-matrix`, { credentials: 'include' }),
+        const [practicesRes, mData] = await Promise.all([
+          platformAdminApi.listPractices({ pageSize: 100 }),
+          platformAdminApi.getRoleMatrix(),
         ]);
 
-        if (practicesRes.ok) {
-          const pData = await practicesRes.json();
-          setPractices(pData);
-          if (pData.length > 0 && !selectedPracticeId) {
-            setSelectedPracticeId(pData[0].id);
-          }
+        const rawList = (practicesRes as any)?.results || (Array.isArray(practicesRes) ? practicesRes : []);
+        setPractices(rawList);
+        if (rawList.length > 0 && !selectedPracticeId) {
+          setSelectedPracticeId(rawList[0].id);
         }
 
-        if (matrixRes.ok) {
-          const mData = await matrixRes.json();
-          setMatrixData(mData);
-        }
-      } catch (err) {
+        const normalizedMatrix: PermissionMatrixData = {
+          roles: mData.roles || ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY'],
+          roleDefaults: (mData as any).roleDefaults || (mData as any).rolePermissions || {},
+          metadata: (mData as any).metadata || {},
+          permissions: {
+            clinical: (mData as any).permissions?.clinical || (mData as any).categories?.CLINICAL || [],
+            practice: (mData as any).permissions?.practice || (mData as any).categories?.PRACTICE || [],
+            commercial: (mData as any).permissions?.commercial || (mData as any).categories?.COMMERCIAL || [],
+            security: (mData as any).permissions?.security || (mData as any).categories?.SECURITY || [],
+            platformOnly: (mData as any).permissions?.platformOnly || (mData as any).categories?.PLATFORM || [],
+          },
+        };
+        setMatrixData(normalizedMatrix);
+      } catch (err: unknown) {
         console.error('Failed to load platform matrix data:', err);
+        showToast(`Failed to load matrix: ${formatApiError(err)}`);
       } finally {
         setIsLoading(false);
       }
@@ -155,21 +166,16 @@ export const RolePermissionManagementPage: React.FC = () => {
 
     const loadPracticeMembers = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/platform/admin/practices/${selectedPracticeId}`, {
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const mems: PracticeMember[] = data.members || [];
-          setMembers(mems);
-          if (mems.length > 0) {
-            setSelectedMemberId(mems[0].id);
-          } else {
-            setSelectedMemberId('');
-            setMemberPermissions(null);
-          }
+        const data = await platformAdminApi.getPractice(selectedPracticeId);
+        const mems: PracticeMember[] = (data as any)?.members || [];
+        setMembers(mems);
+        if (mems.length > 0) {
+          setSelectedMemberId(mems[0].id);
+        } else {
+          setSelectedMemberId('');
+          setMemberPermissions(null);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Failed to load practice details:', err);
       }
     };
@@ -181,15 +187,9 @@ export const RolePermissionManagementPage: React.FC = () => {
   const loadMemberPermissions = async () => {
     if (!selectedPracticeId || !selectedMemberId) return;
     try {
-      const res = await fetch(
-        `${API_BASE}/api/platform/admin/practices/${selectedPracticeId}/members/${selectedMemberId}/permissions`,
-        { credentials: 'include' }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setMemberPermissions(data);
-      }
-    } catch (err) {
+      const data = await platformAdminApi.getMemberPermissions(selectedPracticeId, selectedMemberId);
+      setMemberPermissions(data as any);
+    } catch (err: unknown) {
       console.error('Failed to fetch member permissions:', err);
     }
   };
@@ -211,31 +211,18 @@ export const RolePermissionManagementPage: React.FC = () => {
     if (!selectedPracticeId || !selectedMemberId || !targetPermission) return;
     setIsUpdating(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/platform/admin/practices/${selectedPracticeId}/members/${selectedMemberId}/permissions`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            permission: targetPermission,
-            effect: targetEffect,
-            reason: overrideReason.trim() || undefined,
-          }),
-        }
-      );
+      await platformAdminApi.setMemberOverride(selectedPracticeId, selectedMemberId, {
+        permission: targetPermission,
+        effect: targetEffect,
+        reason: overrideReason.trim() || undefined,
+      });
 
-      if (res.ok) {
-        showToast(`Override saved: ${targetPermission} is now ${targetEffect}.`);
-        setModalOpen(false);
-        await loadMemberPermissions();
-      } else {
-        const err = await res.json();
-        showToast(`Error: ${err.message || 'Failed to save override'}`);
-      }
-    } catch (err) {
+      showToast(`Override saved: ${targetPermission} is now ${targetEffect}.`);
+      setModalOpen(false);
+      await loadMemberPermissions();
+    } catch (err: unknown) {
       console.error('Failed to save override:', err);
-      showToast('Network error saving override.');
+      showToast(`Error: ${formatApiError(err, 'Failed to save override')}`);
     } finally {
       setIsUpdating(false);
     }
@@ -246,24 +233,12 @@ export const RolePermissionManagementPage: React.FC = () => {
     if (!selectedPracticeId || !selectedMemberId) return;
     setIsUpdating(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/platform/admin/practices/${selectedPracticeId}/members/${selectedMemberId}/permissions/${permission}`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
-      );
-
-      if (res.ok) {
-        showToast(`Override removed. Reset to role default.`);
-        await loadMemberPermissions();
-      } else {
-        const err = await res.json();
-        showToast(`Error: ${err.message || 'Failed to reset override'}`);
-      }
-    } catch (err) {
+      await platformAdminApi.removeMemberOverride(selectedPracticeId, selectedMemberId, permission);
+      showToast(`Override removed. Reset to role default.`);
+      await loadMemberPermissions();
+    } catch (err: unknown) {
       console.error('Failed to reset override:', err);
-      showToast('Network error removing override.');
+      showToast(`Error: ${formatApiError(err, 'Failed to reset override')}`);
     } finally {
       setIsUpdating(false);
     }
@@ -405,63 +380,65 @@ export const RolePermissionManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tenant Practice Selection Strip */}
-      <div
-        style={{
-          background: 'var(--color-surface-container-lowest)',
-          border: '1px solid var(--color-surface-container)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="hospital" size={18} color="var(--color-primary)" />
-            <label htmlFor="select-tenant-practice" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-              Practice Tenant:
-            </label>
-          </div>
-          <select
-            id="select-tenant-practice"
-            className="form-input"
-            style={{ minWidth: '260px', height: '38px', fontSize: '13px', borderRadius: '8px' }}
-            value={selectedPracticeId}
-            onChange={(e) => setSelectedPracticeId(e.target.value)}
-          >
-            {practices.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} {p.owner?.name ? `(Owner: ${p.owner.name})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {selectedPractice && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-            <span>Members: <strong>{selectedPractice._count?.members || members.length}</strong></span>
-            <span>Patients: <strong>{selectedPractice._count?.patients || 0}</strong></span>
-            <span>Prescriptions: <strong>{selectedPractice._count?.prescriptions || 0}</strong></span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                color: selectedPractice.isActive ? '#059669' : '#dc2626',
-                fontWeight: 600,
-              }}
+      {/* Tenant Practice Selection Strip (Member Overrides Tab Only) */}
+      {activeTab === 'member_overrides' && (
+        <div
+          style={{
+            background: 'var(--color-surface-container-lowest)',
+            border: '1px solid var(--color-surface-container)',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Icon name="hospital" size={18} color="var(--color-primary)" />
+              <label htmlFor="select-tenant-practice" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                Practice Tenant:
+              </label>
+            </div>
+            <select
+              id="select-tenant-practice"
+              className="form-input"
+              style={{ minWidth: '260px', height: '38px', fontSize: '13px', borderRadius: '8px' }}
+              value={selectedPracticeId}
+              onChange={(e) => setSelectedPracticeId(e.target.value)}
             >
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedPractice.isActive ? '#10b981' : '#ef4444' }} />
-              {selectedPractice.isActive ? 'Active' : 'Suspended'}
-            </span>
+              {practices.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.owner?.name ? `(Owner: ${p.owner.name})` : p.ownerName ? `(Owner: ${p.ownerName})` : ''}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-      </div>
+
+          {selectedPractice && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+              <span>Members: <strong>{selectedPractice._count?.members ?? selectedPractice.memberCount ?? members.length}</strong></span>
+              <span>Patients: <strong>{selectedPractice._count?.patients ?? 0}</strong></span>
+              <span>Prescriptions: <strong>{selectedPractice._count?.prescriptions ?? 0}</strong></span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  color: selectedPractice.isActive ? '#059669' : '#dc2626',
+                  fontWeight: 600,
+                }}
+              >
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: selectedPractice.isActive ? '#10b981' : '#ef4444' }} />
+                {selectedPractice.isActive ? 'Active' : 'Suspended'}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'member_overrides' ? (
         /* ── Tab 1: Member Overrides View ──────────────────────────── */
@@ -781,9 +758,19 @@ export const RolePermissionManagementPage: React.FC = () => {
                   })}
                 </div>
               </div>
+            ) : members.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: '16px', border: '1px solid var(--color-surface-container)' }}>
+                <Icon name="users" size={36} color="var(--color-outline)" style={{ margin: '0 auto 12px' }} />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '12px 0 4px', color: 'var(--color-on-surface)' }}>
+                  No Practice Members Found
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', maxWidth: '420px', margin: '0 auto' }}>
+                  {selectedPractice?.name || 'This practice'} currently has 0 registered users. To configure member overrides, add users to this practice via Practice Management or User Administration.
+                </p>
+              </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: '16px', border: '1px solid var(--color-surface-container)' }}>
-                <Icon name="user" size={32} color="var(--color-outline)" />
+                <Icon name="user" size={32} color="var(--color-outline)" style={{ margin: '0 auto 12px' }} />
                 <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '12px 0 4px' }}>No Member Selected</h3>
                 <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)' }}>
                   Select a practice member from the left panel to inspect and customize their permission matrix.
@@ -808,7 +795,7 @@ export const RolePermissionManagementPage: React.FC = () => {
               Baseline Practice Role Matrix
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', margin: '4px 0 0' }}>
-              Standard system-level baseline capabilities assigned to tenant roles by default before account overrides.
+              Standard platform-wide canonical baseline capabilities assigned to practice roles across all 43 permissions.
             </p>
           </div>
 
@@ -817,8 +804,8 @@ export const RolePermissionManagementPage: React.FC = () => {
               <tr style={{ borderBottom: '2px solid var(--color-surface-container)', textAlign: 'left' }}>
                 <th style={{ padding: '12px 14px', color: 'var(--color-on-surface)' }}>Permission</th>
                 <th style={{ padding: '12px 14px', color: 'var(--color-on-surface)' }}>Category</th>
-                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Owner</th>
-                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Admin</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Practice Owner</th>
+                <th style={{ padding: '12px 14px', textAlign: 'center' }}>Practice Admin</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center' }}>Veterinarian</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center' }}>Staff</th>
                 <th style={{ padding: '12px 14px', textAlign: 'center' }}>Read Only</th>
@@ -826,35 +813,58 @@ export const RolePermissionManagementPage: React.FC = () => {
             </thead>
             <tbody>
               {matrixData &&
-                Object.entries(matrixData.metadata).map(([code, meta]) => {
-                  const isOwner = matrixData.roleDefaults['PRACTICE_OWNER']?.includes(code);
-                  const isAdmin = matrixData.roleDefaults['PRACTICE_ADMIN']?.includes(code);
-                  const isVet = matrixData.roleDefaults['VETERINARIAN']?.includes(code);
-                  const isStaff = matrixData.roleDefaults['STAFF']?.includes(code);
-                  const isReadOnly = matrixData.roleDefaults['READ_ONLY']?.includes(code);
+                Object.entries(matrixData.metadata || {}).map(([code, meta]) => {
+                  const rDefaults = matrixData.roleDefaults || {};
+                  const isOwner = rDefaults['PRACTICE_OWNER']?.includes(code);
+                  const isAdmin = rDefaults['PRACTICE_ADMIN']?.includes(code);
+                  const isVet = rDefaults['VETERINARIAN']?.includes(code);
+                  const isStaff = rDefaults['STAFF']?.includes(code) || rDefaults['PRACTICE_STAFF']?.includes(code);
+                  const isReadOnly = rDefaults['READ_ONLY']?.includes(code);
 
                   return (
                     <tr key={code} style={{ borderBottom: '1px solid var(--color-surface-container)' }}>
                       <td style={{ padding: '10px 14px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--color-on-surface)' }}>{meta.name}</div>
+                        <div style={{ fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{meta.name}</span>
+                          {meta.clinicalSafetyWarning && (
+                            <span
+                              style={{
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                              }}
+                              title="Clinical Safety Sensitivity: Delegates prescription authority"
+                            >
+                              Clinical Sensitive
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '11px', color: 'var(--color-outline)', fontFamily: 'var(--font-mono)' }}>{code}</div>
+                        {meta.description && (
+                          <div style={{ fontSize: '11.5px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
+                            {meta.description}
+                          </div>
+                        )}
                       </td>
-                      <td style={{ padding: '10px 14px', textTransform: 'capitalize', color: 'var(--color-on-surface-variant)' }}>
+                      <td style={{ padding: '10px 14px', textTransform: 'capitalize', color: 'var(--color-on-surface-variant)', verticalAlign: 'top' }}>
                         {meta.category}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {isOwner ? <span style={{ color: '#059669', fontWeight: 800 }}>✓</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {isAdmin ? <span style={{ color: '#059669', fontWeight: 800 }}>✓</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {isVet ? <span style={{ color: '#059669', fontWeight: 800 }}>✓</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {isStaff ? <span style={{ color: '#059669', fontWeight: 800 }}>✓</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle' }}>
                         {isReadOnly ? <span style={{ color: '#059669', fontWeight: 800 }}>✓</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
                     </tr>

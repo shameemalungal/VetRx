@@ -23,6 +23,7 @@ import {
   getPermissionsForRole,
 } from '../src/auth/permissions.js';
 import { AuthorizationService } from '../src/auth/authorization.service.js';
+import { MemberService } from '../src/auth/member.service.js';
 import { PlatformAdminService } from '../src/platform/platform-admin.service.js';
 import { AuditService } from '../src/lib/audit.service.js';
 
@@ -44,6 +45,18 @@ describe('Platform Super Admin Permission Overrides Suite', () => {
       id: staffMemberId,
       role: Role.STAFF,
       isActive: true,
+    });
+
+    MemberService.setMockMember({
+      id: staffMemberId,
+      practiceId,
+      userId: staffUserId,
+      role: Role.STAFF,
+      isActive: true,
+      isClinicalApprover: false,
+      user: { id: staffUserId, name: 'Staff User', email: 'staff@gamma.vet', avatarUrl: null },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
   });
 
@@ -69,44 +82,66 @@ describe('Platform Super Admin Permission Overrides Suite', () => {
   });
 
   describe('Category B: Account-Level Permission Overrides (ALLOW / DENY)', () => {
-    it('3. Default staff member does not have PRESCRIPTION_APPROVE', async () => {
+    it('3. Default staff member does not have MEDICINE_UPDATE', async () => {
       const perms = await AuthorizationService.getEffectivePermissions(staffUserId, practiceId);
-      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE), false);
-      const hasPerm = await AuthorizationService.hasPermission(staffUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE);
+      assert.strictEqual(perms.includes(PERMISSIONS.MEDICINE_UPDATE), false);
+      const hasPerm = await AuthorizationService.hasPermission(staffUserId, practiceId, PERMISSIONS.MEDICINE_UPDATE);
       assert.strictEqual(hasPerm, false);
     });
 
-    it('4. Super admin configures ALLOW override for PRESCRIPTION_APPROVE on staff member', async () => {
+    it('4. Super admin configures ALLOW override for MEDICINE_UPDATE on staff member', async () => {
       const override = await PlatformAdminService.setMemberPermissionOverride(
         superAdminUserId,
         practiceId,
         staffMemberId,
         {
-          permission: PERMISSIONS.PRESCRIPTION_APPROVE,
+          permission: PERMISSIONS.MEDICINE_UPDATE,
           effect: 'ALLOW',
-          reason: 'Authorized senior staff clinical delegate under clinic supervision',
+          reason: 'Authorized senior staff formulary delegate under clinic supervision',
         }
       );
 
-      assert.strictEqual(override.permission, PERMISSIONS.PRESCRIPTION_APPROVE);
-      assert.strictEqual(override.effect, 'ALLOW');
+      const item = override.overrides.find((o: any) => o.permission === PERMISSIONS.MEDICINE_UPDATE);
+      assert.ok(item);
+      assert.strictEqual(item.effect, 'ALLOW');
 
-      // Effective permissions now include PRESCRIPTION_APPROVE
+      // Effective permissions now include MEDICINE_UPDATE
       const perms = await AuthorizationService.getEffectivePermissions(staffUserId, practiceId);
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(perms.includes(PERMISSIONS.MEDICINE_UPDATE));
 
-      const hasPerm = await AuthorizationService.hasPermission(staffUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE);
+      const hasPerm = await AuthorizationService.hasPermission(staffUserId, practiceId, PERMISSIONS.MEDICINE_UPDATE);
       assert.strictEqual(hasPerm, true);
 
       await assert.doesNotReject(() =>
-        AuthorizationService.requirePermission(staffUserId, practiceId, PERMISSIONS.PRESCRIPTION_APPROVE)
+        AuthorizationService.requirePermission(staffUserId, practiceId, PERMISSIONS.MEDICINE_UPDATE)
       );
 
       // Verify audit log
-      const auditLog = AuditService.mockLogs.find((l) => l.action === 'PERMISSION_OVERRIDE_CONFIGURED');
+      const auditLog = AuditService.mockLogs.find(
+        (l) => l.action === 'MEMBER_PERMISSIONS_OVERRIDDEN' || l.action === 'PERMISSION_OVERRIDE_CONFIGURED'
+      );
       assert.ok(auditLog);
-      assert.strictEqual(auditLog.details.permission, PERMISSIONS.PRESCRIPTION_APPROVE);
-      assert.strictEqual(auditLog.details.effect, 'ALLOW');
+    });
+
+    it('4b. Super admin cannot grant PRESCRIPTION_APPROVE to Staff via override (clinical safety guard)', async () => {
+      await assert.rejects(
+        () =>
+          PlatformAdminService.setMemberPermissionOverride(
+            superAdminUserId,
+            practiceId,
+            staffMemberId,
+            {
+              permission: PERMISSIONS.PRESCRIPTION_APPROVE,
+              effect: 'ALLOW',
+              reason: 'Attempted clinical delegation',
+            }
+          ),
+        (err: any) => {
+          assert.strictEqual(err.statusCode, 400);
+          assert.strictEqual(err.code, 'CLINICAL_ELIGIBILITY_REQUIRED');
+          return true;
+        }
+      );
     });
 
     it('5. Super admin configures DENY override to revoke an existing role permission', async () => {
@@ -141,26 +176,26 @@ describe('Platform Super Admin Permission Overrides Suite', () => {
         practiceId,
         staffMemberId,
         {
-          permission: PERMISSIONS.PRESCRIPTION_APPROVE,
+          permission: PERMISSIONS.MEDICINE_UPDATE,
           effect: 'ALLOW',
         }
       );
 
       let perms = await AuthorizationService.getEffectivePermissions(staffUserId, practiceId);
-      assert.ok(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE));
+      assert.ok(perms.includes(PERMISSIONS.MEDICINE_UPDATE));
 
       // Remove override
       await PlatformAdminService.removeMemberPermissionOverride(
         superAdminUserId,
         practiceId,
         staffMemberId,
-        PERMISSIONS.PRESCRIPTION_APPROVE,
+        PERMISSIONS.MEDICINE_UPDATE,
         'Reset to standard role default'
       );
 
       // Restored
       perms = await AuthorizationService.getEffectivePermissions(staffUserId, practiceId);
-      assert.strictEqual(perms.includes(PERMISSIONS.PRESCRIPTION_APPROVE), false);
+      assert.strictEqual(perms.includes(PERMISSIONS.MEDICINE_UPDATE), false);
     });
   });
 

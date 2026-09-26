@@ -10,6 +10,7 @@ import {
   platformAdminApi,
   type PlatformPracticeListItem,
 } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformPracticesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -64,11 +65,11 @@ export const PlatformPracticesPage: React.FC = () => {
         pageSize,
       });
       // Supports both array and paginated object structure
-      const results = (res as any).results || res;
+      const results = (res as any)?.results || res;
       setPractices(Array.isArray(results) ? results : []);
-      setTotal((res as any).total ?? (Array.isArray(results) ? results.length : 0));
-    } catch (err: any) {
-      setError(err.message || 'Failed to retrieve practices.');
+      setTotal((res as any)?.total ?? (Array.isArray(results) ? results.length : 0));
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Failed to retrieve practices.'));
     } finally {
       setIsLoading(false);
     }
@@ -101,8 +102,8 @@ export const PlatformPracticesPage: React.FC = () => {
         isClinicalApprover: true,
       });
       await loadPractices();
-    } catch (err: any) {
-      alert(`Creation failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Creation failed: ${formatApiError(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -120,8 +121,8 @@ export const PlatformPracticesPage: React.FC = () => {
       setActionModal(null);
       setSuspendReason('');
       await loadPractices();
-    } catch (err: any) {
-      alert(`Action failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Action failed: ${formatApiError(err)}`);
     } finally {
       setIsSubmitting(false);
     }

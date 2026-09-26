@@ -147,13 +147,18 @@ export class PlatformAdminService {
       const payments = Array.from(this.mockPayments.values());
       const issues = Array.from(this.mockIssues.values());
 
+      const independentPractices = practices.filter((p) => p.practiceType === 'INDEPENDENT').length;
+      const clinicPractices = practices.filter((p) => p.practiceType === 'CLINIC').length;
+      const enterprisePractices = practices.filter((p) => p.practiceType === 'ENTERPRISE').length;
+      const securityEvents = AuditService.mockLogs.slice(-5).reverse();
+
       return {
         metrics: {
           totalPractices: practices.length,
           activePractices: practices.filter((p) => p.status === 'ACTIVE' || p.isActive).length,
-          independentPractices: practices.filter((p) => p.practiceType === 'INDEPENDENT').length,
-          clinicPractices: practices.filter((p) => p.practiceType === 'CLINIC').length,
-          enterprisePractices: practices.filter((p) => p.practiceType === 'ENTERPRISE').length,
+          independentPractices,
+          clinicPractices,
+          enterprisePractices,
           totalUsers: users.length,
           activeVeterinarians: users.filter((u) => u.isVeterinarian || u.isClinicalApprover).length,
           activeSubscriptions: subs.filter((s) => s.status === 'ACTIVE').length,
@@ -161,10 +166,16 @@ export class PlatformAdminService {
           pastDueAccounts: subs.filter((s) => s.status === 'PAST_DUE' || s.status === 'GRACE_PERIOD').length,
           suspendedPractices: practices.filter((p) => p.status === 'SUSPENDED').length,
         },
+        practicesByType: {
+          independent: independentPractices,
+          clinic: clinicPractices,
+          enterprise: enterprisePractices,
+        },
         recentPractices: practices.slice(0, 5),
         recentPayments: payments.slice(0, 5),
         recentIssues: issues.slice(0, 5),
-        securityEvents: AuditService.mockLogs.slice(-5).reverse(),
+        recentAuditLogs: securityEvents,
+        securityEvents,
       };
     }
 
@@ -256,6 +267,11 @@ export class PlatformAdminService {
         activeTrials,
         pastDueAccounts,
       },
+      practicesByType: {
+        independent: independentPractices,
+        clinic: clinicPractices,
+        enterprise: enterprisePractices,
+      },
       trialsExpiringSoon,
       recentPractices: recentPractices.map((p) => ({
         id: p.id,
@@ -269,6 +285,7 @@ export class PlatformAdminService {
       })),
       recentPayments,
       recentIssues,
+      recentAuditLogs: securityEvents,
       securityEvents,
     };
   }
@@ -734,12 +751,23 @@ export class PlatformAdminService {
       return { success: true, newOwnerUserId };
     }
 
-    // Verify member exists in target practice
-    const member = await prisma.practiceMember.findUnique({
+    // Resolve member by userId or memberId
+    let targetUserId = newOwnerUserId;
+    let member = await prisma.practiceMember.findUnique({
       where: {
         practiceId_userId: { practiceId, userId: newOwnerUserId },
       },
     });
+
+    if (!member) {
+      const memberById = await prisma.practiceMember.findUnique({
+        where: { id: newOwnerUserId },
+      });
+      if (memberById && memberById.practiceId === practiceId) {
+        member = memberById;
+        targetUserId = memberById.userId;
+      }
+    }
 
     if (!member || !member.isActive) {
       throw new AppError(400, 'INVALID_TARGET_MEMBER', 'New owner must be an active member of this practice.');
@@ -753,7 +781,7 @@ export class PlatformAdminService {
     await prisma.$transaction([
       prisma.practice.update({
         where: { id: practiceId },
-        data: { ownerUserId: newOwnerUserId },
+        data: { ownerUserId: targetUserId },
       }),
       prisma.practiceMember.update({
         where: { id: member.id },
@@ -1216,6 +1244,42 @@ export class PlatformAdminService {
     });
 
     return { success: true, message: 'All active sessions have been signed out.' };
+  }
+
+  static async updateUser(
+    actorUserId: string,
+    userId: string,
+    data: { name?: string; phone?: string; email?: string }
+  ) {
+    await AuthorizationService.requirePlatformSuperAdmin(actorUserId);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const user = this.mockUsers.get(userId);
+      if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found.');
+      if (data.name !== undefined) user.name = data.name;
+      if (data.phone !== undefined) user.phone = data.phone;
+      if (data.email !== undefined) user.email = data.email;
+      return user;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        ...(data.email ? { email: data.email } : {}),
+      },
+    });
+
+    void AuditService.record({
+      userId: actorUserId,
+      action: 'PLATFORM_USER_UPDATE',
+      resource: 'User',
+      resourceId: userId,
+      details: { updatedFields: Object.keys(data) },
+    });
+
+    return updated;
   }
 
   // ============================================================================
@@ -1760,6 +1824,28 @@ export class PlatformAdminService {
     return updated;
   }
 
+  static async getIssueDetails(actorUserId: string, issueId: string) {
+    await AuthorizationService.requirePlatformSuperAdmin(actorUserId);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const issue = this.mockIssues.get(issueId);
+      if (!issue) throw new AppError(404, 'ISSUE_NOT_FOUND', 'Support issue not found.');
+      return issue;
+    }
+
+    const issue = await prisma.platformIssue.findUnique({
+      where: { id: issueId },
+      include: {
+        practice: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+        assignedTo: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    if (!issue) throw new AppError(404, 'ISSUE_NOT_FOUND', 'Support issue not found.');
+    return issue;
+  }
+
   // ============================================================================
   // 7. Audited Support Access Sessions
   // ============================================================================
@@ -1983,7 +2069,13 @@ export class PlatformAdminService {
         logs = logs.filter((l) => l.action === options.action);
       }
       return {
-        results: logs.slice((page - 1) * pageSize, page * pageSize),
+        results: logs.slice((page - 1) * pageSize, page * pageSize).map((l: any) => ({
+          ...l,
+          userName: l.userName || l.user?.name || 'System',
+          userEmail: l.userEmail || l.user?.email || null,
+          practiceName: l.practiceName || l.practice?.name || null,
+          metadata: l.details || l.metadata || {},
+        })),
         total: logs.length,
         page,
         pageSize,
@@ -2009,7 +2101,18 @@ export class PlatformAdminService {
       }),
     ]);
 
-    return { results: logs, total, page, pageSize };
+    return {
+      results: logs.map((l: any) => ({
+        ...l,
+        userName: l.user?.name || l.userName || 'System',
+        userEmail: l.user?.email || l.userEmail || null,
+        practiceName: l.practice?.name || l.practiceName || null,
+        metadata: l.details || l.metadata || {},
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   // ============================================================================

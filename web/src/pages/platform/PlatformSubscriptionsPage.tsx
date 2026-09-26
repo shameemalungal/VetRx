@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformSubscriptionItem } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformSubscriptionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,9 +21,10 @@ export const PlatformSubscriptionsPage: React.FC = () => {
         setIsLoading(true);
         setError(null);
         const res = await platformAdminApi.listSubscriptions();
-        setSubscriptions(Array.isArray(res) ? res : []);
-      } catch (err: any) {
-        setError(err.message || 'Failed to retrieve subscriptions.');
+        const results = (res as any)?.results || res;
+        setSubscriptions(Array.isArray(results) ? results : []);
+      } catch (err: unknown) {
+        setError(formatApiError(err, 'Failed to retrieve subscriptions.'));
       } finally {
         setIsLoading(false);
       }

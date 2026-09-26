@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformUserListItem } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformUsersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -42,11 +43,11 @@ export const PlatformUsersPage: React.FC = () => {
         page,
         pageSize,
       });
-      const results = (res as any).results || res;
+      const results = (res as any)?.results || res;
       setUsers(Array.isArray(results) ? results : []);
-      setTotal((res as any).total ?? (Array.isArray(results) ? results.length : 0));
-    } catch (err: any) {
-      setError(err.message || 'Failed to retrieve users.');
+      setTotal((res as any)?.total ?? (Array.isArray(results) ? results.length : 0));
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Failed to retrieve users.'));
     } finally {
       setIsLoading(false);
     }
@@ -75,8 +76,8 @@ export const PlatformUsersPage: React.FC = () => {
       setIsCreateModalOpen(false);
       setCreateForm({ name: '', email: '', password: '', platformRole: '' });
       await loadUsers();
-    } catch (err: any) {
-      alert(`User creation failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`User creation failed: ${formatApiError(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -87,8 +88,8 @@ export const PlatformUsersPage: React.FC = () => {
     try {
       const res = await platformAdminApi.resetPassword(user.id);
       alert(res.message || 'Password reset email sent successfully.');
-    } catch (err: any) {
-      alert(`Password reset failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Password reset failed: ${formatApiError(err)}`);
     }
   };
 
@@ -98,8 +99,8 @@ export const PlatformUsersPage: React.FC = () => {
       await platformAdminApi.forcePasswordChange(user.id);
       alert('Password change flag set.');
       await loadUsers();
-    } catch (err: any) {
-      alert(`Failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Failed: ${formatApiError(err)}`);
     }
   };
 
@@ -108,8 +109,8 @@ export const PlatformUsersPage: React.FC = () => {
     try {
       await platformAdminApi.forceLogout(user.id);
       alert('Active user sessions revoked.');
-    } catch (err: any) {
-      alert(`Session revocation failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Session revocation failed: ${formatApiError(err)}`);
     }
   };
 
@@ -123,8 +124,8 @@ export const PlatformUsersPage: React.FC = () => {
         await platformAdminApi.activateUser(user.id);
       }
       await loadUsers();
-    } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Status update failed: ${formatApiError(err)}`);
     }
   };
 

@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformAuditLogItem } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformAuditPage: React.FC = () => {
   const [logs, setLogs] = useState<PlatformAuditLogItem[]>([]);
@@ -24,8 +25,8 @@ export const PlatformAuditPage: React.FC = () => {
       });
       setLogs(res.results || []);
       setTotal(res.total || 0);
-    } catch (err: any) {
-      setError(err.message || 'Failed to retrieve audit trail.');
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Failed to retrieve audit trail.'));
     } finally {
       setIsLoading(false);
     }

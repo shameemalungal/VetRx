@@ -712,6 +712,25 @@ export class MemberService {
 
     if (process.env.VETRX_FAST_TEST === '1') {
       member = this.mockMembers.get(memberId) || null;
+      if (!member) {
+        for (const mem of AuthorizationService.getMockMembers(practiceId)) {
+          if (mem.id === memberId || mem.userId === memberId) {
+            member = {
+              id: mem.id,
+              practiceId,
+              userId: mem.userId,
+              role: mem.role,
+              isClinicalApprover: mem.isClinicalApprover || mem.role === Role.VETERINARIAN,
+              isActive: mem.isActive,
+              user: { id: mem.userId, email: 'user@test.vetrx', name: 'Test User', avatarUrl: null },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            this.mockMembers.set(mem.id, member);
+            break;
+          }
+        }
+      }
       if (member) {
         const mockMap = (AuthorizationService as any).mockOverrides?.get(member.id);
         if (mockMap) {
@@ -782,6 +801,25 @@ export class MemberService {
     let targetMember: MemberListItemDTO | null = null;
     if (process.env.VETRX_FAST_TEST === '1') {
       targetMember = this.mockMembers.get(memberId) || null;
+      if (!targetMember) {
+        for (const mem of AuthorizationService.getMockMembers(practiceId)) {
+          if (mem.id === memberId || mem.userId === memberId) {
+            targetMember = {
+              id: mem.id,
+              practiceId,
+              userId: mem.userId,
+              role: mem.role,
+              isClinicalApprover: mem.isClinicalApprover || mem.role === Role.VETERINARIAN,
+              isActive: mem.isActive,
+              user: { id: mem.userId, email: 'user@test.vetrx', name: 'Test User', avatarUrl: null },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            this.mockMembers.set(memberId, targetMember);
+            break;
+          }
+        }
+      }
     } else {
       const dbMember = await prisma.practiceMember.findFirst({
         where: { id: memberId, practiceId },

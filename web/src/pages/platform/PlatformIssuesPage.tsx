@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformIssueItem } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformIssuesPage: React.FC = () => {
   const [issues, setIssues] = useState<PlatformIssueItem[]>([]);
@@ -40,9 +41,10 @@ export const PlatformIssuesPage: React.FC = () => {
         category: categoryFilter,
         priority: priorityFilter,
       });
-      setIssues(Array.isArray(res) ? res : []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to retrieve support issues.');
+      const results = (res as any)?.results || res;
+      setIssues(Array.isArray(results) ? results : []);
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Failed to retrieve support issues.'));
     } finally {
       setIsLoading(false);
     }
@@ -72,8 +74,8 @@ export const PlatformIssuesPage: React.FC = () => {
         practiceId: '',
       });
       await loadIssues();
-    } catch (err: any) {
-      alert(`Failed to create ticket: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Failed to create ticket: ${formatApiError(err)}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -84,8 +86,8 @@ export const PlatformIssuesPage: React.FC = () => {
       const updated = await platformAdminApi.updateIssue(issueId, { status: newStatus });
       setSelectedIssue(updated);
       await loadIssues();
-    } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Status update failed: ${formatApiError(err)}`);
     }
   };
 
@@ -94,8 +96,8 @@ export const PlatformIssuesPage: React.FC = () => {
       const updated = await platformAdminApi.updateIssue(issueId, { priority: newPriority });
       setSelectedIssue(updated);
       await loadIssues();
-    } catch (err: any) {
-      alert(`Priority update failed: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Priority update failed: ${formatApiError(err)}`);
     }
   };
 
@@ -108,8 +110,8 @@ export const PlatformIssuesPage: React.FC = () => {
       setSelectedIssue(updated);
       setNewNote('');
       await loadIssues();
-    } catch (err: any) {
-      alert(`Could not add note: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Could not add note: ${formatApiError(err)}`);
     } finally {
       setIsAddingNote(false);
     }

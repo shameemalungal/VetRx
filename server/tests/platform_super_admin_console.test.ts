@@ -731,5 +731,88 @@ describe('Central Platform Super Admin Console (38+ Scenarios)', () => {
       assert.ok(res.results.length > 0);
       assert.strictEqual(res.results[0].action, 'SECURITY_AUDIT_VERIFIED');
     });
+
+    it('39. Role Default Matrix is accessible to Super Admin without practice membership and returns all permissions', async () => {
+      const matrix = await PlatformAdminService.getGlobalPermissionMatrix(superAdminUserId);
+      assert.ok(matrix.rolePermissions);
+      assert.ok(matrix.metadata);
+      assert.ok(matrix.categories);
+      assert.ok(matrix.rolePermissions[Role.PRACTICE_OWNER].length > 0);
+      assert.ok(matrix.rolePermissions[Role.VETERINARIAN].length > 0);
+      assert.ok(matrix.rolePermissions[Role.STAFF].length > 0);
+      assert.ok(matrix.rolePermissions[Role.READ_ONLY].length > 0);
+      // Verify all 43 canonical assignable/platform permissions exist in metadata registry
+      assert.ok(Object.keys(matrix.metadata).length >= 43);
+    });
+
+    it('40. Role Default Matrix rejects unauthenticated (401) and normal user (403)', async () => {
+      await assert.rejects(
+        async () => {
+          await PlatformAdminService.getGlobalPermissionMatrix('');
+        },
+        (err: any) => err instanceof AppError && (err.code === 'PLATFORM_ACCESS_REQUIRED' || err.code === 'UNAUTHORIZED')
+      );
+
+      await assert.rejects(
+        async () => {
+          await PlatformAdminService.getGlobalPermissionMatrix(vetAlphaUserId);
+        },
+        (err: any) => err instanceof AppError && (err.code === 'PLATFORM_ACCESS_REQUIRED' || err.code === 'FORBIDDEN')
+      );
+    });
+
+    it('41. Member Overrides are strictly tenant-isolated (no cross-practice leakage)', async () => {
+      // Trying to access or override member in wrong practice throws 404
+      await assert.rejects(
+        async () => {
+          await PlatformAdminService.getMemberPermissions(
+            superAdminUserId,
+            practiceBetaId,
+            'mem-staff-alpha' // Alpha member does not belong to Beta
+          );
+        },
+        (err: any) => err instanceof AppError && err.code === 'MEMBER_NOT_FOUND'
+      );
+    });
+
+    it('42. Platform promotion audit record (PLATFORM_ROLE_PROMOTION) is retrievable by Super Admin with mapped fields', async () => {
+      void AuditService.record({
+        userId: superAdminUserId,
+        action: 'PLATFORM_ROLE_PROMOTION',
+        resource: 'User',
+        resourceId: 'promoted-user-id',
+        details: { newRole: 'PLATFORM_SUPER_ADMIN', email: 'drshameemalungal@gmail.com' },
+      });
+
+      const res = await PlatformAdminService.listAuditLogs(superAdminUserId, {
+        action: 'PLATFORM_ROLE_PROMOTION',
+      });
+      assert.ok(res.results.length > 0);
+      const log = res.results.find((l) => l.action === 'PLATFORM_ROLE_PROMOTION');
+      assert.ok(log);
+      assert.ok(log.metadata);
+      assert.strictEqual((log.metadata as any).newRole, 'PLATFORM_SUPER_ADMIN');
+      assert.ok(log.userName);
+    });
+
+    it('43. Dashboard returns practicesByType and recentAuditLogs alongside metrics', async () => {
+      const dashboard = await PlatformAdminService.getDashboard(superAdminUserId);
+      assert.ok(dashboard.metrics);
+      assert.ok(dashboard.practicesByType);
+      assert.strictEqual(typeof dashboard.practicesByType.independent, 'number');
+      assert.strictEqual(typeof dashboard.practicesByType.clinic, 'number');
+      assert.strictEqual(typeof dashboard.practicesByType.enterprise, 'number');
+      assert.ok(Array.isArray(dashboard.recentAuditLogs));
+      assert.ok(Array.isArray(dashboard.securityEvents));
+    });
+
+    it('44. updateUser updates profile attributes safely and audits event', async () => {
+      const updated = await PlatformAdminService.updateUser(superAdminUserId, vetAlphaUserId, {
+        name: 'Dr. Victor Updated',
+        phone: '+919876543210',
+      });
+      assert.strictEqual(updated.name, 'Dr. Victor Updated');
+      assert.strictEqual(updated.phone, '+919876543210');
+    });
   });
 });

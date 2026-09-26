@@ -160,19 +160,24 @@ platformAdminRouter.post('/practices/:id/transfer-ownership', async (req: Authen
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
     const id = req.params.id as string;
     const schema = z.object({
-      newOwnerUserId: z.string().min(1),
+      newOwnerUserId: z.string().optional(),
+      targetMemberId: z.string().optional(),
       reason: z.string().optional(),
     });
-    const { newOwnerUserId, reason } = schema.parse(req.body);
+    const body = schema.parse(req.body);
+    const newOwnerUserId = body.newOwnerUserId || body.targetMemberId;
+    if (!newOwnerUserId) {
+      throw new AppError(400, 'BAD_REQUEST', 'newOwnerUserId or targetMemberId is required');
+    }
 
-    const result = await PlatformAdminService.transferPracticeOwnership(actorUserId, id, newOwnerUserId, reason);
+    const result = await PlatformAdminService.transferPracticeOwnership(actorUserId, id, newOwnerUserId, body.reason);
     res.status(200).json(result);
   } catch (err) {
     next(err);
   }
 });
 
-platformAdminRouter.get('/practices/:id/users', async (req: AuthenticatedRequest, res, next) => {
+const getPracticeUsersHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -182,9 +187,11 @@ platformAdminRouter.get('/practices/:id/users', async (req: AuthenticatedRequest
   } catch (err) {
     next(err);
   }
-});
+};
+platformAdminRouter.get('/practices/:id/users', getPracticeUsersHandler);
+platformAdminRouter.get('/practices/:id/members', getPracticeUsersHandler);
 
-platformAdminRouter.post('/practices/:id/users', async (req: AuthenticatedRequest, res, next) => {
+const addPracticeUserHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -199,6 +206,74 @@ platformAdminRouter.post('/practices/:id/users', async (req: AuthenticatedReques
     const body = schema.parse(req.body);
     const member = await PlatformAdminService.addUserToPractice(actorUserId, practiceId, body);
     res.status(201).json(member);
+  } catch (err) {
+    next(err);
+  }
+};
+platformAdminRouter.post('/practices/:id/users', addPracticeUserHandler);
+platformAdminRouter.post('/practices/:id/members', addPracticeUserHandler);
+
+// Direct practice member removal and role/status modification
+platformAdminRouter.delete('/practices/:practiceId/members/:memberId', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = req.params.practiceId as string;
+    const memberId = req.params.memberId as string;
+    const reason = req.query.reason as string | undefined;
+
+    const result = await PlatformAdminService.removeUserFromPractice(actorUserId, practiceId, memberId, reason);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformAdminRouter.patch('/practices/:practiceId/members/:memberId/role', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = req.params.practiceId as string;
+    const memberId = req.params.memberId as string;
+
+    const schema = z.object({
+      role: z.nativeEnum(Role),
+      isClinicalApprover: z.boolean().optional(),
+    });
+    const { role, isClinicalApprover } = schema.parse(req.body);
+
+    const updated = await PlatformAdminService.updateUserPracticeRole(
+      actorUserId,
+      practiceId,
+      memberId,
+      role,
+      isClinicalApprover
+    );
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformAdminRouter.patch('/practices/:practiceId/members/:memberId/clinical-status', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = req.params.practiceId as string;
+    const memberId = req.params.memberId as string;
+
+    const schema = z.object({
+      isClinicalApprover: z.boolean(),
+    });
+    const { isClinicalApprover } = schema.parse(req.body);
+
+    const updated = await PlatformAdminService.updateUserClinicalStatus(
+      actorUserId,
+      practiceId,
+      memberId,
+      isClinicalApprover
+    );
+    res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
@@ -293,6 +368,28 @@ platformAdminRouter.get('/users/:id', async (req: AuthenticatedRequest, res, nex
   }
 });
 
+const updateUserHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const userId = req.params.id as string;
+
+    const schema = z.object({
+      name: z.string().min(2).max(100).optional(),
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+    });
+
+    const body = schema.parse(req.body);
+    const updated = await PlatformAdminService.updateUser(actorUserId, userId, body);
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+platformAdminRouter.patch('/users/:id', updateUserHandler);
+platformAdminRouter.put('/users/:id', updateUserHandler);
+
 platformAdminRouter.post('/users/:id/activate', async (req: AuthenticatedRequest, res, next) => {
   try {
     const actorUserId = req.user?.id;
@@ -346,7 +443,7 @@ platformAdminRouter.post('/users/:id/force-password-change', async (req: Authent
   }
 });
 
-platformAdminRouter.post('/users/:id/revoke-sessions', async (req: AuthenticatedRequest, res, next) => {
+const revokeSessionsHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -357,7 +454,9 @@ platformAdminRouter.post('/users/:id/revoke-sessions', async (req: Authenticated
   } catch (err) {
     next(err);
   }
-});
+};
+platformAdminRouter.post('/users/:id/revoke-sessions', revokeSessionsHandler);
+platformAdminRouter.post('/users/:id/force-logout', revokeSessionsHandler);
 
 platformAdminRouter.post('/users/:id/practices', async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -544,7 +643,19 @@ platformAdminRouter.post('/issues', async (req: AuthenticatedRequest, res, next)
   }
 });
 
-platformAdminRouter.patch('/issues/:id', async (req: AuthenticatedRequest, res, next) => {
+platformAdminRouter.get('/issues/:id', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const id = req.params.id as string;
+    const issue = await PlatformAdminService.getIssueDetails(actorUserId, id);
+    res.status(200).json(issue);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const updateIssueHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -562,7 +673,9 @@ platformAdminRouter.patch('/issues/:id', async (req: AuthenticatedRequest, res, 
   } catch (err) {
     next(err);
   }
-});
+};
+platformAdminRouter.patch('/issues/:id', updateIssueHandler);
+platformAdminRouter.put('/issues/:id', updateIssueHandler);
 
 platformAdminRouter.post('/issues/:id/notes', async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -631,7 +744,7 @@ platformAdminRouter.post('/support-sessions/:id/end', async (req: AuthenticatedR
 // 7. Roles & Permissions Matrix and Member Overrides
 // ==============================================================================
 
-platformAdminRouter.get('/permission-matrix', async (req: AuthenticatedRequest, res, next) => {
+const getMatrixHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -640,18 +753,10 @@ platformAdminRouter.get('/permission-matrix', async (req: AuthenticatedRequest, 
   } catch (err) {
     next(err);
   }
-});
-
-platformAdminRouter.get('/roles-permissions', async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const actorUserId = req.user?.id;
-    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
-    const matrix = await PlatformAdminService.getGlobalPermissionMatrix(actorUserId);
-    res.status(200).json(matrix);
-  } catch (err) {
-    next(err);
-  }
-});
+};
+platformAdminRouter.get('/permission-matrix', getMatrixHandler);
+platformAdminRouter.get('/roles-permissions', getMatrixHandler);
+platformAdminRouter.get('/matrix', getMatrixHandler);
 
 platformAdminRouter.get(
   '/practices/:practiceId/members/:memberId/permissions',
@@ -724,7 +829,7 @@ platformAdminRouter.delete(
 // 8. Platform Audit & Security Logs
 // ==============================================================================
 
-platformAdminRouter.get('/audit', async (req: AuthenticatedRequest, res, next) => {
+const listAuditHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
@@ -739,4 +844,6 @@ platformAdminRouter.get('/audit', async (req: AuthenticatedRequest, res, next) =
   } catch (err) {
     next(err);
   }
-});
+};
+platformAdminRouter.get('/audit', listAuditHandler);
+platformAdminRouter.get('/audit-logs', listAuditHandler);

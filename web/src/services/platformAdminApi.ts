@@ -1,11 +1,11 @@
 // ==============================================================================
 // VetRx — Platform Super Admin API Client (web/src/services/platformAdminApi.ts)
-// Type-safe HTTP client for all platform SaaS management endpoints.
+// Canonical HTTP client for all platform SaaS management endpoints under /api/platform/admin.
 // ==============================================================================
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -16,13 +16,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!res.ok) {
-    let errMessage = `Request failed (${res.status})`;
+    let errMessage = `Request failed (${res.status}${res.statusText ? `: ${res.statusText}` : ''})`;
     try {
       const body = await res.json();
-      if (body?.message) errMessage = body.message;
-      else if (body?.error) errMessage = body.error;
+      if (body?.error) {
+        if (typeof body.error === 'string') {
+          errMessage = body.error;
+        } else if (typeof body.error === 'object' && body.error !== null) {
+          if (body.error.message && typeof body.error.message === 'string') {
+            errMessage = body.error.message;
+            if (Array.isArray(body.error.details) && body.error.details.length > 0) {
+              const detailsMsg = body.error.details
+                .map((d: any) => (d && typeof d === 'object' ? d.message || d.path : String(d)))
+                .filter(Boolean)
+                .join(', ');
+              if (detailsMsg) errMessage += ` (${detailsMsg})`;
+            }
+          } else if (body.error.code) {
+            errMessage = String(body.error.code).replace(/_/g, ' ');
+          }
+        }
+      } else if (body?.message && typeof body.message === 'string') {
+        errMessage = body.message;
+      }
     } catch {
-      // fallback
+      // Fallback to HTTP status text if body is not JSON
     }
     throw new Error(errMessage);
   }
@@ -37,8 +55,12 @@ export interface PlatformDashboardData {
     suspendedPractices: number;
     totalUsers: number;
     activeUsers: number;
+    activeVeterinarians?: number;
     activeSubscriptions: number;
     openIssues: number;
+    independentPractices?: number;
+    clinicPractices?: number;
+    enterprisePractices?: number;
   };
   practicesByType: {
     independent: number;
@@ -48,11 +70,12 @@ export interface PlatformDashboardData {
   recentPractices: Array<{
     id: string;
     name: string;
-    slug: string | null;
+    slug?: string | null;
     practiceType: string;
     status: string;
-    ownerName: string;
-    ownerEmail: string;
+    ownerName?: string;
+    ownerEmail?: string;
+    memberCount?: number;
     createdAt: string;
   }>;
   recentAuditLogs: Array<{
@@ -63,6 +86,9 @@ export interface PlatformDashboardData {
     practiceName?: string;
     actorEmail?: string;
   }>;
+  recentPayments?: any[];
+  recentIssues?: any[];
+  securityEvents?: any[];
 }
 
 export interface PlatformPracticeListItem {
@@ -83,6 +109,14 @@ export interface PlatformPracticeListItem {
   subscriptionStatus: string;
 }
 
+export interface PlatformUserPracticeMembership {
+  practiceId: string;
+  practiceName: string;
+  role: string;
+  isClinicalApprover: boolean;
+  isActive: boolean;
+}
+
 export interface PlatformUserListItem {
   id: string;
   name: string;
@@ -93,13 +127,10 @@ export interface PlatformUserListItem {
   platformRole: string | null;
   mustChangePassword?: boolean;
   createdAt: string;
-  practiceMemberships: Array<{
-    practiceId: string;
-    practiceName: string;
-    role: string;
-    isClinicalApprover: boolean;
-    isActive: boolean;
-  }>;
+  lastLoginAt?: string | null;
+  membershipCount?: number;
+  practices?: PlatformUserPracticeMembership[];
+  practiceMemberships?: PlatformUserPracticeMembership[];
 }
 
 export interface PlatformSubscriptionItem {
@@ -121,8 +152,15 @@ export interface PlatformPaymentItem {
   practiceId: string;
   practiceName: string;
   amountINR: number;
+  amountRupees?: string;
+  amountPaisa?: number;
   currency: string;
   status: string;
+  paymentProvider?: string;
+  gatewayTransactionId?: string;
+  internalReference?: string;
+  paymentMethod?: string;
+  subscriptionPlan?: string;
   razorpayPaymentId?: string;
   razorpayInvoiceId?: string;
   createdAt: string;
@@ -179,24 +217,89 @@ export interface PlatformAuditLogItem {
   practiceName?: string;
   ipAddress?: string;
   metadata?: any;
+  details?: any;
+  user?: { id: string; email: string; name: string } | null;
+  practice?: { id: string; name: string } | null;
   createdAt: string;
+}
+
+export interface PermissionMetadataItem {
+  name: string;
+  category: string;
+  description: string;
+  clinicalSafetyWarning?: boolean;
+  isClinicalSafetyCritical?: boolean;
+}
+
+export interface PermissionMatrixData {
+  roles: string[];
+  permissions: {
+    clinical: string[];
+    practice: string[];
+    commercial: string[];
+    security: string[];
+    platformOnly: string[];
+  };
+  metadata: Record<string, PermissionMetadataItem>;
+  roleDefaults: Record<string, string[]>;
+  assignablePermissions?: string[];
+  categories?: {
+    CLINICAL: string[];
+    PRACTICE: string[];
+    COMMERCIAL: string[];
+    SECURITY: string[];
+    PLATFORM: string[];
+  };
 }
 
 export const platformAdminApi = {
   // Dashboard & Global Search
-  getDashboard: () => request<PlatformDashboardData>('/api/platform/dashboard'),
-  globalSearch: (q: string) => request<{ practices: any[]; users: any[]; issues: any[] }>(`/api/platform/search?q=${encodeURIComponent(q)}`),
+  getDashboard: async (): Promise<PlatformDashboardData> => {
+    const raw = await request<any>('/api/platform/admin/dashboard');
+    const metrics = raw.metrics || {};
+    const practicesByType = raw.practicesByType || {
+      independent: metrics.independentPractices || 0,
+      clinic: metrics.clinicPractices || 0,
+      enterprise: metrics.enterprisePractices || 0,
+    };
+    const recentAuditLogs = raw.recentAuditLogs || raw.securityEvents || [];
+    const openIssues = metrics.openIssues ?? (raw.recentIssues?.length || 0);
+    const activeUsers = metrics.activeUsers ?? metrics.totalUsers ?? 0;
+
+    return {
+      ...raw,
+      metrics: {
+        ...metrics,
+        openIssues,
+        activeUsers,
+      },
+      practicesByType,
+      recentPractices: raw.recentPractices || [],
+      recentAuditLogs,
+    };
+  },
+
+  globalSearch: (q: string) =>
+    request<{ practices: any[]; users: any[]; issues: any[] }>(`/api/platform/admin/search?q=${encodeURIComponent(q)}`),
 
   // Practices
-  listPractices: (params?: { search?: string; type?: string; status?: string; page?: number; pageSize?: number }) => {
+  listPractices: async (params?: { search?: string; type?: string; status?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.type && params.type !== 'ALL') q.set('type', params.type);
     if (params?.status && params.status !== 'ALL') q.set('status', params.status);
     if (params?.page) q.set('page', String(params.page));
     if (params?.pageSize) q.set('pageSize', String(params.pageSize));
-    return request<{ results: PlatformPracticeListItem[]; total: number; page: number; pageSize: number }>(`/api/platform/practices?${q.toString()}`);
+
+    const res = await request<any>(`/api/platform/admin/practices?${q.toString()}`);
+    const results: PlatformPracticeListItem[] = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
   },
+
   createPractice: (data: {
     name: string;
     practiceType: 'INDEPENDENT' | 'CLINIC' | 'ENTERPRISE';
@@ -206,71 +309,171 @@ export const platformAdminApi = {
     address?: string;
     planCode?: string;
     isClinicalApprover?: boolean;
-  }) => request<any>('/api/platform/practices', { method: 'POST', body: JSON.stringify(data) }),
-  getPracticeDetails: (id: string) => request<any>(`/api/platform/practices/${id}`),
-  updatePractice: (id: string, data: { name?: string; practiceType?: string; status?: string }) =>
-    request<any>(`/api/platform/practices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  }) => request<any>('/api/platform/admin/practices', { method: 'POST', body: JSON.stringify(data) }),
+
+  getPracticeDetails: (id: string) => request<any>(`/api/platform/admin/practices/${id}`),
+
+  updatePractice: (id: string, data: { name?: string; practiceType?: string; address?: string; phone?: string; email?: string }) =>
+    request<any>(`/api/platform/admin/practices/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
   suspendPractice: (id: string, reason?: string) =>
-    request<any>(`/api/platform/practices/${id}/suspend`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  reactivatePractice: (id: string) =>
-    request<any>(`/api/platform/practices/${id}/reactivate`, { method: 'POST' }),
-  transferOwnership: (id: string, targetMemberId: string, previousOwnerRole?: string) =>
-    request<any>(`/api/platform/practices/${id}/transfer-ownership`, { method: 'POST', body: JSON.stringify({ targetMemberId, previousOwnerRole }) }),
+    request<any>(`/api/platform/admin/practices/${id}/suspend`, { method: 'POST', body: JSON.stringify({ reason: reason || 'Administrative suspension' }) }),
+
+  reactivatePractice: (id: string, reason?: string) =>
+    request<any>(`/api/platform/admin/practices/${id}/reactivate`, { method: 'POST', body: JSON.stringify({ reason: reason || 'Administrative reactivation' }) }),
+
+  transferOwnership: (id: string, targetMemberId: string, previousOwnerRole?: string, reason?: string) =>
+    request<any>(`/api/platform/admin/practices/${id}/transfer-ownership`, {
+      method: 'POST',
+      body: JSON.stringify({
+        newOwnerUserId: targetMemberId,
+        targetMemberId,
+        previousOwnerRole,
+        reason: reason || 'Administrative ownership transfer',
+      }),
+    }),
 
   // Practice Members
-  listPracticeMembers: (practiceId: string) => request<any[]>(`/api/platform/practices/${practiceId}/members`),
+  listPracticeMembers: (practiceId: string) => request<any[]>(`/api/platform/admin/practices/${practiceId}/users`),
+
   addMemberToPractice: (practiceId: string, data: { userId: string; role: string; isClinicalApprover?: boolean }) =>
-    request<any>(`/api/platform/practices/${practiceId}/members`, { method: 'POST', body: JSON.stringify(data) }),
-  removeMemberFromPractice: (practiceId: string, memberId: string) =>
-    request<any>(`/api/platform/practices/${practiceId}/members/${memberId}`, { method: 'DELETE' }),
-  updateMemberRole: (practiceId: string, memberId: string, role: string) =>
-    request<any>(`/api/platform/practices/${practiceId}/members/${memberId}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
+    request<any>(`/api/platform/admin/practices/${practiceId}/users`, { method: 'POST', body: JSON.stringify(data) }),
+
+  removeMemberFromPractice: (practiceId: string, memberId: string, reason?: string) =>
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, { method: 'DELETE' }),
+
+  updateMemberRole: (practiceId: string, memberId: string, role: string, isClinicalApprover?: boolean) =>
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role, isClinicalApprover }),
+    }),
+
   updateMemberClinicalStatus: (practiceId: string, memberId: string, isClinicalApprover: boolean) =>
-    request<any>(`/api/platform/practices/${practiceId}/members/${memberId}/clinical-status`, { method: 'PUT', body: JSON.stringify({ isClinicalApprover }) }),
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/clinical-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isClinicalApprover }),
+    }),
+
   setMemberPermissionOverride: (practiceId: string, memberId: string, permission: string, effect: 'ALLOW' | 'DENY', reason?: string) =>
-    request<any>(`/api/platform/practices/${practiceId}/members/${memberId}/permissions`, {
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/permissions`, {
       method: 'POST',
       body: JSON.stringify({ permission, effect, reason }),
     }),
-  removeMemberPermissionOverride: (practiceId: string, memberId: string, permission: string) =>
-    request<any>(`/api/platform/practices/${practiceId}/members/${memberId}/permissions`, {
+
+  removeMemberPermissionOverride: (practiceId: string, memberId: string, permission: string, reason?: string) =>
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/permissions/${permission}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`, {
       method: 'DELETE',
-      body: JSON.stringify({ permission }),
     }),
 
   // Users
-  listUsers: (params?: { search?: string; status?: string; platformRole?: string; page?: number; pageSize?: number }) => {
+  listUsers: async (params?: { search?: string; status?: string; platformRole?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.status && params.status !== 'ALL') q.set('status', params.status);
-    if (params?.platformRole && params.platformRole !== 'ALL') q.set('platformRole', params.platformRole);
+    if (params?.platformRole && params.platformRole !== 'ALL') q.set('role', params.platformRole === 'PLATFORM_SUPER_ADMIN' ? 'SUPER_ADMIN' : params.platformRole);
     if (params?.page) q.set('page', String(params.page));
     if (params?.pageSize) q.set('pageSize', String(params.pageSize));
-    return request<{ results: PlatformUserListItem[]; total: number; page: number; pageSize: number }>(`/api/platform/users?${q.toString()}`);
+
+    const res = await request<any>(`/api/platform/admin/users?${q.toString()}`);
+    const rawResults = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const results: PlatformUserListItem[] = rawResults.map((u: any) => ({
+      ...u,
+      practiceMemberships: u.practiceMemberships || u.practices || [],
+    }));
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
   },
-  createUser: (data: { name: string; email: string; password?: string; platformRole?: string | null }) =>
-    request<any>('/api/platform/users', { method: 'POST', body: JSON.stringify(data) }),
-  getUserDetails: (id: string) => request<any>(`/api/platform/users/${id}`),
-  updateUser: (id: string, data: { name?: string; email?: string; platformRole?: string | null }) =>
-    request<any>(`/api/platform/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  resetPassword: (id: string) => request<{ success: boolean; message: string }>(`/api/platform/users/${id}/reset-password`, { method: 'POST' }),
-  forcePasswordChange: (id: string) => request<any>(`/api/platform/users/${id}/force-password-change`, { method: 'POST' }),
-  forceLogout: (id: string) => request<any>(`/api/platform/users/${id}/force-logout`, { method: 'POST' }),
-  activateUser: (id: string) => request<any>(`/api/platform/users/${id}/activate`, { method: 'POST' }),
-  deactivateUser: (id: string) => request<any>(`/api/platform/users/${id}/deactivate`, { method: 'POST' }),
+
+  createUser: (data: {
+    name: string;
+    email: string;
+    phone?: string;
+    password?: string;
+    practiceId?: string;
+    role?: string;
+    isClinicalApprover?: boolean;
+    platformRole?: string | null;
+  }) => request<any>('/api/platform/admin/users', { method: 'POST', body: JSON.stringify(data) }),
+
+  getUserDetails: (id: string) => request<any>(`/api/platform/admin/users/${id}`),
+
+  updateUser: (id: string, data: { name?: string; email?: string; phone?: string; platformRole?: string | null }) =>
+    request<any>(`/api/platform/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  resetPassword: (id: string) =>
+    request<{ success: boolean; message: string }>(`/api/platform/admin/users/${id}/reset-password`, { method: 'POST' }),
+
+  forcePasswordChange: (id: string) =>
+    request<any>(`/api/platform/admin/users/${id}/force-password-change`, { method: 'POST' }),
+
+  forceLogout: (id: string) =>
+    request<any>(`/api/platform/admin/users/${id}/revoke-sessions`, { method: 'POST' }),
+
+  activateUser: (id: string) =>
+    request<any>(`/api/platform/admin/users/${id}/activate`, { method: 'POST' }),
+
+  deactivateUser: (id: string, reason?: string) =>
+    request<any>(`/api/platform/admin/users/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Subscriptions & Payments
-  listSubscriptions: () => request<PlatformSubscriptionItem[]>('/api/platform/subscriptions'),
-  listPayments: () => request<PlatformPaymentItem[]>('/api/platform/payments'),
+  listSubscriptions: async (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.status && params.status !== 'ALL') q.set('status', params.status);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+
+    const res = await request<any>(`/api/platform/admin/subscriptions?${q.toString()}`);
+    const results: PlatformSubscriptionItem[] = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
+  },
+
+  listPayments: async (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.status && params.status !== 'ALL') q.set('status', params.status);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+
+    const res = await request<any>(`/api/platform/admin/payments?${q.toString()}`);
+    const rawResults = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const results: PlatformPaymentItem[] = rawResults.map((p: any) => ({
+      ...p,
+      amountINR: p.amountINR ?? (p.amountRupees ? Number(p.amountRupees) : p.amountPaisa ? p.amountPaisa / 100 : 0),
+    }));
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
+  },
 
   // Support Issues
-  listIssues: (params?: { status?: string; category?: string; priority?: string }) => {
+  listIssues: async (params?: { status?: string; category?: string; priority?: string; practiceId?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();
     if (params?.status && params.status !== 'ALL') q.set('status', params.status);
     if (params?.category && params.category !== 'ALL') q.set('category', params.category);
     if (params?.priority && params.priority !== 'ALL') q.set('priority', params.priority);
-    return request<PlatformIssueItem[]>(`/api/platform/issues?${q.toString()}`);
+    if (params?.practiceId) q.set('practiceId', params.practiceId);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+
+    const res = await request<any>(`/api/platform/admin/issues?${q.toString()}`);
+    const results: PlatformIssueItem[] = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
   },
+
   createIssue: (data: {
     title: string;
     description: string;
@@ -278,29 +481,90 @@ export const platformAdminApi = {
     priority?: string;
     practiceId?: string;
     userId?: string;
-  }) => request<PlatformIssueItem>('/api/platform/issues', { method: 'POST', body: JSON.stringify(data) }),
-  getIssueDetails: (id: string) => request<PlatformIssueItem>(`/api/platform/issues/${id}`),
-  updateIssue: (id: string, data: { status?: string; priority?: string; category?: string }) =>
-    request<PlatformIssueItem>(`/api/platform/issues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  }) => request<PlatformIssueItem>('/api/platform/admin/issues', { method: 'POST', body: JSON.stringify(data) }),
+
+  getIssueDetails: (id: string) => request<PlatformIssueItem>(`/api/platform/admin/issues/${id}`),
+
+  updateIssue: (id: string, data: { status?: string; priority?: string; category?: string; assignedToUserId?: string | null }) =>
+    request<PlatformIssueItem>(`/api/platform/admin/issues/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
   addIssueNote: (id: string, note: string) =>
-    request<PlatformIssueItem>(`/api/platform/issues/${id}/notes`, { method: 'POST', body: JSON.stringify({ note }) }),
+    request<PlatformIssueItem>(`/api/platform/admin/issues/${id}/notes`, { method: 'POST', body: JSON.stringify({ note }) }),
 
   // Support Access Sessions
-  startSupportSession: (data: { targetPracticeId: string; reason: string; durationMinutes?: number }) =>
-    request<SupportSessionItem>('/api/platform/support-sessions', { method: 'POST', body: JSON.stringify(data) }),
+  startSupportSession: (data: { targetPracticeId: string; targetUserId?: string; reason: string; durationMinutes?: number }) =>
+    request<SupportSessionItem>('/api/platform/admin/support-sessions', { method: 'POST', body: JSON.stringify(data) }),
+
   endSupportSession: (id: string) =>
-    request<{ success: boolean; session: SupportSessionItem }>(`/api/platform/support-sessions/${id}/end`, { method: 'POST' }),
+    request<{ success: boolean; session: SupportSessionItem }>(`/api/platform/admin/support-sessions/${id}/end`, { method: 'POST' }),
 
   // Audit Logs
-  listAuditLogs: (params?: { action?: string; practiceId?: string; userId?: string; limit?: number }) => {
+  listAuditLogs: async (params?: { action?: string; practiceId?: string; userId?: string; page?: number; pageSize?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.action) q.set('action', params.action);
     if (params?.practiceId) q.set('practiceId', params.practiceId);
     if (params?.userId) q.set('userId', params.userId);
-    if (params?.limit) q.set('limit', String(params.limit));
-    return request<{ results: PlatformAuditLogItem[]; total: number }>(`/api/platform/audit-logs?${q.toString()}`);
+    if (params?.page) q.set('page', String(params.page));
+    const size = params?.pageSize || params?.limit || 25;
+    q.set('pageSize', String(size));
+
+    const res = await request<any>(`/api/platform/admin/audit?${q.toString()}`);
+    const rawList = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
+    const results: PlatformAuditLogItem[] = rawList.map((l: any) => ({
+      ...l,
+      userName: l.userName || l.user?.name,
+      userEmail: l.userEmail || l.user?.email,
+      practiceName: l.practiceName || l.practice?.name,
+      metadata: l.metadata || l.details,
+    }));
+    const total: number = res?.total ?? results.length;
+    const page: number = res?.page ?? 1;
+    const pageSize: number = res?.pageSize ?? results.length;
+
+    return { results, total, page, pageSize };
   },
 
   // Role Matrix
-  getPermissionMatrix: () => request<any>('/api/platform/matrix'),
+  getPermissionMatrix: async (): Promise<PermissionMatrixData> => {
+    const raw = await request<any>('/api/platform/admin/permission-matrix');
+    return {
+      roles: ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY', 'PRACTICE_STAFF'],
+      permissions: {
+        clinical: raw.categories?.CLINICAL || raw.permissions?.clinical || [],
+        practice: raw.categories?.PRACTICE || raw.permissions?.practice || [],
+        commercial: raw.categories?.COMMERCIAL || raw.permissions?.commercial || [],
+        security: raw.categories?.SECURITY || raw.permissions?.security || [],
+        platformOnly: raw.categories?.PLATFORM || raw.permissions?.platformOnly || [],
+      },
+      metadata: raw.metadata || {},
+      roleDefaults: raw.rolePermissions || raw.roleDefaults || {},
+      assignablePermissions: raw.assignablePermissions || [],
+      categories: raw.categories,
+    };
+  },
+
+  getRoleMatrix: async (): Promise<PermissionMatrixData> => platformAdminApi.getPermissionMatrix(),
+
+  getPractice: (id: string) => platformAdminApi.getPracticeDetails(id),
+
+  getMemberPermissions: (practiceId: string, memberId: string) =>
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/permissions`),
+
+  setMemberOverride: (
+    practiceId: string,
+    memberId: string,
+    data: { permission: string; effect: 'ALLOW' | 'DENY'; reason?: string }
+  ) =>
+    request<any>(`/api/platform/admin/practices/${practiceId}/members/${memberId}/permissions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeMemberOverride: (practiceId: string, memberId: string, permission: string, reason?: string) =>
+    request<any>(
+      `/api/platform/admin/practices/${practiceId}/members/${memberId}/permissions/${permission}${
+        reason ? `?reason=${encodeURIComponent(reason)}` : ''
+      }`,
+      { method: 'DELETE' }
+    ),
 };

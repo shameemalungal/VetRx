@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformDashboardData } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,8 +22,8 @@ export const PlatformDashboardPage: React.FC = () => {
         setError(null);
         const res = await platformAdminApi.getDashboard();
         setData(res);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load platform dashboard.');
+      } catch (err: unknown) {
+        setError(formatApiError(err, 'Failed to load platform dashboard.'));
       } finally {
         setIsLoading(false);
       }

@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '../../components/ui/Icon';
 import { platformAdminApi, type PlatformPaymentItem } from '../../services/platformAdminApi';
+import { formatApiError } from '../../utils/formatError';
 
 export const PlatformPaymentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,9 +21,10 @@ export const PlatformPaymentsPage: React.FC = () => {
         setIsLoading(true);
         setError(null);
         const res = await platformAdminApi.listPayments();
-        setPayments(Array.isArray(res) ? res : []);
-      } catch (err: any) {
-        setError(err.message || 'Failed to retrieve payments.');
+        const results = (res as any)?.results || res;
+        setPayments(Array.isArray(results) ? results : []);
+      } catch (err: unknown) {
+        setError(formatApiError(err, 'Failed to retrieve payments.'));
       } finally {
         setIsLoading(false);
       }
@@ -82,7 +84,7 @@ export const PlatformPaymentsPage: React.FC = () => {
                   </td>
                   <td>
                     <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#0f172a' }}>
-                      ₹{p.amountINR.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      ₹{(p.amountINR ?? (p as any).amount ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </div>
                     <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{p.currency}</div>
                   </td>
