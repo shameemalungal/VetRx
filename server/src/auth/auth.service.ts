@@ -1313,6 +1313,16 @@ export class AuthService {
 
     if (!membership || !membership.practice) {
       if (user.platformRole === PlatformRole.PLATFORM_SUPER_ADMIN) {
+        const userPractices = user.memberships
+          .filter((m) => m.isActive && m.practice?.isActive)
+          .map((m) => ({
+            practiceId: m.practiceId,
+            practiceName: m.practice.name,
+            role: m.role as any,
+            isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
+            isCurrent: false,
+          }));
+
         return {
           user: {
             id: user.id,
@@ -1327,7 +1337,7 @@ export class AuthService {
           practice: null,
           membership: null,
           permissions: [],
-          practices: [],
+          practices: userPractices,
           settings: null,
         };
       }

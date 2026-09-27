@@ -3,8 +3,8 @@
 // Root router. Loads settings, seeds DB, manages Auth Gate & AppShell.
 // =============================================================
 
-import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { AppShell } from './components/Layout/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
@@ -41,24 +41,220 @@ import { ensureSeeded } from './db/schema';
 
 import './pages/DashboardPage.css';
 
+interface PlatformErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface PlatformErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class PlatformErrorBoundary extends React.Component<
+  PlatformErrorBoundaryProps,
+  PlatformErrorBoundaryState
+> {
+  constructor(props: PlatformErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): PlatformErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('PlatformShell uncaught error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            padding: '60px 24px',
+            textAlign: 'center',
+            maxWidth: '540px',
+            margin: '40px auto',
+            background: '#fff',
+            borderRadius: '16px',
+            border: '1px solid #fecaca',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ fontSize: '36px', marginBottom: '12px' }}>⚠️</div>
+          <h2
+            style={{
+              fontSize: '18px',
+              fontWeight: 700,
+              margin: '0 0 8px',
+              color: '#0f172a',
+            }}
+          >
+            Platform Console Error
+          </h2>
+          <p
+            style={{
+              fontSize: '13.5px',
+              color: '#64748b',
+              margin: '0 0 16px',
+              lineHeight: 1.5,
+            }}
+          >
+            An unexpected error occurred while rendering the Platform Administration Console.
+          </p>
+          {this.state.error?.message && (
+            <div
+              style={{
+                padding: '10px 14px',
+                background: '#fef2f2',
+                borderRadius: '8px',
+                color: '#991b1b',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                marginBottom: '16px',
+                wordBreak: 'break-word',
+                textAlign: 'left',
+              }}
+            >
+              {this.state.error.message}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+            >
+              Reload Console
+            </button>
+            <a
+              href="/"
+              className="btn btn-primary"
+              style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+            >
+              Return to Practice
+            </a>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function PlatformAccessDeniedPage() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f8fafc',
+        padding: '24px',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '480px',
+          width: '100%',
+          background: '#ffffff',
+          borderRadius: '16px',
+          border: '1px solid #e2e8f0',
+          padding: '36px 32px',
+          textAlign: 'center',
+          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)',
+        }}
+      >
+        <div
+          style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '14px',
+            background: '#fee2e2',
+            color: '#dc2626',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '16px',
+            fontSize: '24px',
+          }}
+        >
+          🛡️
+        </div>
+        <h1
+          style={{
+            fontSize: '20px',
+            fontWeight: 800,
+            color: '#0f172a',
+            margin: '0 0 8px',
+          }}
+        >
+          Platform Access Required
+        </h1>
+        <p
+          style={{
+            fontSize: '13.5px',
+            color: '#64748b',
+            lineHeight: 1.5,
+            margin: '0 0 24px',
+          }}
+        >
+          This area is strictly restricted to Platform Super Administrators. Your authenticated account (<strong>{user?.email}</strong>) does not have platform administrative privileges.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ width: '100%', height: '42px', justifyContent: 'center' }}
+            onClick={() => navigate('/')}
+          >
+            Return to Practice Workspace
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: '100%', height: '42px', justifyContent: 'center' }}
+            onClick={async () => {
+              await logout();
+              navigate(`/login?redirect=${encodeURIComponent('/platform')}`);
+            }}
+          >
+            Sign in with Different Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlatformAppRoutes() {
   return (
-    <PlatformShell>
-      <Routes>
-        <Route path="/" element={<Navigate to="/platform/dashboard" replace />} />
-        <Route path="/dashboard" element={<PlatformDashboardPage />} />
-        <Route path="/practices" element={<PlatformPracticesPage />} />
-        <Route path="/practices/:id" element={<PlatformPracticeDetailsPage />} />
-        <Route path="/users" element={<PlatformUsersPage />} />
-        <Route path="/users/:id" element={<PlatformUserDetailsPage />} />
-        <Route path="/subscriptions" element={<PlatformSubscriptionsPage />} />
-        <Route path="/payments" element={<PlatformPaymentsPage />} />
-        <Route path="/issues" element={<PlatformIssuesPage />} />
-        <Route path="/audit" element={<PlatformAuditPage />} />
-        <Route path="/permissions" element={<RolePermissionManagementPage />} />
-        <Route path="*" element={<Navigate to="/platform/dashboard" replace />} />
-      </Routes>
-    </PlatformShell>
+    <PlatformErrorBoundary>
+      <PlatformShell>
+        <Routes>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<PlatformDashboardPage />} />
+          <Route path="practices" element={<PlatformPracticesPage />} />
+          <Route path="practices/:id" element={<PlatformPracticeDetailsPage />} />
+          <Route path="users" element={<PlatformUsersPage />} />
+          <Route path="users/:id" element={<PlatformUserDetailsPage />} />
+          <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+          <Route path="payments" element={<PlatformPaymentsPage />} />
+          <Route path="issues" element={<PlatformIssuesPage />} />
+          <Route path="audit" element={<PlatformAuditPage />} />
+          <Route path="permissions" element={<RolePermissionManagementPage />} />
+          <Route path="*" element={<Navigate to="dashboard" replace />} />
+        </Routes>
+      </PlatformShell>
+    </PlatformErrorBoundary>
   );
 }
 
@@ -164,7 +360,7 @@ function MainContent() {
       const redirectTarget = location.pathname + location.search;
       return <Navigate to={`/login?redirect=${encodeURIComponent(redirectTarget)}`} replace />;
     }
-    return <Navigate to="/" replace />;
+    return <PlatformAccessDeniedPage />;
   }
 
   useEffect(() => {

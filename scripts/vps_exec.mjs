@@ -12,10 +12,9 @@ export function runRemote(cmd) {
       SSH_ASKPASS_REQUIRE: 'force',
       DISPLAY: 'dummy:0',
     };
-    const b64 = Buffer.from(cmd).toString('base64');
     const out = execSync(
-      `ssh -i "C:\\Users\\drsha\\.ssh\\ncms_production" -o StrictHostKeyChecking=no ncms@109.122.56.148 "echo '${b64}' | base64 -d | bash -l"`,
-      { env, encoding: 'utf8' }
+      `ssh -i "C:\\Users\\drsha\\.ssh\\ncms_production" -o StrictHostKeyChecking=no ncms@109.122.56.148 "bash -l"`,
+      { env, input: cmd, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
     );
     return out;
   } finally {

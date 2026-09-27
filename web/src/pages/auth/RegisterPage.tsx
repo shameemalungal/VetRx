@@ -429,7 +429,7 @@ export const RegisterPage: React.FC = () => {
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="auth-grid-2">
                   <div className="auth-form-group">
                     <label className="auth-label" htmlFor="reg-phone">
                       Phone Number
@@ -512,7 +512,7 @@ export const RegisterPage: React.FC = () => {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="auth-grid-2">
               <div className="auth-form-group">
                 <label className="auth-label" htmlFor="reg-password">
                   Password <span style={{ color: '#e11d48' }}>*</span>
@@ -669,7 +669,7 @@ export const RegisterPage: React.FC = () => {
               <div className="auth-modal-overlay">
                 <div className="auth-modal-card">
                   <div className="auth-modal-header">
-                    <h3 className="auth-modal-title">Skip Adding Team Members?</h3>
+                    <h3 className="auth-modal-title">Create your practice?</h3>
                     <button
                       type="button"
                       className="auth-modal-close"
@@ -681,32 +681,34 @@ export const RegisterPage: React.FC = () => {
                     </button>
                   </div>
 
-                  <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 20px 0' }}>
-                    You can invite veterinarians, administrators, and clinical staff anytime later from{' '}
-                    <strong>Settings &rarr; Team</strong> after your clinic is created.
+                  <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 10px 0' }}>
+                    You haven't added any team members yet.
+                  </p>
+                  <p style={{ fontSize: '13px', color: '#64748b', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+                    You can add veterinarians and staff later from <strong>Practice Settings &rarr; Users &amp; Permissions</strong>.
                   </p>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                     <button
                       type="button"
                       className="btn-auth-submit"
-                      style={{ background: '#f1f5f9', color: '#475569', height: '38px', padding: '0 14px', margin: 0 }}
+                      style={{ background: '#f1f5f9', color: '#475569', height: '38px', padding: '0 14px', margin: 0, width: 'auto' }}
                       onClick={() => setShowSkipConfirmModal(false)}
                       disabled={loading}
                     >
-                      Return to Invites
+                      Cancel
                     </button>
                     <button
                       type="button"
                       className="btn-auth-submit"
-                      style={{ height: '38px', padding: '0 16px', margin: 0 }}
+                      style={{ height: '38px', padding: '0 16px', margin: 0, width: 'auto' }}
                       onClick={async () => {
                         setShowSkipConfirmModal(false);
                         await executeRegistration(false);
                       }}
                       disabled={loading}
                     >
-                      {loading ? 'Creating Clinic...' : 'Yes, Skip & Finish'}
+                      {loading ? 'Creating Practice...' : 'Yes, Create Practice'}
                     </button>
                   </div>
                 </div>

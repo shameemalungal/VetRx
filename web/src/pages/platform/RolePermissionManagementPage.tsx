@@ -95,7 +95,7 @@ interface MemberPermissionsResponse {
 export const RolePermissionManagementPage: React.FC = () => {
   const { user, isPlatformAdmin } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'member_overrides' | 'role_matrix'>('member_overrides');
+  const [activeTab, setActiveTab] = useState<'member_overrides' | 'role_matrix'>('role_matrix');
   const [practices, setPractices] = useState<PracticeSummary[]>([]);
   const [selectedPracticeId, setSelectedPracticeId] = useState<string>('');
   const [members, setMembers] = useState<PracticeMember[]>([]);
@@ -128,30 +128,37 @@ export const RolePermissionManagementPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [practicesRes, mData] = await Promise.all([
+      const [practicesResult, matrixResult] = await Promise.allSettled([
         platformAdminApi.listPractices({ pageSize: 100 }),
         platformAdminApi.getRoleMatrix(),
       ]);
 
-      const rawList = (practicesRes as any)?.results || (Array.isArray(practicesRes) ? practicesRes : []);
-      setPractices(rawList);
-      if (rawList.length > 0 && !selectedPracticeId) {
-        setSelectedPracticeId(rawList[0].id);
+      if (practicesResult.status === 'fulfilled') {
+        const rawList = (practicesResult.value as any)?.results || (Array.isArray(practicesResult.value) ? practicesResult.value : []);
+        setPractices(rawList);
+        if (rawList.length > 0 && !selectedPracticeId) {
+          setSelectedPracticeId(rawList[0].id);
+        }
       }
 
-      const normalizedMatrix: PermissionMatrixData = {
-        roles: mData?.roles || ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY'],
-        roleDefaults: (mData as any)?.roleDefaults || (mData as any)?.rolePermissions || {},
-        metadata: (mData as any)?.metadata || {},
-        permissions: {
-          clinical: (mData as any)?.permissions?.clinical || (mData as any)?.categories?.CLINICAL || [],
-          practice: (mData as any)?.permissions?.practice || (mData as any)?.categories?.PRACTICE || [],
-          commercial: (mData as any)?.permissions?.commercial || (mData as any)?.categories?.COMMERCIAL || [],
-          security: (mData as any)?.permissions?.security || (mData as any)?.categories?.SECURITY || [],
-          platformOnly: (mData as any)?.permissions?.platformOnly || (mData as any)?.categories?.PLATFORM || [],
-        },
-      };
-      setMatrixData(normalizedMatrix);
+      if (matrixResult.status === 'fulfilled') {
+        const mData = matrixResult.value;
+        const normalizedMatrix: PermissionMatrixData = {
+          roles: mData?.roles || ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY'],
+          roleDefaults: (mData as any)?.roleDefaults || (mData as any)?.rolePermissions || {},
+          metadata: (mData as any)?.metadata || {},
+          permissions: {
+            clinical: (mData as any)?.permissions?.clinical || (mData as any)?.categories?.CLINICAL || [],
+            practice: (mData as any)?.permissions?.practice || (mData as any)?.categories?.PRACTICE || [],
+            commercial: (mData as any)?.permissions?.commercial || (mData as any)?.categories?.COMMERCIAL || [],
+            security: (mData as any)?.permissions?.security || (mData as any)?.categories?.SECURITY || [],
+            platformOnly: (mData as any)?.permissions?.platformOnly || (mData as any)?.categories?.PLATFORM || [],
+          },
+        };
+        setMatrixData(normalizedMatrix);
+      } else {
+        throw matrixResult.reason;
+      }
     } catch (err: unknown) {
       console.error('Failed to load platform matrix data:', err);
       const msg = formatApiError(err, 'Failed to load permissions matrix');

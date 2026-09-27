@@ -511,3 +511,16 @@
 .btn-skip-link:hover {
   color: #0f172a;
 }
+
+.auth-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .auth-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

@@ -225,6 +225,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     brandName: '',
     genericName: '',
     presentation: 'Tablet',
+    strength: '',
+    packSize: '',
     dose: '1',
     doseUnit: 'mg',
     route: 'PO (Oral)',
@@ -526,6 +528,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           brandName: item.brandName,
           genericName: item.genericName,
           presentation: item.presentation,
+          packSize: item.packSize,
+          strength: item.strength,
           strengthVolume: item.strengthVolume,
           dose: item.dose || item.strengthVolume,
           doseUnit: item.doseUnit || extractDoseUnit(item.dose) || 'mg',
@@ -568,6 +572,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           brandName: item.brandName,
           genericName: item.genericName,
           presentation: item.presentation,
+          packSize: item.packSize,
+          strength: item.strength,
           strengthVolume: item.strengthVolume,
           dose: item.dose || item.strengthVolume,
           doseUnit: item.doseUnit || extractDoseUnit(item.dose) || 'mg',
@@ -1141,6 +1147,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: '',
       genericName: '',
       presentation: 'Tablet',
+      strength: '',
+      packSize: '',
       dose: '1',
       doseUnit: 'mg',
       dispenseUnit: 'tablet',
@@ -1253,6 +1261,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: itm.brandName,
       genericName: itm.genericName || '',
       presentation: itm.presentation || 'Tablet',
+      strength: itm.strength || itm.strengthVolume || '',
+      packSize: itm.packSize || '',
       dose: numericDose,
       doseUnit: doseUnit,
       dispenseUnit: dispUnit,
@@ -1334,6 +1344,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: med.brandName,
       genericName: med.genericName || '',
       presentation: med.presentation,
+      strength: med.strength || med.strengthVolume || '',
+      packSize: med.packSize || '',
       dose: numericDose,
       doseUnit: doseUnit,
       dispenseUnit: dispUnit,
@@ -1450,15 +1462,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     const numericApprovedDose = medForm.dose.trim() || '1';
     const doseUnitVal = medForm.doseUnit || 'mg';
     const dispenseUnitVal = medForm.dispenseUnit || medForm.unit || 'tablet';
-    const formattedStrengthVolume = selectedMedRef?.strengthVolume || `${numericApprovedDose} ${doseUnitVal}`;
+    const formattedStrengthVolume = medForm.strength?.trim() || selectedMedRef?.strengthVolume || `${numericApprovedDose} ${doseUnitVal}`;
 
     const newItem: DraftItem = {
       medicineId: selectedMedRef?.id,
       brandName: brand,
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
-      packSize: selectedMedRef?.packSize,
-      strength: selectedMedRef?.strength,
+      packSize: medForm.packSize?.trim() || selectedMedRef?.packSize,
+      strength: medForm.strength?.trim() || selectedMedRef?.strength,
       dose: numericApprovedDose,
       doseUnit: doseUnitVal,
       strengthVolume: formattedStrengthVolume,
@@ -2013,7 +2025,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             brandName: itm.brandName,
             genericName: itm.genericName,
             presentation: itm.presentation,
-            strengthVolume: itm.strengthVolume,
+            packSize: itm.packSize,
+            strength: itm.strength,
+            strengthVolume: itm.strengthVolume || itm.strength,
             dose: itm.dose || itm.strengthVolume,
             doseUnit: itm.doseUnit || extractDoseUnit(itm.dose) || 'mg',
             quantity: itm.quantity,
@@ -3674,6 +3688,84 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* ── Medicine Specification: Brand, Formulation, Strength & Presentation (Defect 3) ── */}
+              <div
+                style={{
+                  background: 'var(--color-surface-container-low, #f8fafc)',
+                  border: '1px solid var(--color-surface-container, #e2e8f0)',
+                  borderRadius: 'var(--radius-lg, 12px)',
+                  padding: '14px 16px',
+                  marginBottom: '16px',
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-outline)', marginBottom: '10px' }}>
+                  Medicine Formulation &amp; Presentation Specification
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                      Brand Name <span style={{ color: 'var(--color-error)' }}>*</span>
+                    </label>
+                    <input
+                      id="med-brand-name"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Brand XYZ, Amoxil"
+                      value={medForm.brandName}
+                      onChange={(e) => setMedForm((prev) => ({ ...prev, brandName: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                      Chemical / Formulation
+                    </label>
+                    <input
+                      id="med-chemical-formulation"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Amoxicillin, Prednisolone"
+                      value={medForm.genericName}
+                      onChange={(e) => setMedForm((prev) => ({ ...prev, genericName: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                      Strength / Concentration
+                    </label>
+                    <input
+                      id="med-strength"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 125 mg/tablet, 5 mg/mL, 20 mg/g"
+                      value={medForm.strength}
+                      onChange={(e) => setMedForm((prev) => ({ ...prev, strength: e.target.value }))}
+                    />
+                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                      Active concentration (e.g. 5 mg/mL, 125 mg/tablet)
+                    </span>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                      Presentation / Pack Size
+                    </label>
+                    <input
+                      id="med-pack-size"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 10 tablets/strip, 30 mL bottle, 2 mL vial"
+                      value={medForm.packSize}
+                      onChange={(e) => setMedForm((prev) => ({ ...prev, packSize: e.target.value }))}
+                    />
+                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                      Physical pack unit (e.g. 30 mL bottle, 10 tablets/strip)
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Dosing parameters */}

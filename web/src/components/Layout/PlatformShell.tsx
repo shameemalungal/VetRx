@@ -147,20 +147,11 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
           <button
             type="button"
             className="platform-switch-practice-btn"
-            onClick={async () => {
-              if (practices && practices.length === 1) {
-                await switchPractice(practices[0].practiceId);
-                navigate('/');
-              } else if (practices && practices.length > 1) {
-                setIsPracticeSwitcherOpen(true);
-              } else {
-                navigate('/');
-              }
-            }}
+            onClick={() => setIsPracticeSwitcherOpen(true)}
             title="Switch to veterinary practice"
           >
             <Icon name="swap-horiz" size={16} />
-            <span>{practices && practices.length === 1 ? 'Switch to My Practice' : 'Switch to Practice'}</span>
+            <span>Switch to Practice</span>
           </button>
         </div>
       </aside>
@@ -318,20 +309,11 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
                 alignItems: 'center',
                 gap: '6px',
               }}
-              onClick={async () => {
-                if (practices && practices.length === 1) {
-                  await switchPractice(practices[0].practiceId);
-                  navigate('/');
-                } else if (practices && practices.length > 1) {
-                  setIsPracticeSwitcherOpen(true);
-                } else {
-                  navigate('/');
-                }
-              }}
+              onClick={() => setIsPracticeSwitcherOpen(true)}
               title="Switch to veterinary practice"
             >
               <Icon name="hospital" size={15} />
-              <span>{practices && practices.length === 1 ? 'My Practice' : 'Practice Workspace'}</span>
+              <span>Switch to Practice</span>
             </button>
 
             <button
@@ -357,58 +339,109 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
 
       {/* Practice Switcher Modal */}
       {isPracticeSwitcherOpen && (
-        <div className="platform-modal-overlay">
-          <div className="platform-modal">
-            <div className="platform-modal-header">
-              <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Switch to Practice</div>
+        <div className="platform-modal-overlay" onClick={() => setIsPracticeSwitcherOpen(false)}>
+          <div className="platform-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', width: '100%' }}>
+            <div className="platform-modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary, #00685f)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Context Switch
+                </div>
+                <h3 style={{ fontWeight: 800, fontSize: '1.25rem', margin: '2px 0 0', color: '#0f172a' }}>
+                  MY PRACTICES
+                </h3>
+              </div>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
                 onClick={() => setIsPracticeSwitcherOpen(false)}
               >
-                <Icon name="close" size={18} />
+                <Icon name="close" size={20} />
               </button>
             </div>
-            <div className="platform-modal-body">
-              <p style={{ fontSize: '0.875rem', color: '#64748b', margin: 0 }}>
-                Select a practice to enter clinical practitioner mode:
+            <div className="platform-modal-body" style={{ padding: '16px 0' }}>
+              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 12px' }}>
+                Select your veterinary practice to enter normal clinical practice mode:
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                {practices.map((p) => (
-                  <button
-                    key={p.practiceId}
-                    type="button"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      borderRadius: '6px',
-                      border: '1px solid #e2e8f0',
-                      background: p.isCurrent ? '#f1f5f9' : '#ffffff',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                    onClick={async () => {
-                      await switchPractice(p.practiceId);
-                      setIsPracticeSwitcherOpen(false);
-                      navigate('/');
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.practiceName}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        Role: {p.role} {p.isClinicalApprover ? '• Clinical Approver' : ''}
-                      </div>
-                    </div>
-                    {p.isCurrent && (
-                      <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 600 }}>Current</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              {practices && practices.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {practices.map((p) => {
+                    const isOwner = p.role === 'PRACTICE_OWNER' || p.role === 'Owner';
+                    const roleLabel = isOwner
+                      ? 'Owner • Veterinarian'
+                      : p.role === 'VETERINARIAN'
+                      ? 'Veterinarian'
+                      : p.role?.replace(/_/g, ' ') || 'Staff';
+
+                    return (
+                      <button
+                        key={p.practiceId}
+                        type="button"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '14px 16px',
+                          borderRadius: '10px',
+                          border: p.isCurrent ? '1.5px solid var(--color-primary, #00685f)' : '1px solid #e2e8f0',
+                          background: p.isCurrent ? 'rgba(0, 104, 95, 0.05)' : '#ffffff',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'all 0.15s ease',
+                          width: '100%',
+                        }}
+                        onClick={async () => {
+                          await switchPractice(p.practiceId);
+                          setIsPracticeSwitcherOpen(false);
+                          navigate('/');
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '8px',
+                              background: 'rgba(0, 104, 95, 0.1)',
+                              color: 'var(--color-primary, #00685f)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon name="hospital" size={20} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                              {p.practiceName}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
+                              {roleLabel}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {p.isCurrent ? (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-primary, #00685f)', fontWeight: 700, background: 'rgba(0, 104, 95, 0.1)', padding: '2px 8px', borderRadius: '4px' }}>
+                              Current
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.8rem', color: 'var(--color-primary, #00685f)', fontWeight: 600 }}>
+                              Enter →
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748b', fontSize: '0.875rem' }}>
+                  No practice memberships found.
+                </div>
+              )}
             </div>
-            <div className="platform-modal-footer">
+            <div className="platform-modal-footer" style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
