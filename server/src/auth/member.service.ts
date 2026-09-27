@@ -61,6 +61,19 @@ export class MemberService {
     this.mockMembers.clear();
   }
 
+  static getMockMember(memberId: string): MemberListItemDTO | undefined {
+    return this.mockMembers.get(memberId);
+  }
+
+  static getMockMemberByUserId(userId: string, practiceId: string): MemberListItemDTO | undefined {
+    for (const m of this.mockMembers.values()) {
+      if (m.userId === userId && m.practiceId === practiceId) {
+        return m;
+      }
+    }
+    return undefined;
+  }
+
   /**
    * Lists all members of a practice.
    */

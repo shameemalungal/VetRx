@@ -308,7 +308,9 @@ const createPrescriptionSchema = z.object({
   diagnosis: z.string().max(300).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
   status: z.string().max(50).optional(),
-  forwardedToUserId: z.string().uuid().nullable().optional(),
+  forwardedToUserId: z.string().min(1).nullable().optional(),
+  targetUserId: z.string().min(1).nullable().optional(),
+  targetMemberId: z.string().min(1).nullable().optional(),
   forwardingRemarks: z.string().max(1000).nullable().optional(),
   items: z.array(
     z.object({
@@ -438,7 +440,9 @@ clinicalRouter.post(
     try {
       const practiceId = getPracticeId(req);
       const body = z.object({
-        forwardedToUserId: z.string().uuid().optional().nullable(),
+        forwardedToUserId: z.string().min(1).optional().nullable(),
+        targetUserId: z.string().min(1).optional().nullable(),
+        targetMemberId: z.string().min(1).optional().nullable(),
         forwardingRemarks: z.string().max(1000).nullable().optional(),
       }).parse(req.body);
       const updated = await ClinicalService.forwardPrescription(getId(req), practiceId, req.user!.id, body);

@@ -361,98 +361,126 @@ export const PlatformPracticesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create Practice Modal */}
+      {/* Create Practice Modal (VetRx Polished) */}
       {isCreateModalOpen && (
-        <div className="platform-modal-overlay">
-          <div className="platform-modal">
-            <div className="platform-modal-header">
-              <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Create Practice Tenant</div>
+        <div className="platform-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-practice-title">
+          <div className="create-practice-modal">
+            <div className="create-practice-modal-header">
+              <div>
+                <h2 id="create-practice-title" className="create-practice-modal-title">
+                  Create Practice Tenant
+                </h2>
+                <p className="create-practice-modal-subtitle">
+                  Create a new veterinary practice and assign its initial owner.
+                </p>
+              </div>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="create-practice-modal-close"
                 onClick={() => setIsCreateModalOpen(false)}
+                aria-label="Close dialog"
               >
                 <Icon name="close" size={18} />
               </button>
             </div>
             <form onSubmit={handleCreatePractice}>
-              <div className="platform-modal-body">
-                <div>
-                  <label className="form-label">Practice Name *</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-control"
-                    placeholder="e.g. Apex Pet Hospital"
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Practice Archetype *</label>
-                  <select
-                    className="form-control"
-                    value={createForm.practiceType}
-                    onChange={(e) =>
-                      setCreateForm({
-                        ...createForm,
-                        practiceType: e.target.value as any,
-                        planCode:
-                          e.target.value === 'INDEPENDENT'
-                            ? 'INDIVIDUAL_MONTHLY'
-                            : e.target.value === 'ENTERPRISE'
-                            ? 'ENTERPRISE_CUSTOM'
-                            : 'CLINIC_MONTHLY',
-                      })
-                    }
-                  >
-                    <option value="CLINIC">Veterinary Clinic (Multi-vet practice)</option>
-                    <option value="INDEPENDENT">Independent Practitioner (Solo vet)</option>
-                    <option value="ENTERPRISE">Enterprise Organization (Multi-branch)</option>
-                  </select>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label className="form-label">Owner Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      className="form-control"
-                      placeholder="Dr. Rajesh Sharma"
-                      value={createForm.ownerName}
-                      onChange={(e) => setCreateForm({ ...createForm, ownerName: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label">Owner Email *</label>
-                    <input
-                      type="email"
-                      required
-                      className="form-control"
-                      placeholder="rajesh@clinic.vet"
-                      value={createForm.ownerEmail}
-                      onChange={(e) => setCreateForm({ ...createForm, ownerEmail: e.target.value })}
-                    />
+              <div className="create-practice-modal-body">
+                {/* 1. Practice Details */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Practice Details</div>
+                  <div className="create-practice-grid-2">
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Practice Name <span className="required-indicator">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="create-practice-input"
+                        placeholder="e.g. Apex Pet Hospital"
+                        value={createForm.name}
+                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Practice Archetype <span className="required-indicator">*</span>
+                      </label>
+                      <select
+                        className="create-practice-select"
+                        value={createForm.practiceType}
+                        onChange={(e) =>
+                          setCreateForm({
+                            ...createForm,
+                            practiceType: e.target.value as any,
+                            planCode:
+                              e.target.value === 'INDEPENDENT'
+                                ? 'INDIVIDUAL_MONTHLY'
+                                : e.target.value === 'ENTERPRISE'
+                                ? 'ENTERPRISE_CUSTOM'
+                                : 'CLINIC_MONTHLY',
+                          })
+                        }
+                      >
+                        <option value="CLINIC">Veterinary Clinic (Multi-vet practice)</option>
+                        <option value="INDEPENDENT">Independent Practitioner (Solo vet)</option>
+                        <option value="ENTERPRISE">Enterprise Organization (Multi-branch)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label className="form-label">Contact Phone</label>
+                {/* 2. Owner Details */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Owner Details</div>
+                  <div className="create-practice-grid-2">
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Owner Full Name <span className="required-indicator">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="create-practice-input"
+                        placeholder="Dr. Rajesh Sharma"
+                        value={createForm.ownerName}
+                        onChange={(e) => setCreateForm({ ...createForm, ownerName: e.target.value })}
+                      />
+                    </div>
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Owner Email <span className="required-indicator">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        className="create-practice-input"
+                        placeholder="rajesh@clinic.vet"
+                        value={createForm.ownerEmail}
+                        onChange={(e) => setCreateForm({ ...createForm, ownerEmail: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">Contact Phone</label>
                     <input
                       type="tel"
-                      className="form-control"
+                      className="create-practice-input"
                       placeholder="+91 98765 43210"
                       value={createForm.ownerPhone}
                       onChange={(e) => setCreateForm({ ...createForm, ownerPhone: e.target.value })}
                     />
                   </div>
-                  <div>
-                    <label className="form-label">Initial Commercial Plan</label>
+                </div>
+
+                {/* 3. Commercial */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Commercial</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">Initial Commercial Plan</label>
                     <select
-                      className="form-control"
+                      className="create-practice-select"
                       value={createForm.planCode}
                       onChange={(e) => setCreateForm({ ...createForm, planCode: e.target.value })}
                     >
@@ -465,41 +493,58 @@ export const PlatformPracticesPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Clinic Address</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="12, High Street, Indiranagar, Bengaluru"
-                    value={createForm.address}
-                    onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                  />
+                {/* 4. Address */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Address</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">Clinic Address</label>
+                    <input
+                      type="text"
+                      className="create-practice-input"
+                      placeholder="12, High Street, Indiranagar, Bengaluru"
+                      value={createForm.address}
+                      onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
+                    />
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                  <input
-                    type="checkbox"
-                    id="isClinicalApprover"
-                    checked={createForm.isClinicalApprover}
-                    onChange={(e) => setCreateForm({ ...createForm, isClinicalApprover: e.target.checked })}
-                  />
-                  <label htmlFor="isClinicalApprover" style={{ fontSize: '0.875rem', color: '#0f172a', cursor: 'pointer' }}>
-                    Practice Owner is a licensed practicing veterinarian (Clinical Approver)
+                {/* 5. Clinical Authority */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Clinical Authority</div>
+                  <label
+                    htmlFor="isClinicalApprover"
+                    className={`create-practice-checkbox-card ${createForm.isClinicalApprover ? 'checked' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      id="isClinicalApprover"
+                      className="create-practice-checkbox"
+                      checked={createForm.isClinicalApprover}
+                      onChange={(e) => setCreateForm({ ...createForm, isClinicalApprover: e.target.checked })}
+                    />
+                    <div className="create-practice-checkbox-content">
+                      <span className="create-practice-checkbox-title">
+                        Practice Owner is a licensed practicing veterinarian
+                      </span>
+                      <span className="create-practice-checkbox-desc">
+                        Clinical Approver — Designates the owner with clinical authority to review, approve, and seal prescriptions.
+                      </span>
+                    </div>
                   </label>
                 </div>
               </div>
 
-              <div className="platform-modal-footer">
+              <div className="create-practice-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="create-practice-btn-cancel"
                   disabled={isSubmitting}
                   onClick={() => setIsCreateModalOpen(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create Practice Tenant'}
+                <button type="submit" className="create-practice-btn-submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating Tenant...' : 'Create Practice Tenant'}
                 </button>
               </div>
             </form>

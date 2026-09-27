@@ -241,7 +241,7 @@ export interface Prescription {
   forwardedByUserId?: string | null;
   forwardedByUser?: { id: string; name: string; email: string } | null;
   forwardedToUserId?: string | null;
-  forwardedToUser?: { id: string; name: string; email: string } | null;
+  forwardedToUser?: { id: string; name: string; email: string; role?: string; isClinicalApprover?: boolean } | null;
   forwardedAt?: string | Date | null;
   approvedByUserId?: string | null;
   approvedByUser?: { id: string; name: string; email: string } | null;

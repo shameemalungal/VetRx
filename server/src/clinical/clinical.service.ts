@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { AuditService } from '../lib/audit.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthorizationService } from '../auth/authorization.service.js';
+import { MemberService } from '../auth/member.service.js';
 import { PERMISSIONS } from '../auth/permissions.js';
 
 // ==============================================================================
@@ -511,6 +512,28 @@ export class ClinicalService {
     if (!rx) {
       throw new AppError(404, 'PRESCRIPTION_NOT_FOUND', 'Prescription not found.');
     }
+
+    if (rx.forwardedToUserId && rx.forwardedToUser) {
+      if (process.env.VETRX_FAST_TEST === '1') {
+        const mem = MemberService.getMockMemberByUserId(rx.forwardedToUserId, practiceId);
+        if (mem) {
+          (rx.forwardedToUser as any).role = mem.role;
+          (rx.forwardedToUser as any).isClinicalApprover = mem.isClinicalApprover;
+        }
+      } else {
+        try {
+          const pm = await prisma.practiceMember.findUnique({
+            where: { practiceId_userId: { practiceId, userId: rx.forwardedToUserId } },
+            select: { role: true, isClinicalApprover: true },
+          });
+          if (pm) {
+            (rx.forwardedToUser as any).role = pm.role;
+            (rx.forwardedToUser as any).isClinicalApprover = pm.isClinicalApprover;
+          }
+        } catch {}
+      }
+    }
+
     return rx;
   }
 
@@ -558,27 +581,79 @@ export class ClinicalService {
     await this.getPatientById(data.patientId, practiceId);
 
     // If forwarded directly upon creation or status is Pending Approval
-    let targetClinicianUserId = data.forwardedToUserId || null;
+    let targetClinicianUserId = (data as any).targetUserId || data.forwardedToUserId || null;
+    const rawTargetMemberId = (data as any).targetMemberId;
 
-    if (targetClinicianUserId) {
-      const isEligible = await this.isEligiblePrescriptionApprover(targetClinicianUserId, practiceId);
-      if (!isEligible) {
-        const member = await AuthorizationService.resolveMembership(targetClinicianUserId, practiceId);
-        if (!member || !member.isActive) {
-          throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+    if (rawTargetMemberId) {
+      let resolvedUserId: string | null = null;
+      if (process.env.VETRX_FAST_TEST === '1') {
+        const mock = MemberService.getMockMember(rawTargetMemberId);
+        if (mock && mock.practiceId === practiceId) {
+          resolvedUserId = mock.userId;
         }
-        throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+      } else {
+        try {
+          const pm = await prisma.practiceMember.findFirst({
+            where: { id: rawTargetMemberId, practiceId },
+            select: { userId: true },
+          });
+          if (pm) resolvedUserId = pm.userId;
+        } catch {}
       }
-    } else if (data.status === 'Pending Approval') {
+      if (!resolvedUserId) {
+        throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+      }
+      targetClinicianUserId = resolvedUserId;
+    } else if (targetClinicianUserId) {
+      let resolvedUserId: string | null = null;
+      if (process.env.VETRX_FAST_TEST === '1') {
+        const mock = MemberService.getMockMember(targetClinicianUserId);
+        if (mock && mock.practiceId === practiceId) {
+          resolvedUserId = mock.userId;
+        }
+      } else {
+        try {
+          const pm = await prisma.practiceMember.findFirst({
+            where: { id: targetClinicianUserId, practiceId },
+            select: { userId: true },
+          });
+          if (pm) resolvedUserId = pm.userId;
+        } catch {}
+      }
+      if (resolvedUserId) {
+        targetClinicianUserId = resolvedUserId;
+      }
+    }
+
+    if (targetClinicianUserId || data.status === 'Pending Approval') {
       const eligible = await this.getEligibleClinicians(practiceId);
       if (eligible.length === 0) {
         throw new AppError(
           400,
           'NO_CLINICAL_APPROVER_AVAILABLE',
-          'No active veterinarian is available to review this prescription. Please designate a veterinarian before sending for approval.'
+          'No clinical approver is currently available for this practice. Please ask a veterinarian or authorized clinical approver to join the practice or be designated as a clinical approver.'
         );
-      } else if (eligible.length === 1) {
-        targetClinicianUserId = eligible[0].id;
+      }
+
+      if (!targetClinicianUserId) {
+        if (eligible.length === 1) {
+          targetClinicianUserId = eligible[0].userId;
+        } else {
+          throw new AppError(
+            400,
+            'MULTIPLE_APPROVERS_SELECTION_REQUIRED',
+            'Multiple clinical approvers are available. Please explicitly select which veterinarian or clinical approver should review this prescription.'
+          );
+        }
+      } else {
+        const isEligible = await this.isEligiblePrescriptionApprover(targetClinicianUserId, practiceId);
+        if (!isEligible) {
+          const member = await AuthorizationService.resolveMembership(targetClinicianUserId, practiceId);
+          if (!member || !member.isActive) {
+            throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+          }
+          throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+        }
       }
     }
 
@@ -832,9 +907,86 @@ export class ClinicalService {
       );
     }
 
-    let targetUserId = data.forwardedToUserId || null;
+    let targetUserId = (data as any).targetUserId || data.forwardedToUserId || null;
+    const rawTargetMemberId = (data as any).targetMemberId;
 
-    if (targetUserId) {
+    if (rawTargetMemberId) {
+      let resolvedUserId: string | null = null;
+      if (process.env.VETRX_FAST_TEST === '1') {
+        const mock = MemberService.getMockMember(rawTargetMemberId);
+        if (mock && mock.practiceId === practiceId) {
+          resolvedUserId = mock.userId;
+        }
+      } else {
+        try {
+          const pm = await prisma.practiceMember.findFirst({
+            where: { id: rawTargetMemberId, practiceId },
+            select: { userId: true },
+          });
+          if (pm) resolvedUserId = pm.userId;
+        } catch {}
+      }
+      if (!resolvedUserId) {
+        throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+      }
+      targetUserId = resolvedUserId;
+    } else if (targetUserId) {
+      let resolvedUserId: string | null = null;
+      if (process.env.VETRX_FAST_TEST === '1') {
+        const mock = MemberService.getMockMember(targetUserId);
+        if (mock && mock.practiceId === practiceId) {
+          resolvedUserId = mock.userId;
+        }
+      } else {
+        try {
+          const pm = await prisma.practiceMember.findFirst({
+            where: { id: targetUserId, practiceId },
+            select: { userId: true },
+          });
+          if (pm) resolvedUserId = pm.userId;
+        } catch {}
+      }
+      if (resolvedUserId) {
+        targetUserId = resolvedUserId;
+      }
+    }
+
+    const eligible = await this.getEligibleClinicians(practiceId);
+
+    // CASE A — ZERO ELIGIBLE APPROVERS
+    if (eligible.length === 0) {
+      throw new AppError(
+        400,
+        'NO_CLINICAL_APPROVER_AVAILABLE',
+        'No clinical approver is currently available for this practice. Please ask a veterinarian or authorized clinical approver to join the practice or be designated as a clinical approver.'
+      );
+    }
+
+    // CASE B — EXACTLY ONE ELIGIBLE APPROVER
+    if (eligible.length === 1) {
+      if (!targetUserId) {
+        targetUserId = eligible[0].userId;
+      } else {
+        const isTargetEligible = await this.isEligiblePrescriptionApprover(targetUserId, practiceId);
+        if (!isTargetEligible) {
+          const targetMember = await AuthorizationService.resolveMembership(targetUserId, practiceId);
+          if (!targetMember || !targetMember.isActive) {
+            throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
+          }
+          throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
+        }
+      }
+    }
+
+    // CASE C — MORE THAN ONE ELIGIBLE APPROVER
+    if (eligible.length > 1) {
+      if (!targetUserId) {
+        throw new AppError(
+          400,
+          'MULTIPLE_APPROVERS_SELECTION_REQUIRED',
+          'Multiple clinical approvers are available. Please explicitly select which veterinarian or clinical approver should review this prescription.'
+        );
+      }
       const isTargetEligible = await this.isEligiblePrescriptionApprover(targetUserId, practiceId);
       if (!isTargetEligible) {
         const targetMember = await AuthorizationService.resolveMembership(targetUserId, practiceId);
@@ -842,17 +994,6 @@ export class ClinicalService {
           throw new AppError(404, 'CLINICIAN_NOT_FOUND', 'Selected clinician is not an active member of this practice.');
         }
         throw new AppError(400, 'INVALID_CLINICIAN', 'Selected user does not have clinical prescription approval authority.');
-      }
-    } else {
-      const eligible = await this.getEligibleClinicians(practiceId);
-      if (eligible.length === 0) {
-        throw new AppError(
-          400,
-          'NO_CLINICAL_APPROVER_AVAILABLE',
-          'No active veterinarian is available to review this prescription. Please designate a veterinarian before sending for approval.'
-        );
-      } else if (eligible.length === 1) {
-        targetUserId = eligible[0].id;
       }
     }
 
@@ -1148,21 +1289,30 @@ export class ClinicalService {
 
   static async getEligibleClinicians(practiceId: string) {
     if (process.env.VETRX_FAST_TEST === '1') {
-      const results: Array<{ id: string; userId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
+      const results: Array<{ id: string; userId: string; memberId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
       const members = AuthorizationService.getMockMembers(practiceId);
       for (const m of members) {
         if (m.isActive && (m.role === Role.VETERINARIAN || m.isClinicalApprover)) {
+          const fullMock = MemberService.getMockMemberByUserId(m.userId, practiceId);
           results.push({
             id: m.userId,
             userId: m.userId,
-            name: `User ${m.userId}`,
-            email: `${m.userId}@practice.test`,
-            avatarUrl: null,
+            memberId: m.id,
+            name: fullMock?.user.name || `User ${m.userId}`,
+            email: fullMock?.user.email || `${m.userId}@practice.test`,
+            avatarUrl: fullMock?.user.avatarUrl || null,
             role: m.role,
             isClinicalApprover: !!m.isClinicalApprover,
           });
         }
       }
+      results.sort((a, b) => {
+        const isVetA = a.role === Role.VETERINARIAN;
+        const isVetB = b.role === Role.VETERINARIAN;
+        if (isVetA && !isVetB) return -1;
+        if (!isVetA && isVetB) return 1;
+        return a.name.localeCompare(b.name);
+      });
       return results;
     }
 
@@ -1182,12 +1332,13 @@ export class ClinicalService {
       },
     });
 
-    const eligible: Array<{ id: string; userId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
+    const eligible: Array<{ id: string; userId: string; memberId: string; name: string; email: string; avatarUrl: string | null; role: string; isClinicalApprover?: boolean }> = [];
     for (const m of members) {
       if (m.user.isActive && await this.isEligiblePrescriptionApprover(m.userId, practiceId)) {
         eligible.push({
           id: m.userId,
           userId: m.userId,
+          memberId: m.id,
           name: m.user.name,
           email: m.user.email,
           avatarUrl: m.user.avatarUrl,
@@ -1196,6 +1347,15 @@ export class ClinicalService {
         });
       }
     }
+
+    eligible.sort((a, b) => {
+      const isVetA = a.role === Role.VETERINARIAN;
+      const isVetB = b.role === Role.VETERINARIAN;
+      if (isVetA && !isVetB) return -1;
+      if (!isVetA && isVetB) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
     return eligible;
   }
 
