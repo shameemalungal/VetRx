@@ -320,6 +320,20 @@ function MainContent() {
   const [dbReady, setDbReady] = useState(false);
   const location = useLocation();
 
+  useEffect(() => {
+    async function initDb() {
+      try {
+        await ensureSeeded();
+        await loadSettings(settings, user);
+      } catch (err) {
+        console.error('VetRx IndexedDB init error:', err);
+      } finally {
+        setDbReady(true);
+      }
+    }
+    void initDb();
+  }, [practice?.id, user?.id, loadSettings, settings, user]);
+
   // Public/direct invitation acceptance route
   if (location.pathname.startsWith('/invite/')) {
     return (
@@ -363,20 +377,6 @@ function MainContent() {
     }
     return <PlatformAccessDeniedPage />;
   }
-
-  useEffect(() => {
-    async function initDb() {
-      try {
-        await ensureSeeded();
-        await loadSettings(settings, user);
-      } catch (err) {
-        console.error('VetRx IndexedDB init error:', err);
-      } finally {
-        setDbReady(true);
-      }
-    }
-    void initDb();
-  }, [practice?.id, user?.id, loadSettings, settings, user]);
 
   if (isLoading || !dbReady) {
     return (
