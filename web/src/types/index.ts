@@ -147,7 +147,9 @@ export interface Medicine {
   brandName: string;
   genericName?: string;
   presentation: string;    // e.g. Tablet, Syrup, Injection, Drops
-  strengthVolume?: string; // e.g. 500mg, 15ml
+  packSize?: string;       // e.g. 30 mL bottle, 2 mL vial, 10 tablets/strip
+  strength?: string;       // e.g. 5 mg/mL, 125 mg/tablet
+  strengthVolume?: string; // e.g. 500mg, 15ml (backward compat alias)
   defaultUnit?: string;    // e.g. tablets, ml, vial
   dispenseUnit?: string;   // e.g. tablet, capsule, vial, bottle
   category?: string;       // e.g. Antibiotic, NSAID, Otic / Topical
@@ -269,6 +271,8 @@ export interface PrescriptionItem {
   brandName: string;       // snapshot at time of Rx
   genericName?: string;
   presentation: string;
+  packSize?: string;
+  strength?: string;
   strengthVolume?: string;
   dose?: string;           // Final approved numeric or clinical dose e.g. "240", "1.17"
   doseUnit?: string;       // Clinical dose unit e.g. "mg", "g", "mL", "mg/kg"
@@ -308,6 +312,8 @@ export interface TreatmentPackageItem {
   brandName: string;
   genericName?: string;
   presentation: string;
+  packSize?: string;
+  strength?: string;
   strengthVolume?: string;
   dose?: string;
   quantity: number;

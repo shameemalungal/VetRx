@@ -29,6 +29,37 @@ export class AuthorizationService {
   private static mockPlatformUsers: Map<string, { platformRole: PlatformRole | null }> = new Map();
   private static mockPracticeOwners: Map<string, string> = new Map(); // practiceId -> ownerUserId
   private static mockOverrides: Map<string, Map<string, 'ALLOW' | 'DENY'>> = new Map(); // practiceMemberId -> (permission -> effect)
+  private static mockSupportAccess: Map<string, { expiresAt: Date }> = new Map(); // `${userId}:${practiceId}` -> session
+
+  static setMockSupportAccess(userId: string, practiceId: string, durationMinutes = 60): void {
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+    this.mockSupportAccess.set(`${userId}:${practiceId}`, { expiresAt });
+  }
+
+  static clearMockSupportAccess(): void {
+    this.mockSupportAccess.clear();
+  }
+
+  static async hasActiveSupportSession(userId: string, practiceId: string): Promise<boolean> {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const mock = this.mockSupportAccess.get(`${userId}:${practiceId}`);
+      return Boolean(mock && mock.expiresAt > new Date());
+    }
+
+    try {
+      const session = await prisma.supportAccessSession.findFirst({
+        where: {
+          platformAdminUserId: userId,
+          targetPracticeId: practiceId,
+          status: 'ACTIVE',
+          expiresAt: { gt: new Date() },
+        },
+      });
+      return Boolean(session);
+    } catch {
+      return false;
+    }
+  }
 
   static setMockMembership(userId: string, practiceId: string, record: Partial<MembershipRecord>): void {
     const key = `${userId}:${practiceId}`;
@@ -103,6 +134,7 @@ export class AuthorizationService {
     this.mockPlatformUsers.clear();
     this.mockPracticeOwners.clear();
     this.mockOverrides.clear();
+    this.mockSupportAccess.clear();
   }
 
   /**
@@ -238,6 +270,15 @@ export class AuthorizationService {
 
   /**
    * Asserts that a user has a specific permission in a practice, throwing an AppError if not.
+   *
+   * STRICT DUAL CONTEXT SECURITY RULES:
+   * 1. In Practice context (user is a PracticeMember):
+   *    Authorization comes SOLELY from their PracticeMember record, practice role, and member overrides.
+   *    Platform Super Admin permissions NEVER leak into practice context.
+   * 2. Non-member context:
+   *    Unrestricted impersonation is strictly prohibited.
+   *    Platform Super Admins can only perform non-clinical administrative operations
+   *    if an audited, time-limited Support Access session is currently active.
    */
   static async requirePermission(
     userId: string,
@@ -245,50 +286,57 @@ export class AuthorizationService {
     permission: Permission | string
   ): Promise<void> {
     const membership = await this.resolveMembership(userId, practiceId);
-    if (membership && membership.isActive) {
-      const effective = await this.getEffectivePermissions(userId, practiceId);
-      if (effective.includes(permission as Permission)) {
-        return;
-      }
-    }
 
-    const isSuperAdmin = await this.isPlatformSuperAdmin(userId);
-    if (isSuperAdmin) {
-      const clinicalPermissions: string[] = [
-        PERMISSIONS.PRESCRIPTION_APPROVE,
-        PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES,
-        'PRESCRIPTION_SIGN',
-        'PRESCRIPTION_ISSUE',
-        'PRESCRIPTION_DISPENSE',
-      ];
-      if (clinicalPermissions.includes(permission as any)) {
+    // CASE 1: Practice Member context (including Super Admin's OWN practice)
+    if (membership) {
+      if (!membership.isActive) {
         throw new AppError(
           403,
-          'CLINICAL_AUTHORITY_RESTRICTED',
-          'Platform Super Admins cannot execute clinical approval actions without being a licensed clinical approver member.'
+          'MEMBERSHIP_DISABLED',
+          'Your membership in this practice has been deactivated.'
         );
       }
-      return; // Permitted for administrative practice operations
+
+      const effective = await this.getEffectivePermissions(userId, practiceId);
+      if (effective.includes(permission as Permission)) {
+        return; // Authorized via explicit practice role / overrides
+      }
+
+      throw new AppError(
+        403,
+        'INSUFFICIENT_PERMISSION',
+        `Action requires permission: ${permission}`
+      );
     }
 
-    if (!membership) {
-      throw new AppError(
-        403,
-        'NOT_PRACTICE_MEMBER',
-        'User is not a member of the requested practice.'
-      );
+    // CASE 2: Non-member context (Other practices)
+    // Impersonation forbidden. Audited support session required for platform super admins.
+    const isSuperAdmin = await this.isPlatformSuperAdmin(userId);
+    if (isSuperAdmin) {
+      const hasSupport = await this.hasActiveSupportSession(userId, practiceId);
+      if (hasSupport) {
+        const clinicalPermissions: string[] = [
+          PERMISSIONS.PRESCRIPTION_APPROVE,
+          PERMISSIONS.PRESCRIPTION_REQUEST_CHANGES,
+          'PRESCRIPTION_SIGN',
+          'PRESCRIPTION_ISSUE',
+          'PRESCRIPTION_DISPENSE',
+        ];
+        if (clinicalPermissions.includes(permission as any)) {
+          throw new AppError(
+            403,
+            'CLINICAL_AUTHORITY_RESTRICTED',
+            'Platform Super Admins cannot execute clinical approval actions in support access mode.'
+          );
+        }
+        return; // Permitted under active audited support access session
+      }
     }
-    if (!membership.isActive) {
-      throw new AppError(
-        403,
-        'MEMBERSHIP_DISABLED',
-        'Your membership in this practice has been deactivated.'
-      );
-    }
+
     throw new AppError(
       403,
-      'INSUFFICIENT_PERMISSION',
-      `Action requires permission: ${permission}`
+      'NOT_PRACTICE_MEMBER',
+      'User is not a member of the requested practice.'
     );
   }
 

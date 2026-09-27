@@ -17,6 +17,7 @@ export interface SafeUserDTO {
   avatarUrl: string | null;
   emailVerified: boolean;
   platformRole?: PlatformRoleType | null;
+  hasPassword?: boolean;
   createdAt: string;
 }
 
@@ -66,8 +67,8 @@ export interface PracticeMembershipSummaryDTO {
 
 export interface AuthMeResponse {
   user: SafeUserDTO;
-  practice: SafePracticeDTO;
-  membership: SafeMembershipDTO;
+  practice: SafePracticeDTO | null;
+  membership: SafeMembershipDTO | null;
   permissions: string[];
   settings: SafePracticeSettingsDTO | null;
   practices?: PracticeMembershipSummaryDTO[];

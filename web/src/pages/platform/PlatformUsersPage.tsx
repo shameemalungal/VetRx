@@ -375,81 +375,116 @@ export const PlatformUsersPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create User Modal */}
+      {/* Create User Modal (VetRx Polished) */}
       {isCreateModalOpen && (
-        <div className="platform-modal-overlay">
-          <div className="platform-modal" style={{ maxWidth: 460 }}>
-            <div className="platform-modal-header">
-              <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Create User Account</div>
+        <div className="platform-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-user-title">
+          <div className="create-practice-modal">
+            <div className="create-practice-modal-header">
+              <div>
+                <h2 id="create-user-title" className="create-practice-modal-title">
+                  Create User Account
+                </h2>
+                <p className="create-practice-modal-subtitle">
+                  Provision a user account and optionally assign platform super admin privileges.
+                </p>
+              </div>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="create-practice-modal-close"
                 onClick={() => setIsCreateModalOpen(false)}
+                aria-label="Close dialog"
               >
                 <Icon name="close" size={18} />
               </button>
             </div>
             <form onSubmit={handleCreateUser}>
-              <div className="platform-modal-body">
-                <div>
-                  <label className="form-label">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-control"
-                    placeholder="e.g. Dr. Ananya Sen"
-                    value={createForm.name}
-                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  />
+              <div className="create-practice-modal-body">
+                {/* 1. Account Details */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">User Information</div>
+                  <div className="create-practice-grid-2">
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Full Name <span className="required-indicator">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="create-practice-input"
+                        placeholder="e.g. Dr. Ananya Sen"
+                        value={createForm.name}
+                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">
+                        Email Address <span className="required-indicator">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        className="create-practice-input"
+                        placeholder="ananya@example.vet"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    className="form-control"
-                    placeholder="ananya@example.vet"
-                    value={createForm.email}
-                    onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                  />
+                {/* 2. Security & Credentials */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Security &amp; Credentials</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">
+                      Initial Password <span style={{ color: 'var(--color-outline, #94a3b8)', fontWeight: 400 }}>(Optional)</span>
+                    </label>
+                    <input
+                      type="password"
+                      className="create-practice-input"
+                      placeholder="Leave empty to send welcome setup invite"
+                      value={createForm.password}
+                      onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                    />
+                    <span style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                      If omitted, user will be sent a secure invitation link to configure their own password.
+                    </span>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Initial Password (Optional)</label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    placeholder="Leave empty to send welcome setup invite"
-                    value={createForm.password}
-                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Platform Role</label>
-                  <select
-                    className="form-control"
-                    value={createForm.platformRole}
-                    onChange={(e) => setCreateForm({ ...createForm, platformRole: e.target.value })}
-                  >
-                    <option value="">Standard User (Default)</option>
-                    <option value="PLATFORM_SUPER_ADMIN">Platform Super Admin</option>
-                  </select>
+                {/* 3. Platform Authorization */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Platform Access Role</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">Platform Authorization Level</label>
+                    <select
+                      className="create-practice-select"
+                      value={createForm.platformRole}
+                      onChange={(e) => setCreateForm({ ...createForm, platformRole: e.target.value })}
+                    >
+                      <option value="">Standard User (Practice practitioner or clinic staff)</option>
+                      <option value="PLATFORM_SUPER_ADMIN">Platform Super Admin (Full SaaS platform control)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="platform-modal-footer">
+              <div className="create-practice-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="create-practice-btn-cancel"
                   disabled={isSubmitting}
                   onClick={() => setIsCreateModalOpen(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create User'}
+                <button
+                  type="submit"
+                  className="create-practice-btn-submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating User…' : 'Create User'}
                 </button>
               </div>
             </form>

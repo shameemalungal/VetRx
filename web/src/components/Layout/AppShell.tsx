@@ -301,15 +301,30 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             </NavLink>
           ))}
           {isPlatformAdmin?.() && (
-            <NavLink
-              to="/platform/permissions"
-              className={({ isActive }) =>
-                `sidebar-nav-item${isActive ? ' active' : ''}`
-              }
-            >
-              <Icon name="shield" size={18} />
-              <span>Platform Matrix</span>
-            </NavLink>
+            <>
+              <NavLink
+                to="/platform/dashboard"
+                className={({ isActive }) =>
+                  `sidebar-nav-item${isActive ? ' active' : ''}`
+                }
+                style={{
+                  color: 'var(--color-primary, #00685f)',
+                  fontWeight: 600,
+                }}
+              >
+                <Icon name="shield" size={18} />
+                <span>Super Admin Console</span>
+              </NavLink>
+              <NavLink
+                to="/platform/permissions"
+                className={({ isActive }) =>
+                  `sidebar-nav-item${isActive ? ' active' : ''}`
+                }
+              >
+                <Icon name="lock" size={18} />
+                <span>Platform Matrix</span>
+              </NavLink>
+            </>
           )}
         </nav>
 

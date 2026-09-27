@@ -162,6 +162,65 @@ export class EmailService {
     });
   }
 
+  static async sendPasswordResetOtpEmail(data: {
+    recipientEmail: string;
+    recipientName: string;
+    otpCode: string;
+    expiresInMinutes: number;
+  }): Promise<SendEmailResult> {
+    const subject = `${data.otpCode} is your VetRx verification code`;
+    const textContent = `Hello ${data.recipientName},\n\nYour one-time verification code for password reset is: ${data.otpCode}\n\nThis code will expire in ${data.expiresInMinutes} minutes and can only be used once.\n\nIf you did not request a password reset, please ignore this email or contact support immediately.`;
+    const htmlContent = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #00685f; margin: 0; font-size: 24px; font-weight: 800;">VetRx</h2>
+          <p style="color: #64748b; font-size: 13px; margin: 4px 0 0;">Veterinary Practice Management</p>
+        </div>
+        <h3 style="font-size: 18px; color: #0f172a; margin: 0 0 12px;">Password Reset Verification</h3>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5; margin: 0 0 20px;">
+          Hello ${data.recipientName},<br />
+          We received a request to reset your password. Use the single-use verification code below:
+        </p>
+        <div style="text-align: center; margin: 24px 0;">
+          <div style="display: inline-block; padding: 14px 28px; background: #f0fdfa; border: 2px dashed #00685f; border-radius: 10px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #00685f; font-family: monospace;">
+            ${data.otpCode}
+          </div>
+        </div>
+        <p style="color: #64748b; font-size: 12.5px; line-height: 1.5; margin: 0 0 16px;">
+          ⏱ This code will expire in <strong>${data.expiresInMinutes} minutes</strong> and is strictly single-use.
+        </p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+        <p style="color: #94a3b8; font-size: 11.5px; margin: 0;">
+          If you did not initiate this request, your account remains secure and you can safely disregard this email.
+        </p>
+      </div>
+    `;
+
+    const isEnabled = this.config?.enabled ?? false;
+    if (!isEnabled || process.env.VETRX_FAST_TEST === '1') {
+      this.mockSentEmails.push({
+        to: data.recipientEmail,
+        subject,
+        htmlContent,
+        textContent,
+        timestamp: new Date(),
+      });
+      return { success: true, messageId: `mock-otp-${Date.now()}` };
+    }
+
+    if (!this.provider) {
+      return { success: false, error: 'NO_EMAIL_PROVIDER_CONFIGURED' };
+    }
+
+    return this.provider.send({
+      to: [{ email: data.recipientEmail }],
+      subject,
+      htmlContent,
+      textContent,
+      tags: ['password-reset-otp'],
+    });
+  }
+
   static async sendWelcomeEmail(data: {
     recipientEmail: string;
     recipientName: string;

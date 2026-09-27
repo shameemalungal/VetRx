@@ -65,6 +65,16 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Valid email address is required'),
+});
+
+const resetPasswordOtpSchema = z.object({
+  email: z.string().email('Valid email address is required'),
+  otp: z.string().min(6, 'Verification code must be 6 digits').max(6, 'Verification code must be 6 digits'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
 /**
  * POST /api/auth/register
  * Creates a new user, default practice, ownership, settings, and session.
@@ -239,6 +249,48 @@ authRouter.post('/password/change', requireAuth, async (req: AuthenticatedReques
 
     const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
     const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password
+ * Requests a 6-digit OTP for password reset (rate-limited, generic response).
+ */
+authRouter.post('/forgot-password', authRateLimiter, async (req, res, next) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body);
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const result = await AuthService.requestPasswordResetOtp(email, {
+      ipAddress,
+      userAgent,
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Validates single-use OTP and resets account password.
+ */
+authRouter.post('/reset-password', authRateLimiter, async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = resetPasswordOtpSchema.parse(req.body);
+    const ipAddress = req.ip || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const result = await AuthService.resetPasswordWithOtp(email, otp, newPassword, {
+      ipAddress,
+      userAgent,
+    });
+
     res.status(200).json(result);
   } catch (error) {
     next(error);

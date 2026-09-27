@@ -461,101 +461,133 @@ export const PlatformIssuesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create Issue Modal */}
+      {/* Create Issue Modal (VetRx Polished) */}
       {isCreateModalOpen && (
-        <div className="platform-modal-overlay">
-          <div className="platform-modal" style={{ maxWidth: 520 }}>
-            <div className="platform-modal-header">
-              <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Create Support Ticket</div>
+        <div className="platform-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-ticket-title">
+          <div className="create-practice-modal">
+            <div className="create-practice-modal-header">
+              <div>
+                <h2 id="create-ticket-title" className="create-practice-modal-title">
+                  Create Support Ticket
+                </h2>
+                <p className="create-practice-modal-subtitle">
+                  File a new support ticket or incident report for an individual tenant practice or platform-wide issue.
+                </p>
+              </div>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="create-practice-modal-close"
                 onClick={() => setIsCreateModalOpen(false)}
+                aria-label="Close dialog"
               >
                 <Icon name="close" size={18} />
               </button>
             </div>
             <form onSubmit={handleCreateIssue}>
-              <div className="platform-modal-body">
-                <div>
-                  <label className="form-label">Title *</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-control"
-                    placeholder="e.g. Doctor unable to sign prescription on tablet"
-                    value={createForm.title}
-                    onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label className="form-label">Category</label>
-                    <select
-                      className="form-control"
-                      value={createForm.category}
-                      onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
-                    >
-                      <option value="GENERAL">General Support</option>
-                      <option value="LOGIN_AUTH">Login / Auth</option>
-                      <option value="CLINICAL_WORKFLOW">Clinical Workflow</option>
-                      <option value="BILLING">Billing &amp; Payments</option>
-                      <option value="PERMISSION_ACCESS">Permissions &amp; Access</option>
-                      <option value="DATA_BUG">Bug / Anomaly</option>
-                    </select>
+              <div className="create-practice-modal-body">
+                {/* 1. Ticket Overview */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Ticket Overview</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">
+                      Ticket Title / Subject <span className="required-indicator">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      className="create-practice-input"
+                      placeholder="e.g. Doctor unable to sign prescription on tablet"
+                      value={createForm.title}
+                      onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                      autoFocus
+                    />
                   </div>
 
-                  <div>
-                    <label className="form-label">Priority</label>
-                    <select
-                      className="form-control"
-                      value={createForm.priority}
-                      onChange={(e) => setCreateForm({ ...createForm, priority: e.target.value })}
-                    >
-                      <option value="LOW">Low</option>
-                      <option value="MEDIUM">Medium</option>
-                      <option value="HIGH">High</option>
-                      <option value="CRITICAL">Critical</option>
-                    </select>
+                  <div className="create-practice-grid-2" style={{ marginTop: '12px' }}>
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">Category</label>
+                      <select
+                        className="create-practice-select"
+                        value={createForm.category}
+                        onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                      >
+                        <option value="GENERAL">General Support</option>
+                        <option value="LOGIN_AUTH">Login / Authentication</option>
+                        <option value="CLINICAL_WORKFLOW">Clinical Workflow</option>
+                        <option value="BILLING">Billing &amp; Payments</option>
+                        <option value="PERMISSION_ACCESS">Permissions &amp; Access</option>
+                        <option value="DATA_BUG">Bug / System Anomaly</option>
+                      </select>
+                    </div>
+
+                    <div className="create-practice-field">
+                      <label className="create-practice-label">Priority</label>
+                      <select
+                        className="create-practice-select"
+                        value={createForm.priority}
+                        onChange={(e) => setCreateForm({ ...createForm, priority: e.target.value })}
+                      >
+                        <option value="LOW">Low (Informational / minor query)</option>
+                        <option value="MEDIUM">Medium (Normal operational request)</option>
+                        <option value="HIGH">High (Urgent doctor workflow blocked)</option>
+                        <option value="CRITICAL">Critical (Platform service disruption)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Practice ID (Optional)</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Leave empty if platform-wide"
-                    value={createForm.practiceId}
-                    onChange={(e) => setCreateForm({ ...createForm, practiceId: e.target.value })}
-                  />
+                {/* 2. Practice Association */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Associated Tenant</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">
+                      Practice ID <span style={{ color: 'var(--color-outline, #94a3b8)', fontWeight: 400 }}>(Optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="create-practice-input"
+                      placeholder="Leave blank if platform-wide, or enter practice ID..."
+                      value={createForm.practiceId}
+                      onChange={(e) => setCreateForm({ ...createForm, practiceId: e.target.value })}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="form-label">Description *</label>
-                  <textarea
-                    required
-                    className="form-control"
-                    rows={4}
-                    placeholder="Provide details about the issue or request..."
-                    value={createForm.description}
-                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  />
+                {/* 3. Description & Diagnostics */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Issue Description</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">
+                      Details &amp; Reproduction Steps <span className="required-indicator">*</span>
+                    </label>
+                    <textarea
+                      required
+                      className="create-practice-input"
+                      rows={4}
+                      style={{ height: 'auto', padding: '10px 12px' }}
+                      placeholder="Describe the problem, affected users, and error details..."
+                      value={createForm.description}
+                      onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="platform-modal-footer">
+              <div className="create-practice-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="create-practice-btn-cancel"
                   disabled={isSubmitting}
                   onClick={() => setIsCreateModalOpen(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create Ticket'}
+                <button
+                  type="submit"
+                  className="create-practice-btn-submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating Ticket…' : 'Create Ticket'}
                 </button>
               </div>
             </form>

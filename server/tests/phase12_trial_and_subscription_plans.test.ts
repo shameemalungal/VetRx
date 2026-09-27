@@ -347,9 +347,8 @@ describe('Phase 12: Trial & Subscription Plans Comprehensive Test Suite', () => 
     });
 
     it('22. Evaluates deterministic grace period (7 days) after period end', () => {
-      const now = new Date('2026-09-20T10:00:00Z');
-      const pastPeriodEnd = new Date('2026-09-18T10:00:00Z'); // 2 days past due
-      const futureGraceEnd = new Date('2026-09-25T10:00:00Z'); // 5 days remaining in grace
+      const pastPeriodEnd = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days past due
+      const futureGraceEnd = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000); // 5 days remaining in grace
 
       const sub = {
         status: 'ACTIVE',
@@ -363,8 +362,8 @@ describe('Phase 12: Trial & Subscription Plans Comprehensive Test Suite', () => 
     });
 
     it('23. Evaluates expired status after grace period ends', () => {
-      const pastPeriodEnd = new Date('2026-09-10T10:00:00Z');
-      const pastGraceEnd = new Date('2026-09-17T10:00:00Z'); // Ended 3 days ago
+      const pastPeriodEnd = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      const pastGraceEnd = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // Ended 3 days ago
 
       const sub = {
         status: 'ACTIVE',

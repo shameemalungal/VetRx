@@ -14,6 +14,7 @@ export interface AuthUser {
   avatarUrl: string | null;
   emailVerified: boolean;
   platformRole?: string | null;
+  hasPassword?: boolean;
   createdAt: string;
 }
 

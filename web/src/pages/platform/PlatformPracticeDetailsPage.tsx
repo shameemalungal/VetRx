@@ -601,84 +601,120 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add Member Modal */}
+      {/* Add Member Modal (VetRx Polished) */}
       {isAddMemberModalOpen && (
-        <div className="platform-modal-overlay">
-          <div className="platform-modal">
-            <div className="platform-modal-header">
-              <div style={{ fontWeight: 700, fontSize: '1.125rem' }}>Add User to Practice</div>
+        <div className="platform-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="add-member-title">
+          <div className="create-practice-modal">
+            <div className="create-practice-modal-header">
+              <div>
+                <h2 id="add-member-title" className="create-practice-modal-title">
+                  Add User to Practice
+                </h2>
+                <p className="create-practice-modal-subtitle">
+                  Assign a registered user to {practice.name} with specific clinical and administrative roles.
+                </p>
+              </div>
               <button
                 type="button"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="create-practice-modal-close"
                 onClick={() => setIsAddMemberModalOpen(false)}
+                aria-label="Close dialog"
               >
                 <Icon name="close" size={18} />
               </button>
             </div>
             <form onSubmit={handleAddMember}>
-              <div className="platform-modal-body">
-                <div>
-                  <label className="form-label">User ID or Email *</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-control"
-                    placeholder="Enter registered user ID or email..."
-                    value={addMemberForm.userId}
-                    onChange={(e) => setAddMemberForm({ ...addMemberForm, userId: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Practice Role *</label>
-                  <select
-                    className="form-control"
-                    value={addMemberForm.role}
-                    onChange={(e) => {
-                      const r = e.target.value;
-                      setAddMemberForm({
-                        ...addMemberForm,
-                        role: r,
-                        isClinicalApprover: r === 'VETERINARIAN',
-                      });
-                    }}
-                  >
-                    <option value="VETERINARIAN">Veterinarian (Practicing doctor)</option>
-                    <option value="PRACTICE_ADMIN">Practice Admin (Operations manager)</option>
-                    <option value="STAFF">Practice Staff (Reception / assistant)</option>
-                    <option value="READ_ONLY">Read Only (Auditor / view-only)</option>
-                  </select>
-                </div>
-
-                {(addMemberForm.role === 'VETERINARIAN' || addMemberForm.role === 'PRACTICE_ADMIN') && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="create-practice-modal-body">
+                {/* 1. User Selection */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">User Identification</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">
+                      User Email or User ID <span className="required-indicator">*</span>
+                    </label>
                     <input
-                      type="checkbox"
-                      id="clinicalAdd"
-                      checked={addMemberForm.isClinicalApprover}
-                      disabled={addMemberForm.role === 'VETERINARIAN'}
-                      onChange={(e) =>
-                        setAddMemberForm({ ...addMemberForm, isClinicalApprover: e.target.checked })
-                      }
+                      type="text"
+                      required
+                      className="create-practice-input"
+                      placeholder="e.g. doctor@example.com or user-id"
+                      value={addMemberForm.userId}
+                      onChange={(e) => setAddMemberForm({ ...addMemberForm, userId: e.target.value })}
+                      autoFocus
                     />
-                    <label htmlFor="clinicalAdd" style={{ fontSize: '0.875rem', cursor: 'pointer' }}>
-                      Designate as Clinical Approver (Requires veterinarian seat)
+                  </div>
+                </div>
+
+                {/* 2. Practice Role */}
+                <div className="create-practice-section">
+                  <div className="create-practice-section-title">Role &amp; Responsibilities</div>
+                  <div className="create-practice-field">
+                    <label className="create-practice-label">Practice Role <span className="required-indicator">*</span></label>
+                    <select
+                      className="create-practice-select"
+                      value={addMemberForm.role}
+                      onChange={(e) => {
+                        const r = e.target.value;
+                        setAddMemberForm({
+                          ...addMemberForm,
+                          role: r,
+                          isClinicalApprover: r === 'VETERINARIAN',
+                        });
+                      }}
+                    >
+                      <option value="VETERINARIAN">Veterinarian (Practicing doctor &amp; clinical approver)</option>
+                      <option value="PRACTICE_ADMIN">Practice Admin (Operations manager)</option>
+                      <option value="STAFF">Practice Staff (Reception / assistant)</option>
+                      <option value="READ_ONLY">Read Only (Auditor / view-only)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 3. Clinical Authority */}
+                {(addMemberForm.role === 'VETERINARIAN' || addMemberForm.role === 'PRACTICE_ADMIN') && (
+                  <div className="create-practice-section">
+                    <div className="create-practice-section-title">Clinical Authority</div>
+                    <label
+                      htmlFor="clinicalAdd"
+                      className={`create-practice-checkbox-card ${addMemberForm.isClinicalApprover ? 'checked' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        id="clinicalAdd"
+                        className="create-practice-checkbox"
+                        checked={addMemberForm.isClinicalApprover}
+                        disabled={addMemberForm.role === 'VETERINARIAN'}
+                        onChange={(e) =>
+                          setAddMemberForm({ ...addMemberForm, isClinicalApprover: e.target.checked })
+                        }
+                      />
+                      <div className="create-practice-checkbox-content">
+                        <span className="create-practice-checkbox-title">
+                          Designate as Clinical Prescription Approver
+                        </span>
+                        <span className="create-practice-checkbox-desc">
+                          Authorizes this user to review, modify, approve, and digitally seal prescriptions for this practice.
+                        </span>
+                      </div>
                     </label>
                   </div>
                 )}
               </div>
 
-              <div className="platform-modal-footer">
+              <div className="create-practice-modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="create-practice-btn-cancel"
                   disabled={isSubmitting}
                   onClick={() => setIsAddMemberModalOpen(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Adding...' : 'Add Member'}
+                <button
+                  type="submit"
+                  className="create-practice-btn-submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Adding Member…' : 'Add Member'}
                 </button>
               </div>
             </form>

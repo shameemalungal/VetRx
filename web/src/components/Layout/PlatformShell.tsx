@@ -147,17 +147,20 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
           <button
             type="button"
             className="platform-switch-practice-btn"
-            onClick={() => {
-              if (practices && practices.length > 0) {
+            onClick={async () => {
+              if (practices && practices.length === 1) {
+                await switchPractice(practices[0].practiceId);
+                navigate('/');
+              } else if (practices && practices.length > 1) {
                 setIsPracticeSwitcherOpen(true);
               } else {
                 navigate('/');
               }
             }}
-            title="Switch to clinical workspace"
+            title="Switch to veterinary practice"
           >
             <Icon name="swap-horiz" size={16} />
-            <span>Switch to Practice</span>
+            <span>{practices && practices.length === 1 ? 'Switch to My Practice' : 'Switch to Practice'}</span>
           </button>
         </div>
       </aside>
@@ -298,6 +301,38 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
                 <div className="platform-user-role">Platform Super Admin</div>
               </div>
             </div>
+
+            <button
+              type="button"
+              className="platform-switch-practice-btn"
+              style={{
+                background: 'rgba(0, 104, 95, 0.08)',
+                color: 'var(--color-primary, #00685f)',
+                border: '1px solid rgba(0, 104, 95, 0.25)',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              onClick={async () => {
+                if (practices && practices.length === 1) {
+                  await switchPractice(practices[0].practiceId);
+                  navigate('/');
+                } else if (practices && practices.length > 1) {
+                  setIsPracticeSwitcherOpen(true);
+                } else {
+                  navigate('/');
+                }
+              }}
+              title="Switch to veterinary practice"
+            >
+              <Icon name="hospital" size={15} />
+              <span>{practices && practices.length === 1 ? 'My Practice' : 'Practice Workspace'}</span>
+            </button>
 
             <button
               type="button"

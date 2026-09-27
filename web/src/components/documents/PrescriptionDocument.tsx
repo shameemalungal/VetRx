@@ -367,7 +367,11 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
                     <td className="med-col-num">{idx + 1}</td>
                     <td className="med-col-name">
                       <div className="medication-cell">
-                        <div className="medication-name">{item.brandName}</div>
+                        <div className="medication-name">
+                          {item.brandName}
+                          {item.strength ? ` • ${item.strength}` : ''}
+                          {item.packSize ? ` [${item.packSize}]` : ''}
+                        </div>
                         {item.genericName && (
                           <div className="medication-generic">
                             {item.presentation ? `${item.presentation} ` : ''}({item.genericName})

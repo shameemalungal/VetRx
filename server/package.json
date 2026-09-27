@@ -10,7 +10,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "oxlint src || eslint src --ext .ts || echo 'Lint passed'",
-    "test": "node --max-old-space-size=4096 --import tsx/esm --test --test-concurrency=1 tests/**/*.test.ts",
+    "test": "node run-tests.mjs",
     "admin:promote-super-admin": "node dist/scripts/promote-super-admin.js",
     "admin:demote-super-admin": "node dist/scripts/demote-super-admin.js"
   },

@@ -46,6 +46,7 @@ export const RegisterPage: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showSkipConfirmModal, setShowSkipConfirmModal] = useState(false);
 
   const handleAddTeamMember = () => {
     setTeamMembers([...teamMembers, { name: '', email: '', role: 'STAFF' }]);
@@ -238,7 +239,7 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div className="auth-container">
-      <div className={`auth-card ${step === 3 ? 'auth-card-wide' : ''}`}>
+      <div className={`auth-card ${(step === 3 || (step === 2 && practiceType === 'CLINIC')) ? 'auth-card-wide' : ''}`}>
         <div className="auth-header">
           <div className="auth-logo-badge">
             <VetRxLogo size={30} />
@@ -655,13 +656,62 @@ export const RegisterPage: React.FC = () => {
                   type="button"
                   className="btn-skip-link"
                   style={{ fontWeight: 600, color: '#00685f' }}
-                  onClick={() => executeRegistration(false)}
+                  onClick={() => setShowSkipConfirmModal(true)}
                   disabled={loading}
                 >
                   Skip for now &rarr;
                 </button>
               </div>
             </div>
+
+            {/* Skip Team Members Confirmation Modal */}
+            {showSkipConfirmModal && (
+              <div className="auth-modal-overlay">
+                <div className="auth-modal-card">
+                  <div className="auth-modal-header">
+                    <h3 className="auth-modal-title">Skip Adding Team Members?</h3>
+                    <button
+                      type="button"
+                      className="auth-modal-close"
+                      onClick={() => setShowSkipConfirmModal(false)}
+                      disabled={loading}
+                      aria-label="Close"
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.5, margin: '0 0 20px 0' }}>
+                    You can invite veterinarians, administrators, and clinical staff anytime later from{' '}
+                    <strong>Settings &rarr; Team</strong> after your clinic is created.
+                  </p>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn-auth-submit"
+                      style={{ background: '#f1f5f9', color: '#475569', height: '38px', padding: '0 14px', margin: 0 }}
+                      onClick={() => setShowSkipConfirmModal(false)}
+                      disabled={loading}
+                    >
+                      Return to Invites
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-auth-submit"
+                      style={{ height: '38px', padding: '0 16px', margin: 0 }}
+                      onClick={async () => {
+                        setShowSkipConfirmModal(false);
+                        await executeRegistration(false);
+                      }}
+                      disabled={loading}
+                    >
+                      {loading ? 'Creating Clinic...' : 'Yes, Skip & Finish'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

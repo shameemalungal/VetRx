@@ -115,50 +115,56 @@ export const RolePermissionManagementPage: React.FC = () => {
   const [targetEffect, setTargetEffect] = useState<'ALLOW' | 'DENY'>('ALLOW');
   const [overrideReason, setOverrideReason] = useState('');
 
+  const [error, setError] = useState<string | null>(null);
+  const [reloadCounter, setReloadCounter] = useState(0);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Load Practices and Global Matrix on Mount
-  useEffect(() => {
-    const bootstrap = async () => {
-      setIsLoading(true);
-      try {
-        const [practicesRes, mData] = await Promise.all([
-          platformAdminApi.listPractices({ pageSize: 100 }),
-          platformAdminApi.getRoleMatrix(),
-        ]);
+  const bootstrap = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [practicesRes, mData] = await Promise.all([
+        platformAdminApi.listPractices({ pageSize: 100 }),
+        platformAdminApi.getRoleMatrix(),
+      ]);
 
-        const rawList = (practicesRes as any)?.results || (Array.isArray(practicesRes) ? practicesRes : []);
-        setPractices(rawList);
-        if (rawList.length > 0 && !selectedPracticeId) {
-          setSelectedPracticeId(rawList[0].id);
-        }
-
-        const normalizedMatrix: PermissionMatrixData = {
-          roles: mData.roles || ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY'],
-          roleDefaults: (mData as any).roleDefaults || (mData as any).rolePermissions || {},
-          metadata: (mData as any).metadata || {},
-          permissions: {
-            clinical: (mData as any).permissions?.clinical || (mData as any).categories?.CLINICAL || [],
-            practice: (mData as any).permissions?.practice || (mData as any).categories?.PRACTICE || [],
-            commercial: (mData as any).permissions?.commercial || (mData as any).categories?.COMMERCIAL || [],
-            security: (mData as any).permissions?.security || (mData as any).categories?.SECURITY || [],
-            platformOnly: (mData as any).permissions?.platformOnly || (mData as any).categories?.PLATFORM || [],
-          },
-        };
-        setMatrixData(normalizedMatrix);
-      } catch (err: unknown) {
-        console.error('Failed to load platform matrix data:', err);
-        showToast(`Failed to load matrix: ${formatApiError(err)}`);
-      } finally {
-        setIsLoading(false);
+      const rawList = (practicesRes as any)?.results || (Array.isArray(practicesRes) ? practicesRes : []);
+      setPractices(rawList);
+      if (rawList.length > 0 && !selectedPracticeId) {
+        setSelectedPracticeId(rawList[0].id);
       }
-    };
 
+      const normalizedMatrix: PermissionMatrixData = {
+        roles: mData?.roles || ['PRACTICE_OWNER', 'PRACTICE_ADMIN', 'VETERINARIAN', 'STAFF', 'READ_ONLY'],
+        roleDefaults: (mData as any)?.roleDefaults || (mData as any)?.rolePermissions || {},
+        metadata: (mData as any)?.metadata || {},
+        permissions: {
+          clinical: (mData as any)?.permissions?.clinical || (mData as any)?.categories?.CLINICAL || [],
+          practice: (mData as any)?.permissions?.practice || (mData as any)?.categories?.PRACTICE || [],
+          commercial: (mData as any)?.permissions?.commercial || (mData as any)?.categories?.COMMERCIAL || [],
+          security: (mData as any)?.permissions?.security || (mData as any)?.categories?.SECURITY || [],
+          platformOnly: (mData as any)?.permissions?.platformOnly || (mData as any)?.categories?.PLATFORM || [],
+        },
+      };
+      setMatrixData(normalizedMatrix);
+    } catch (err: unknown) {
+      console.error('Failed to load platform matrix data:', err);
+      const msg = formatApiError(err, 'Failed to load permissions matrix');
+      setError(msg);
+      showToast(`Failed to load matrix: ${msg}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     void bootstrap();
-  }, []);
+  }, [reloadCounter]);
 
   // When selectedPracticeId changes, load practice members
   useEffect(() => {
@@ -264,6 +270,30 @@ export const RolePermissionManagementPage: React.FC = () => {
           <p style={{ fontSize: '13.5px', color: 'var(--color-on-surface-variant)' }}>
             This interface requires Platform Super Admin credentials. Practice-level users cannot access or modify global platform permissions.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !matrixData && !isLoading) {
+    return (
+      <div className="rx-page-container" style={{ padding: '60px 24px', textAlign: 'center' }}>
+        <div style={{ maxWidth: '520px', margin: '0 auto', background: '#fff', padding: '36px 32px', borderRadius: '16px', border: '1px solid #fecaca', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <Icon name="alert-triangle" size={26} />
+          </div>
+          <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: '#991b1b' }}>Platform Matrix Unavailable</h2>
+          <p style={{ fontSize: '13.5px', color: '#64748b', margin: '0 0 24px', lineHeight: 1.5 }}>
+            {error}
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ padding: '10px 24px', fontSize: '14px', fontWeight: 600 }}
+            onClick={() => setReloadCounter((c) => c + 1)}
+          >
+            Retry Loading Matrix
+          </button>
         </div>
       </div>
     );

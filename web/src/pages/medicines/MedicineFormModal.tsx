@@ -166,6 +166,8 @@ export function MedicineFormModal({
   const [brandName, setBrandName] = useState('');
   const [genericName, setGenericName] = useState('');
   const [presentation, setPresentation] = useState('Tablet');
+  const [packSize, setPackSize] = useState('');
+  const [strength, setStrength] = useState('');
   const [strengthVolume, setStrengthVolume] = useState('');
   const [defaultUnit, setDefaultUnit] = useState('tablets');
   const [category, setCategory] = useState('Antibiotic / Antimicrobial');
@@ -277,7 +279,9 @@ export function MedicineFormModal({
       setBrandName(medicine.brandName || '');
       setGenericName(medicine.genericName || '');
       setPresentation(medicine.presentation || 'Tablet');
-      setStrengthVolume(medicine.strengthVolume || '');
+      setPackSize(medicine.packSize || '');
+      setStrength(medicine.strength || medicine.strengthVolume || '');
+      setStrengthVolume(medicine.strengthVolume || medicine.strength || '');
       setDefaultUnit(medicine.defaultUnit || 'tablets');
       setCategory(medicine.category || 'Antibiotic / Antimicrobial');
       setNotes(medicine.notes || '');
@@ -406,7 +410,9 @@ export function MedicineFormModal({
         brandName: brandName.trim(),
         genericName: genericName.trim() || undefined,
         presentation: presentation.trim(),
-        strengthVolume: strengthVolume.trim() || undefined,
+        packSize: packSize.trim() || undefined,
+        strength: strength.trim() || undefined,
+        strengthVolume: (strength.trim() || strengthVolume.trim()) || undefined,
         defaultUnit: defaultUnit.trim() || undefined,
         category: category.trim() || undefined,
         notes: notes.trim() || undefined,
@@ -597,19 +603,43 @@ export function MedicineFormModal({
                 )}
               </div>
 
-              {/* Strength / Volume */}
+              {/* Presentation / Pack Size */}
+              <div className="medicine-form-group">
+                <label className="medicine-form-label" htmlFor="med-pack-size">
+                  Presentation / Pack Size
+                </label>
+                <input
+                  id="med-pack-size"
+                  type="text"
+                  className="medicine-form-input"
+                  placeholder="e.g. 30 mL bottle, 2 mL vial, 10 tablets/strip"
+                  value={packSize}
+                  onChange={(e) => setPackSize(e.target.value)}
+                />
+                <span className="medicine-form-hint">
+                  Commercial container or strip size (e.g. 30 mL bottle, 10 tablets/strip)
+                </span>
+              </div>
+
+              {/* Strength / Concentration */}
               <div className="medicine-form-group">
                 <label className="medicine-form-label" htmlFor="med-strength">
-                  Strength / Volume
+                  Strength / Concentration
                 </label>
                 <input
                   id="med-strength"
                   type="text"
                   className="medicine-form-input"
-                  placeholder="e.g. 500mg, 15ml, 250mg/5ml"
-                  value={strengthVolume}
-                  onChange={(e) => setStrengthVolume(e.target.value)}
+                  placeholder="e.g. 5 mg/mL, 125 mg/tablet, 500 mg"
+                  value={strength}
+                  onChange={(e) => {
+                    setStrength(e.target.value);
+                    setStrengthVolume(e.target.value);
+                  }}
                 />
+                <span className="medicine-form-hint">
+                  Active ingredient potency (e.g. 5 mg/mL, 125 mg/tablet)
+                </span>
               </div>
 
               {/* Default Unit (from Master Data) */}

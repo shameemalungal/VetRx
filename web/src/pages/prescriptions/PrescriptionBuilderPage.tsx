@@ -60,6 +60,8 @@ interface DraftItem {
   brandName: string;
   genericName?: string;
   presentation: string;
+  packSize?: string;
+  strength?: string;
   strengthVolume?: string;
   dose?: string; // Veterinarian-approved numeric dose value (e.g. "1", "240")
   doseUnit?: string; // Clinical dose unit (e.g. "mg", "g", "mL", "mg/kg")
@@ -1455,6 +1457,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       brandName: brand,
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
+      packSize: selectedMedRef?.packSize,
+      strength: selectedMedRef?.strength,
       dose: numericApprovedDose,
       doseUnit: doseUnitVal,
       strengthVolume: formattedStrengthVolume,
@@ -2744,7 +2748,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <div className="rx-med-badge">Rx {idx + 1}</div>
                       <div className="rx-med-details">
                         <div className="rx-med-title-row">
-                          <span className="rx-med-name">{itm.brandName}</span>
+                          <span className="rx-med-name">
+                            {itm.brandName}
+                            {itm.strength ? ` • ${itm.strength}` : ''}
+                            {itm.packSize ? ` [${itm.packSize}]` : ''}
+                          </span>
                           <span className="rx-med-qty-badge">
                             Dispense: {itm.quantity} {itm.dispenseUnit || itm.unit}
                           </span>
@@ -3134,9 +3142,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                               {med.category && (
                                 <span className="rx-live-med-cat">{med.category}</span>
                               )}
-                              {(med.presentation || med.strengthVolume) && (
+                              {(med.presentation || med.strength || med.packSize || med.strengthVolume) && (
                                 <span className="rx-live-med-specs">
-                                  {med.strengthVolume || med.presentation}
+                                  {[med.presentation, med.strength, med.packSize].filter(Boolean).join(' • ') || med.strengthVolume}
                                 </span>
                               )}
                             </div>
@@ -3158,8 +3166,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         </span>
                         <span className="text-xs text-outline truncate">
                           {selectedMedRef.genericName ? `${selectedMedRef.genericName} • ` : ''}
-                          {selectedMedRef.category || 'Medication'}
-                          {selectedMedRef.strengthVolume ? ` • ${selectedMedRef.strengthVolume}` : ''}
+                          {selectedMedRef.presentation || selectedMedRef.category || 'Medication'}
+                          {selectedMedRef.strength ? ` • ${selectedMedRef.strength}` : (selectedMedRef.strengthVolume ? ` • ${selectedMedRef.strengthVolume}` : '')}
+                          {selectedMedRef.packSize ? ` • [${selectedMedRef.packSize}]` : ''}
                         </span>
                       </div>
                     </div>

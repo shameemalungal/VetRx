@@ -45,6 +45,7 @@ function PlatformAppRoutes() {
   return (
     <PlatformShell>
       <Routes>
+        <Route path="/" element={<Navigate to="/platform/dashboard" replace />} />
         <Route path="/dashboard" element={<PlatformDashboardPage />} />
         <Route path="/practices" element={<PlatformPracticesPage />} />
         <Route path="/practices/:id" element={<PlatformPracticeDetailsPage />} />
@@ -160,7 +161,8 @@ function MainContent() {
       );
     }
     if (!user) {
-      return <Navigate to="/login" replace />;
+      const redirectTarget = location.pathname + location.search;
+      return <Navigate to={`/login?redirect=${encodeURIComponent(redirectTarget)}`} replace />;
     }
     return <Navigate to="/" replace />;
   }

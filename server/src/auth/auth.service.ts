@@ -1,4 +1,5 @@
-import { Role, InvitationStatus } from '@prisma/client';
+import crypto from 'node:crypto';
+import { Role, InvitationStatus, PlatformRole } from '@prisma/client';
 import { InvitationService } from './invitation.service.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
 import { SubscriptionService } from '../commercial/subscription.service.js';
@@ -6,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { PasswordService } from '../lib/password.js';
 import { AuditService } from '../lib/audit.service.js';
 import { SessionService } from './session.service.js';
+import { EmailService } from '../email/email.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getPermissionsForRole } from './permissions.js';
 import { AuthorizationService } from './authorization.service.js';
@@ -19,6 +21,17 @@ import type {
 } from '../types/index.js';
 
 export class AuthService {
+  private static otpStore: Map<
+    string,
+    {
+      code: string;
+      expiresAt: Date;
+      attempts: number;
+    }
+  > = new Map();
+
+  private static otpRateLimits: Map<string, number[]> = new Map(); // email -> request timestamps
+
   /**
    * Registers a new user with Email and Password in an atomic transaction.
    */
@@ -1044,6 +1057,213 @@ export class AuthService {
   }
 
   /**
+   * Generates and dispatches a single-use 6-digit OTP for password reset.
+   * Rate limited: Max 3 requests per 15 minutes per email.
+   * Security: Generic response returned on unknown email to prevent enumeration.
+   */
+  static async requestPasswordResetOtp(
+    email: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // 1. Rate Limiting Check (Max 3 requests per 15 minutes)
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000;
+    const history = (this.otpRateLimits.get(normalizedEmail) || []).filter(
+      (ts) => now - ts < windowMs
+    );
+    if (history.length >= 3) {
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        'Too many password reset requests. Please wait a few minutes before trying again.'
+      );
+    }
+    history.push(now);
+    this.otpRateLimits.set(normalizedEmail, history);
+
+    // 2. Generic message returned in all circumstances to prevent user enumeration
+    const genericResponse = {
+      success: true,
+      message: 'If this email address is registered with VetRx, a 6-digit verification code has been sent.',
+    };
+
+    // 3. User lookup
+    let user: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        user = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+        });
+      } catch (err) {
+        console.error('Password reset user lookup error:', err);
+      }
+    } else {
+      // In fast test, lookup in mockUsers if needed or treat as valid
+      user = { id: `user-otp-${Date.now()}`, name: 'Test User', email: normalizedEmail, isActive: true };
+    }
+
+    if (!user || user.isActive === false) {
+      void AuditService.record({
+        action: 'PASSWORD_RESET_OTP_REQUESTED_UNKNOWN',
+        resource: 'User',
+        details: { email: normalizedEmail },
+        ipAddress: meta?.ipAddress,
+        userAgent: meta?.userAgent,
+      });
+      return genericResponse;
+    }
+
+    // 4. Generate cryptographically random 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const expiresInMinutes = 15;
+    const expiresAt = new Date(now + expiresInMinutes * 60 * 1000);
+
+    this.otpStore.set(normalizedEmail, {
+      code: otp,
+      expiresAt,
+      attempts: 0,
+    });
+
+    // 5. Send Email
+    await EmailService.sendPasswordResetOtpEmail({
+      recipientEmail: user.email,
+      recipientName: user.name,
+      otpCode: otp,
+      expiresInMinutes,
+    });
+
+    // 6. Audit Trail
+    void AuditService.record({
+      userId: user.id,
+      action: 'PASSWORD_RESET_OTP_REQUESTED',
+      resource: 'User',
+      resourceId: user.id,
+      details: { email: normalizedEmail },
+      ipAddress: meta?.ipAddress,
+      userAgent: meta?.userAgent,
+    });
+
+    return genericResponse;
+  }
+
+  /**
+   * Verifies the 6-digit OTP and resets the account password.
+   * Single use: OTP is invalidated immediately on verification.
+   * Rate limited: Maximum 5 incorrect verification attempts before OTP is invalidated.
+   */
+  static async resetPasswordWithOtp(
+    email: string,
+    otp: string,
+    newPassword: string,
+    meta?: { ipAddress?: string; userAgent?: string }
+  ): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
+    // 1. Retrieve OTP record
+    const stored = this.otpStore.get(normalizedEmail);
+    if (!stored || stored.expiresAt < new Date()) {
+      throw new AppError(
+        400,
+        'INVALID_OR_EXPIRED_OTP',
+        'The verification code is invalid or has expired. Please request a new code.'
+      );
+    }
+
+    if (stored.attempts >= 5) {
+      this.otpStore.delete(normalizedEmail);
+      throw new AppError(
+        400,
+        'OTP_MAX_ATTEMPTS_EXCEEDED',
+        'Too many incorrect verification attempts. Please request a new code.'
+      );
+    }
+
+    if (stored.code !== cleanOtp) {
+      stored.attempts += 1;
+      throw new AppError(
+        400,
+        'INVALID_OR_EXPIRED_OTP',
+        'The verification code is invalid or has expired. Please request a new code.'
+      );
+    }
+
+    // 2. Validate Password Strength
+    const strength = PasswordService.validatePasswordStrength(newPassword);
+    if (!strength.isValid) {
+      throw new AppError(
+        400,
+        'WEAK_PASSWORD',
+        strength.message || 'Password must be at least 8 characters and include upper, lower, number, and special character.'
+      );
+    }
+
+    // 3. Single-use: Consume OTP immediately
+    this.otpStore.delete(normalizedEmail);
+
+    // 4. Update Password
+    const passwordHash = await PasswordService.hashPassword(newPassword);
+
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      const user = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (!user) {
+        throw new AppError(404, 'USER_NOT_FOUND', 'User record not found.');
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          forcePasswordChange: false,
+        },
+      });
+
+      // Ensure 'password' identity is recorded
+      await prisma.authIdentity.upsert({
+        where: {
+          userId_provider: {
+            userId: user.id,
+            provider: 'password',
+          },
+        },
+        update: {},
+        create: {
+          userId: user.id,
+          provider: 'password',
+          providerUserId: user.id,
+          providerEmail: user.email,
+        },
+      });
+
+      // Revoke all existing sessions for safety
+      await prisma.session.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+
+      void AuditService.record({
+        userId: user.id,
+        action: 'PASSWORD_RESET_COMPLETED',
+        resource: 'User',
+        resourceId: user.id,
+        details: { method: 'EMAIL_OTP' },
+        ipAddress: meta?.ipAddress,
+        userAgent: meta?.userAgent,
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Password reset successfully. You can now log in with your new password.',
+    };
+  }
+
+  /**
    * Retrieves full context for the authenticated user and their active practice.
    */
   static async getMeContext(
@@ -1093,6 +1313,25 @@ export class AuthService {
     }
 
     if (!membership || !membership.practice) {
+      if (user.platformRole === PlatformRole.PLATFORM_SUPER_ADMIN) {
+        return {
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            avatarUrl: user.avatarUrl,
+            emailVerified: user.emailVerified,
+            platformRole: user.platformRole as any,
+            hasPassword: Boolean(user.passwordHash),
+            createdAt: user.createdAt.toISOString(),
+          },
+          practice: null,
+          membership: null,
+          permissions: [],
+          practices: [],
+          settings: null,
+        };
+      }
       throw new AppError(403, 'NO_ACTIVE_PRACTICE', 'No active practice membership found.');
     }
 
@@ -1118,6 +1357,7 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
         emailVerified: user.emailVerified,
         platformRole: user.platformRole as any,
+        hasPassword: Boolean(user.passwordHash),
         createdAt: user.createdAt.toISOString(),
       },
       practice: {

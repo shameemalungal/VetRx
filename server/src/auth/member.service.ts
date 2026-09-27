@@ -128,7 +128,10 @@ export class MemberService {
     rawRole: Role | string | { role: Role | string; isClinicalApprover?: boolean },
     rawIsClinicalApprover?: boolean
   ): Promise<MemberListItemDTO> {
-    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    const isSuperAdmin = await AuthorizationService.isPlatformSuperAdmin(actorUserId);
+    if (!isSuperAdmin) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    }
 
     let parsedRole: string;
     let explicitClinicalApprover: boolean | undefined = rawIsClinicalApprover;
@@ -297,7 +300,10 @@ export class MemberService {
     targetMemberId: string,
     isClinicalApprover: boolean
   ): Promise<MemberListItemDTO> {
-    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    const isSuperAdmin = await AuthorizationService.isPlatformSuperAdmin(actorUserId);
+    if (!isSuperAdmin) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    }
 
     let targetMember: MemberListItemDTO | null = null;
     if (process.env.VETRX_FAST_TEST === '1') {
@@ -718,7 +724,10 @@ export class MemberService {
     overrides: Array<{ permission: string; effect: string }>;
     effectivePermissions: Permission[];
   }> {
-    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_VIEW);
+    const isSuperAdmin = await AuthorizationService.isPlatformSuperAdmin(actorUserId);
+    if (!isSuperAdmin) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_VIEW);
+    }
 
     let member: MemberListItemDTO | null = null;
     let overrides: Array<{ permission: string; effect: string }> = [];
@@ -809,7 +818,10 @@ export class MemberService {
     overrides: Array<{ permission: string; effect: string }>;
     effectivePermissions: Permission[];
   }> {
-    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    const isSuperAdmin = await AuthorizationService.isPlatformSuperAdmin(actorUserId);
+    if (!isSuperAdmin) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    }
 
     let targetMember: MemberListItemDTO | null = null;
     if (process.env.VETRX_FAST_TEST === '1') {
@@ -971,7 +983,10 @@ export class MemberService {
     practiceId: string,
     memberId: string
   ): Promise<{ success: boolean }> {
-    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    const isSuperAdmin = await AuthorizationService.isPlatformSuperAdmin(actorUserId);
+    if (!isSuperAdmin) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.ROLE_ASSIGN);
+    }
 
     if (process.env.VETRX_FAST_TEST === '1') {
       const mockMap = (AuthorizationService as any).mockOverrides?.get(memberId);
