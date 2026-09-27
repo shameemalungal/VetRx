@@ -353,6 +353,7 @@ function MainContent() {
       return (
         <Routes>
           <Route path="/platform/*" element={<PlatformAppRoutes />} />
+          <Route path="/platform" element={<Navigate to="/platform/dashboard" replace />} />
         </Routes>
       );
     }

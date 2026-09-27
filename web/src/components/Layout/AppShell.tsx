@@ -300,32 +300,6 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               )}
             </NavLink>
           ))}
-          {isPlatformAdmin?.() && (
-            <>
-              <NavLink
-                to="/platform/dashboard"
-                className={({ isActive }) =>
-                  `sidebar-nav-item${isActive ? ' active' : ''}`
-                }
-                style={{
-                  color: 'var(--color-primary, #00685f)',
-                  fontWeight: 600,
-                }}
-              >
-                <Icon name="shield" size={18} />
-                <span>Super Admin Console</span>
-              </NavLink>
-              <NavLink
-                to="/platform/permissions"
-                className={({ isActive }) =>
-                  `sidebar-nav-item${isActive ? ' active' : ''}`
-                }
-              >
-                <Icon name="lock" size={18} />
-                <span>Platform Matrix</span>
-              </NavLink>
-            </>
-          )}
         </nav>
 
         {/* Footer — Settings + practitioner */}
@@ -732,9 +706,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       <button
                         type="button"
                         className="profile-popover-item"
+                        id="profile-menu-platform-console"
                         onClick={() => {
-                          navigate('/platform/dashboard');
                           setIsProfileMenuOpen(false);
+                          navigate('/platform');
                         }}
                       >
                         <Icon name="shield" size={16} />

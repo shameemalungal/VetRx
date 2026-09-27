@@ -389,10 +389,14 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
                           transition: 'all 0.15s ease',
                           width: '100%',
                         }}
+                        id="switch-to-own-practice-item"
                         onClick={async () => {
-                          await switchPractice(p.practiceId);
-                          setIsPracticeSwitcherOpen(false);
-                          navigate('/');
+                          try {
+                            await switchPractice(p.practiceId);
+                          } finally {
+                            setIsPracticeSwitcherOpen(false);
+                            window.location.href = '/';
+                          }
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
