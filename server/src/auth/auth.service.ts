@@ -1219,16 +1219,15 @@ export class AuthService {
         where: { id: user.id },
         data: {
           passwordHash,
-          forcePasswordChange: false,
         },
       });
 
       // Ensure 'password' identity is recorded
       await prisma.authIdentity.upsert({
         where: {
-          userId_provider: {
-            userId: user.id,
+          provider_providerUserId: {
             provider: 'password',
+            providerUserId: user.id,
           },
         },
         update: {},
