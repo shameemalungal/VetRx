@@ -2,11 +2,13 @@
 node_modules/
 web/node_modules/
 server/node_modules/
+website/node_modules/
 
 # Production builds & artifacts
 dist/
 web/dist/
 server/dist/
+website/dist/
 dist-ssr/
 web/dist-ssr/
 

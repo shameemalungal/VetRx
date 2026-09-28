@@ -147,6 +147,8 @@
 }
 
 .auth-input {
+  width: 100%;
+  min-width: 0;
   height: 42px;
   padding: 0 12px;
   border-radius: 8px;
@@ -156,6 +158,21 @@
   color: #0f172a;
   box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.auth-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+  .auth-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
 .auth-input:focus {
@@ -436,6 +453,7 @@
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: 0.02em;
+  text-transform: uppercase;
   background: #e0f2fe;
   color: #0369a1;
   padding: 4px 10px;
@@ -443,6 +461,8 @@
   margin-top: 8px;
   max-width: 100%;
   box-sizing: border-box;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .team-member-row {
