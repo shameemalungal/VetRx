@@ -31,25 +31,25 @@ export const VetRxLogo: React.FC<LogoProps> = ({
         aria-hidden="true"
       >
         {/* Cross shape */}
-        <rect x="13" y="2"  width="14" height="36" rx="4" fill="var(--color-primary)" opacity="0.15"/>
-        <rect x="2"  y="13" width="36" height="14" rx="4" fill="var(--color-primary)" opacity="0.15"/>
-        <rect x="13" y="2"  width="14" height="36" rx="4" stroke="var(--color-primary)" strokeWidth="2" fill="none"/>
-        <rect x="2"  y="13" width="36" height="14" rx="4" stroke="var(--color-primary)" strokeWidth="2" fill="none"/>
+        <rect x="13" y="2"  width="14" height="36" rx="4" fill="var(--color-primary, #00685f)" opacity="0.15"/>
+        <rect x="2"  y="13" width="36" height="14" rx="4" fill="var(--color-primary, #00685f)" opacity="0.15"/>
+        <rect x="13" y="2"  width="14" height="36" rx="4" stroke="var(--color-primary, #00685f)" strokeWidth="2" fill="none"/>
+        <rect x="2"  y="13" width="36" height="14" rx="4" stroke="var(--color-primary, #00685f)" strokeWidth="2" fill="none"/>
         {/* Paw center pad */}
-        <ellipse cx="20" cy="22" rx="5" ry="4.5" fill="var(--color-primary)"/>
+        <ellipse cx="20" cy="22" rx="5" ry="4.5" fill="var(--color-primary, #00685f)"/>
         {/* Toe pads */}
-        <circle cx="13.5" cy="17"   r="2.2" fill="var(--color-primary)"/>
-        <circle cx="20"   cy="14.5" r="2.2" fill="var(--color-primary)"/>
-        <circle cx="26.5" cy="17"   r="2.2" fill="var(--color-primary)"/>
+        <circle cx="13.5" cy="17"   r="2.2" fill="var(--color-primary, #00685f)"/>
+        <circle cx="20"   cy="14.5" r="2.2" fill="var(--color-primary, #00685f)"/>
+        <circle cx="26.5" cy="17"   r="2.2" fill="var(--color-primary, #00685f)"/>
       </svg>
 
       {showWordmark && (
         <span
           style={{
-            fontFamily: 'var(--font-heading)',
+            fontFamily: 'var(--font-heading, system-ui, sans-serif)',
             fontSize: size * 0.55 + 'px',
             fontWeight: 700,
-            color: 'var(--color-primary)',
+            color: 'var(--color-primary, #00685f)',
             letterSpacing: '-0.02em',
             lineHeight: 1,
           }}

@@ -242,7 +242,7 @@ export const RegisterPage: React.FC = () => {
       <div className={`auth-card ${(step === 3 || (step === 2 && practiceType === 'CLINIC')) ? 'auth-card-wide' : ''}`}>
         <div className="auth-header">
           <div className="auth-logo-badge">
-            <VetRxLogo size={30} />
+            <VetRxLogo size={32} />
           </div>
           <h1 className="auth-title">Create your VetRx practice</h1>
           <p className="auth-subtitle">
@@ -329,7 +329,7 @@ export const RegisterPage: React.FC = () => {
               className="btn-auth-submit"
               onClick={() => setStep(2)}
             >
-              Continue &rarr;
+              Continue
             </button>
 
             <div className="auth-divider">or sign up with Google</div>
@@ -564,7 +564,7 @@ export const RegisterPage: React.FC = () => {
                   ? 'Setting up...'
                   : practiceType === 'INDEPENDENT'
                   ? 'Complete & Enter Practice'
-                  : 'Next: Add Your Team &rarr;'}
+                  : 'Next: Add Your Team'}
               </button>
             </div>
           </form>

@@ -117,7 +117,7 @@ export const AcceptInvitationPage: React.FC = () => {
       <div className="auth-card" style={{ maxWidth: '480px' }}>
         <div className="auth-header">
           <div className="auth-logo-badge">
-            <VetRxLogo size={30} />
+            <VetRxLogo size={32} />
           </div>
           <h1 className="auth-title">Practice Invitation</h1>
           <p className="auth-subtitle">Join your veterinary team on VetRx</p>

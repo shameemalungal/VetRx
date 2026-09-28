@@ -343,8 +343,11 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
           <div className="platform-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px', width: '100%' }}>
             <div className="platform-modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary, #00685f)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Context Switch
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <VetRxLogo size={20} />
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary, #00685f)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Context Switch
+                  </span>
                 </div>
                 <h3 style={{ fontWeight: 800, fontSize: '1.25rem', margin: '2px 0 0', color: '#0f172a' }}>
                   MY PRACTICES

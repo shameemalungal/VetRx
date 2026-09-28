@@ -19,7 +19,7 @@ interface MedicineFormModalProps {
 
 const ALL_SPECIES: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
 
-const COMMON_PRESENTATIONS = [
+export const COMMON_PRESENTATIONS = [
   'Tablet',
   'Ear Drops',
   'Eye Drops',

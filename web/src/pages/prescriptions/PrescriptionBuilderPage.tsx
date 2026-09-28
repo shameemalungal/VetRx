@@ -34,6 +34,7 @@ import './Prescriptions.css';
 import { DoseCalcNumericField } from '../../components/ui/DoseCalcNumericField';
 import { ClinicalCombobox } from '../../components/common/ClinicalCombobox';
 import { DISPENSE_UNITS, convertUnits } from '../../utils/unitConverter';
+import { COMMON_PRESENTATIONS } from '../medicines/MedicineFormModal';
 
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
@@ -3700,12 +3701,14 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-outline)', marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-outline)', marginBottom: '12px' }}>
                   Medicine Formulation &amp; Presentation Specification
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
+
+                {/* Row 1: Brand Name *, Chemical / Formulation, Strength / Concentration */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-brand-name">
                       Brand Name <span style={{ color: 'var(--color-error)' }}>*</span>
                     </label>
                     <input
@@ -3719,7 +3722,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-chemical-formulation">
                       Chemical / Formulation
                     </label>
                     <input
@@ -3733,7 +3736,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-strength">
                       Strength / Concentration
                     </label>
                     <input
@@ -3748,9 +3751,36 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       Active concentration (e.g. 5 mg/mL, 125 mg/tablet)
                     </span>
                   </div>
+                </div>
+
+                {/* Row 2: Presentation / Form *, Presentation / Pack Size */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-presentation">
+                      Presentation / Form <span style={{ color: 'var(--color-error)' }}>*</span>
+                    </label>
+                    <select
+                      id="med-presentation"
+                      className="form-select"
+                      value={medForm.presentation || 'Tablet'}
+                      onChange={(e) => setMedForm((prev) => ({ ...prev, presentation: e.target.value }))}
+                    >
+                      {COMMON_PRESENTATIONS.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                      {medForm.presentation && !COMMON_PRESENTATIONS.includes(medForm.presentation) && (
+                        <option value={medForm.presentation}>{medForm.presentation}</option>
+                      )}
+                    </select>
+                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
+                      Dosage form (e.g. Tablet, Syrup, Injection)
+                    </span>
+                  </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>
+                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-pack-size">
                       Presentation / Pack Size
                     </label>
                     <input

@@ -44,12 +44,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  background: rgba(0, 104, 95, 0.1);
-  color: #00685f;
-  border-radius: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .auth-title {
@@ -178,6 +173,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   height: 44px;
   background: #00685f;
   color: #ffffff;
@@ -187,7 +183,8 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.05s ease;
-  margin-top: 6px;
+  margin-top: 10px;
+  box-sizing: border-box;
 }
 
 .btn-auth-submit:hover:not(:disabled) {
@@ -432,14 +429,20 @@
 }
 
 .onboarding-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
   background: #e0f2fe;
   color: #0369a1;
-  padding: 2px 8px;
-  border-radius: 999px;
-  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-top: 8px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .team-member-row {
@@ -514,13 +517,26 @@
 
 .auth-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-@media (max-width: 480px) {
+.auth-grid-2 > .auth-form-group {
+  min-width: 0;
+  width: 100%;
+}
+
+.auth-grid-2 .auth-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 540px) {
   .auth-grid-2 {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 12px;
   }
 }

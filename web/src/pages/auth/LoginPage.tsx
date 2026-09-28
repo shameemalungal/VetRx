@@ -132,7 +132,7 @@ export const LoginPage: React.FC = () => {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo-badge">
-            <VetRxLogo size={30} />
+            <VetRxLogo size={32} />
           </div>
           <h1 className="auth-title">
             {viewMode === 'login' && 'Welcome to VetRx'}
