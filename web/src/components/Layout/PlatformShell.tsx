@@ -295,6 +295,7 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
 
             <button
               type="button"
+              id="platform-context-switch-btn"
               className="platform-switch-practice-btn"
               style={{
                 background: 'rgba(0, 104, 95, 0.08)',
