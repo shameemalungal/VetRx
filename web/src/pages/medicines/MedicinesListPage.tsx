@@ -446,9 +446,14 @@ export function MedicinesListPage() {
                       <span className="medicine-spec-badge">
                         <span className="spec-label">Form:</span> {medicine.presentation}
                       </span>
-                      {medicine.strengthVolume && (
+                      {(medicine.strength || medicine.strengthVolume) && (
                         <span className="medicine-spec-badge">
-                          <span className="spec-label">Strength:</span> {medicine.strengthVolume}
+                          <span className="spec-label">Strength:</span> {medicine.strength || medicine.strengthVolume}
+                        </span>
+                      )}
+                      {medicine.packSize && (
+                        <span className="medicine-spec-badge">
+                          <span className="spec-label">Pack Size:</span> {medicine.packSize}
                         </span>
                       )}
                       {medicine.defaultUnit && (
@@ -556,9 +561,14 @@ export function MedicinesListPage() {
                         <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
                           <span className="spec-label">Form:</span> {medicine.presentation}
                         </span>
-                        {medicine.strengthVolume && (
-                          <span className="medicine-spec-badge">
-                            <span className="spec-label">Strength:</span> {medicine.strengthVolume}
+                        {(medicine.strength || medicine.strengthVolume) && (
+                          <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
+                            <span className="spec-label">Strength:</span> {medicine.strength || medicine.strengthVolume}
+                          </span>
+                        )}
+                        {medicine.packSize && (
+                          <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
+                            <span className="spec-label">Pack Size:</span> {medicine.packSize}
                           </span>
                         )}
                       </td>

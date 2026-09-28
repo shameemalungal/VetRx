@@ -180,22 +180,23 @@
 }
 
 .platform-header {
-  height: 60px;
+  min-height: 64px;
   background: #ffffff;
   border-bottom: 1px solid var(--color-border-subtle, #e2e8f0);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  gap: 20px;
+  padding: 0 20px;
+  gap: 16px;
   flex-shrink: 0;
   position: relative;
   z-index: 40;
 }
 
 .platform-search-bar {
-  flex: 1;
-  max-width: 480px;
+  flex: 1 1 200px;
+  max-width: 400px;
+  min-width: 140px;
   position: relative;
 }
 
@@ -287,21 +288,28 @@
   color: #64748b;
 }
 
+/* ── Header Right: User Identity & Actions ─────────────────── */
 .platform-header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .platform-user-identity {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .platform-user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   border-radius: 50%;
   background: #312e81;
   color: #e0e7ff;
@@ -310,33 +318,109 @@
   justify-content: center;
   font-weight: 700;
   font-size: 0.8125rem;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.platform-user-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  justify-content: center;
 }
 
 .platform-user-name {
-  font-size: 0.875rem;
+  font-size: 0.84rem;
   font-weight: 600;
+  line-height: 1.25;
   color: #0f172a;
+  max-width: 160px;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.platform-user-role {
-  font-size: 0.6875rem;
-  color: #4f46e5;
-  font-weight: 600;
+.platform-user-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.platform-context-badge {
+  font-size: 9.5px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 104, 95, 0.08);
+  color: var(--color-primary, #00685f);
+  border: 1px solid rgba(0, 104, 95, 0.22);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.platform-role-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.platform-header-switch-btn {
+  width: auto !important;
+  height: 36px;
+  padding: 0 12px;
+  background: rgba(0, 104, 95, 0.08) !important;
+  color: var(--color-primary, #00685f) !important;
+  border: 1px solid rgba(0, 104, 95, 0.25) !important;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.platform-header-switch-btn:hover {
+  background: rgba(0, 104, 95, 0.15) !important;
+  color: #004d46 !important;
+  border-color: rgba(0, 104, 95, 0.4) !important;
 }
 
 .platform-signout-btn {
-  background: transparent;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid #cbd5e1;
-  padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 600;
   color: #475569;
+  background: transparent;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s ease;
 }
 
@@ -344,6 +428,57 @@
   background: #fef2f2;
   border-color: #fca5a5;
   color: #dc2626;
+}
+
+/* ── Responsive Header Layout ──────────────────────────────── */
+@media (max-width: 900px) {
+  .platform-header {
+    height: auto;
+    min-height: 64px;
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .platform-search-bar {
+    order: 2;
+    width: 100%;
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .platform-header-right {
+    order: 1;
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 768px) {
+  .platform-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 580px) {
+  .platform-header-right {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .platform-user-identity {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+
+  .platform-header-switch-btn {
+    flex: 1 1 auto;
+  }
+
+  .platform-signout-btn {
+    flex: 0 0 auto;
+  }
 }
 
 /* ── Content Viewport ──────────────────────────────────────── */

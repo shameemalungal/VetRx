@@ -31,10 +31,12 @@ import {
   getDosesPerDay,
 } from '../../utils/doseCalculator';
 import './Prescriptions.css';
+import '../medicines/Medicines.css';
 import { DoseCalcNumericField } from '../../components/ui/DoseCalcNumericField';
 import { ClinicalCombobox } from '../../components/common/ClinicalCombobox';
 import { DISPENSE_UNITS, convertUnits } from '../../utils/unitConverter';
-import { COMMON_PRESENTATIONS } from '../medicines/MedicineFormModal';
+import { MedicineFormModal } from '../medicines/MedicineFormModal';
+import { MedicineFormulationSection } from '../medicines/MedicineFormulationSection';
 
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
@@ -203,6 +205,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
+  // Nested MedicineFormModal state — opens the authoritative Medicines → New Medicine form
+  const [createMedicineModalOpen, setCreateMedicineModalOpen] = useState(false);
+
   // Register New Patient Warning Confirmation Modal
   const [registerWarningModalOpen, setRegisterWarningModalOpen] = useState(false);
 
@@ -317,7 +322,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const symptomsRef = useRef<HTMLTextAreaElement>(null);
   const medicinesRef = useRef<HTMLDivElement>(null);
 
-  // Live medicine search filtering against Brand Name, Generic Name, Therapeutic Category, Presentation, Strength
+  // Live medicine search filtering against Brand Name, Generic Name, Therapeutic Category, Presentation, Strength, Pack Size
   const matchingMedicines = useMemo(() => {
     if (!availableMedicines) return [];
     const q = medModalSearch.trim().toLowerCase();
@@ -327,13 +332,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const generic = (m.genericName || '').toLowerCase();
       const cat = (m.category || '').toLowerCase();
       const pres = (m.presentation || '').toLowerCase();
-      const str = (m.strengthVolume || '').toLowerCase();
+      const str = ((m.strength || m.strengthVolume) || '').toLowerCase();
+      const pack = (m.packSize || '').toLowerCase();
       return (
         brand.includes(q) ||
         generic.includes(q) ||
         cat.includes(q) ||
         pres.includes(q) ||
-        str.includes(q)
+        str.includes(q) ||
+        pack.includes(q)
       );
     });
   }, [availableMedicines, medModalSearch]);
@@ -1167,7 +1174,12 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     const itm = items[index];
     setEditingItemIndex(index);
     const matched = availableMedicines?.find(
-      (m) => (itm.medicineId && m.id === itm.medicineId) || m.brandName.toLowerCase() === itm.brandName.toLowerCase()
+      (m) =>
+        (itm.medicineId && m.id === itm.medicineId) ||
+        (m.brandName.toLowerCase() === itm.brandName.toLowerCase() &&
+          (!itm.presentation || m.presentation.toLowerCase() === itm.presentation.toLowerCase()) &&
+          (!itm.strength || (m.strength && m.strength.toLowerCase() === itm.strength.toLowerCase()))) ||
+        m.brandName.toLowerCase() === itm.brandName.toLowerCase()
     );
     setSelectedMedRef(matched || null);
     setMedModalSearch(itm.brandName);
@@ -1991,7 +2003,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 brandName: itm.brandName.trim(),
                 genericName: itm.genericName?.trim() || undefined,
                 presentation: itm.presentation || 'Tablet',
-                strengthVolume: itm.strengthVolume || itm.presentation || '1 unit',
+                strength: itm.strength || undefined,
+                packSize: itm.packSize || undefined,
+                strengthVolume: itm.strengthVolume || itm.strength || itm.presentation || '1 unit',
                 defaultRoute: itm.route || 'PO (Oral)',
                 defaultFrequency: itm.frequency || 'BID (q12h)',
                 defaultDurationDays: itm.durationDays || 5,
@@ -2011,8 +2025,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               formulary.push({
                 id: newMedId,
                 brandName: itm.brandName.trim(),
+                genericName: itm.genericName?.trim() || undefined,
                 presentation: itm.presentation || 'Tablet',
-                strengthVolume: itm.strengthVolume || itm.presentation || '1 unit',
+                strength: itm.strength || undefined,
+                packSize: itm.packSize || undefined,
+                strengthVolume: itm.strengthVolume || itm.strength || itm.presentation || '1 unit',
                 isActive: true,
                 createdAt: now,
                 updatedAt: now,
@@ -2346,8 +2363,473 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     );
   }
 
-  // ============================================================
-  // VIEW 2: STEP 2 & 3 - CLINICAL DETAILS & MEDICINES WORKSPACE
+  // ── Helper: Render Dose Calculator Accordion ──
+  const renderDoseCalculatorAccordion = () => (
+    <div className="rx-dose-calc-accordion">
+      <button
+        type="button"
+        className="rx-dose-calc-accordion-toggle"
+        onClick={() => setIsDoseCalcOpen(!isDoseCalcOpen)}
+      >
+        <div className="rx-dose-calc-header-left">
+          <div className="rx-dose-calc-icon">
+            <Icon name="calculator" size={16} />
+          </div>
+          <div className="rx-dose-calc-text-col">
+            <span className="rx-dose-calc-title">Optional dose calculation</span>
+            <span className="rx-dose-calc-subtitle">Weight-based dose, concentration &amp; quantity calculator</span>
+          </div>
+        </div>
+        <div className="rx-dose-calc-header-right">
+          <span>{isDoseCalcOpen ? 'Hide calculator' : 'Show calculator'}</span>
+          <Icon name={isDoseCalcOpen ? 'chevron-up' : 'chevron-down'} size={14} />
+        </div>
+      </button>
+
+      {isDoseCalcOpen && (
+        <div className="rx-dose-calc-accordion-body">
+          {/* Method Selector */}
+          <div className="form-group" style={{ marginBottom: '12px' }}>
+            <label className="form-label" style={{ fontSize: '11.5px', fontWeight: 600 }}>Calculation Method</label>
+            <select
+              className="form-select"
+              value={calcMethod}
+              onChange={(e) => handleCalcMethodChange(e.target.value as DosingMethod)}
+            >
+              {DOSING_METHOD_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rx-dose-calc-grid">
+            {/* ── METHOD A: VOLUME PER BODY WEIGHT ── */}
+            {calcMethod === 'volume_per_weight' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Patient Weight"
+                  value={calcWeight}
+                  onChange={(val) => {
+                    setCalcWeight(val);
+                    handleInlineWeightChange(val);
+                  }}
+                  unit="kg"
+                  placeholder="e.g. 20"
+                />
+
+                <DoseCalcNumericField
+                  label="2. Dose Volume"
+                  value={calcDoseVolumeAmount}
+                  onChange={setCalcDoseVolumeAmount}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcDoseVolumeUnit}
+                  onUnitChange={setCalcDoseVolumeUnit}
+                  placeholder="e.g. 1"
+                  min={0.01}
+                />
+
+                <DoseCalcNumericField
+                  label="3. Weight Basis"
+                  value={calcWeightBasis}
+                  onChange={setCalcWeightBasis}
+                  unit="kg"
+                  placeholder="e.g. 20"
+                  min={0.01}
+                />
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Volume</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.calculatedVolume > 0
+                      ? `${doseCalcMetrics.calculatedVolume} ${calcDoseVolumeUnit}`
+                      : '—'}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD B: RECONSTITUTED TABLET/UNIT -> LIQUID VOLUME ── */}
+            {calcMethod === 'reconstituted_liquid' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Source Quantity"
+                  value={calcReconSourceQty}
+                  onChange={setCalcReconSourceQty}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcReconSourceUnit}
+                  onUnitChange={setCalcReconSourceUnit}
+                  placeholder="e.g. 1"
+                  min={0.01}
+                />
+
+                <DoseCalcNumericField
+                  label="2. Diluent Volume"
+                  value={calcReconDiluentVol}
+                  onChange={setCalcReconDiluentVol}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcReconDiluentUnit}
+                  onUnitChange={setCalcReconDiluentUnit}
+                  placeholder="e.g. 20"
+                  min={0.01}
+                />
+
+                <DoseCalcNumericField
+                  label="3. Dose Volume"
+                  value={calcReconAdminVol}
+                  onChange={setCalcReconAdminVol}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcReconAdminUnit}
+                  onUnitChange={setCalcReconAdminUnit}
+                  placeholder="e.g. 1"
+                  min={0.01}
+                />
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>4. Source Equivalent</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.sourceEquiv || '—'}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD C: RECONSTITUTED TABLET/UNIT -> DROPS ── */}
+            {calcMethod === 'reconstituted_drops' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Source Quantity"
+                  value={calcReconSourceQty}
+                  onChange={setCalcReconSourceQty}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcReconSourceUnit}
+                  onUnitChange={setCalcReconSourceUnit}
+                  placeholder="e.g. 1"
+                  min={0.01}
+                />
+
+                <DoseCalcNumericField
+                  label="2. Diluent Volume"
+                  value={calcReconDiluentVol}
+                  onChange={setCalcReconDiluentVol}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcReconDiluentUnit}
+                  onUnitChange={setCalcReconDiluentUnit}
+                  placeholder="e.g. 20"
+                  min={0.01}
+                />
+
+                <DoseCalcNumericField
+                  label="3. Drops per mL (Calibrated)"
+                  required
+                  value={calcDropsPerMl}
+                  onChange={setCalcDropsPerMl}
+                  unit="drops/mL"
+                  placeholder="e.g. 20"
+                  min={1}
+                />
+
+                <DoseCalcNumericField
+                  label="4. Dose in Drops"
+                  value={calcDoseDrops}
+                  onChange={setCalcDoseDrops}
+                  unit="drops"
+                  placeholder="e.g. 20"
+                  min={1}
+                />
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>5. Calculated Volume</label>
+                  <div className="rx-calc-badge-display">
+                    {doseCalcMetrics.calculatedVolume > 0 ? `${doseCalcMetrics.calculatedVolume} mL` : '—'}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>6. Source Equivalent</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.sourceEquiv || '—'}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD: WEIGHT-BASED (DEFAULT) ── */}
+            {calcMethod === 'weight_based' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Patient Weight"
+                  value={calcWeight}
+                  onChange={(val) => {
+                    setCalcWeight(val);
+                    handleInlineWeightChange(val);
+                  }}
+                  unit="kg"
+                  placeholder="e.g. 24"
+                />
+
+                <DoseCalcNumericField
+                  label="2. Dose per kg"
+                  value={calcDosePerKg}
+                  onChange={setCalcDosePerKg}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcDoseUnit}
+                  onUnitChange={setCalcDoseUnit}
+                  placeholder="e.g. 10"
+                />
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>3. Calculated Dose</label>
+                  <div className="rx-calc-badge-display">
+                    {doseCalcMetrics.calculatedDose > 0
+                      ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}`
+                      : '—'}
+                  </div>
+                </div>
+
+                <DoseCalcNumericField
+                  label="4. Strength of Active Ingredient"
+                  value={calcStrength}
+                  onChange={setCalcStrength}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcStrengthUnit}
+                  onUnitChange={setCalcStrengthUnit}
+                  placeholder="e.g. 5 or 250"
+                />
+
+                <DoseCalcNumericField
+                  label="5. Base Volume"
+                  value={calcBaseVolume}
+                  onChange={setCalcBaseVolume}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcVolumeUnit}
+                  onUnitChange={setCalcVolumeUnit}
+                  placeholder="1"
+                />
+
+                <div className="form-group rx-calc-row3-item">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>6. Calculated Volume / Qty per Dose</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.calculatedVolume > 0
+                      ? `${Math.round(doseCalcMetrics.calculatedVolume * 100) / 100} ${calcVolumeUnit}`
+                      : (doseCalcMetrics.calculatedDose > 0 ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}` : '—')}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD: WEIGHT-BASED RANGE ── */}
+            {calcMethod === 'weight_range' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Patient Weight"
+                  value={calcWeight}
+                  onChange={(val) => {
+                    setCalcWeight(val);
+                    handleInlineWeightChange(val);
+                  }}
+                  unit="kg"
+                  placeholder="e.g. 24"
+                />
+
+                <DoseCalcNumericField
+                  label="2. Min Dose per kg"
+                  value={calcMinDosePerKg}
+                  onChange={setCalcMinDosePerKg}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcDoseUnit}
+                  onUnitChange={setCalcDoseUnit}
+                  placeholder="e.g. 10"
+                />
+
+                <DoseCalcNumericField
+                  label="3. Max Dose per kg"
+                  value={calcMaxDosePerKg}
+                  onChange={setCalcMaxDosePerKg}
+                  unit={calcDoseUnit}
+                  placeholder="e.g. 20"
+                />
+
+                <div className="form-group rx-calc-row3-item">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Range</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.displayDose}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD: WEIGHT-BAND ── */}
+            {calcMethod === 'weight_band' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Patient Weight"
+                  value={calcWeight}
+                  onChange={(val) => {
+                    setCalcWeight(val);
+                    handleInlineWeightChange(val);
+                  }}
+                  unit="kg"
+                  placeholder="e.g. 15"
+                />
+
+                {calcWeightBands && calcWeightBands.length > 0 ? (
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label" style={{ fontSize: '11.5px' }}>Configured Bands</label>
+                    <div style={{ fontSize: '11.5px', color: 'var(--color-on-surface-variant)', background: 'var(--color-surface-container-low)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
+                      {calcWeightBands.map((b, i) => (
+                        <div key={i}>
+                          • {b.label || `${b.minWeightKg ?? 0}–${b.maxWeightKg ?? '∞'} kg`}: <strong>{b.doseValue} {b.doseUnit}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <DoseCalcNumericField
+                      label="2. Minimum Band Range"
+                      value={calcBandMinWeight}
+                      onChange={setCalcBandMinWeight}
+                      unit="kg"
+                      placeholder="0"
+                      min={0}
+                    />
+
+                    <DoseCalcNumericField
+                      label="3. Maximum Band Range"
+                      value={calcBandMaxWeight}
+                      onChange={setCalcBandMaxWeight}
+                      unit="kg"
+                      placeholder="10"
+                      min={0.1}
+                    />
+
+                    <DoseCalcNumericField
+                      label="4. Band Dose & Unit"
+                      value={calcBandDoseValue}
+                      onChange={setCalcBandDoseValue}
+                      unitOptions={availableUnits}
+                      selectedUnit={calcBandDoseUnit}
+                      onUnitChange={setCalcBandDoseUnit}
+                      placeholder="1"
+                      min={0.01}
+                    />
+                  </>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>Matched Band Dose</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.displayDose}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD: FIXED DOSE ── */}
+            {calcMethod === 'fixed' && (
+              <>
+                <DoseCalcNumericField
+                  label="1. Fixed Dose Value"
+                  value={calcFixedDose}
+                  onChange={setCalcFixedDose}
+                  unitOptions={availableUnits}
+                  selectedUnit={calcFixedDoseUnit}
+                  onUnitChange={(val) => {
+                    setCalcFixedDoseUnit(val);
+                    setMedForm((prev) => ({ ...prev, unit: val }));
+                  }}
+                  placeholder="e.g. 1"
+                  min={0.01}
+                />
+
+                <div className="form-group rx-calc-row3-item">
+                  <label className="form-label" style={{ fontSize: '11.5px' }}>Administer per Dose</label>
+                  <div className="rx-calc-badge-display highlight">
+                    {doseCalcMetrics.displayDose}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── METHOD: NONE (MANUAL) ── */}
+            {calcMethod === 'none' && (
+              <div style={{ gridColumn: '1 / -1', padding: '10px 14px', background: 'var(--color-surface-container-low)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-outline-variant)' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
+                  <strong>Manual Mode:</strong> No automated dosing formula is applied for this medication. Please enter the clinical dose, route, frequency, and dispense quantity manually in the medicine form above.
+                </p>
+              </div>
+            )}
+
+            {/* ── SHARED: Frequency, Duration, Total Dispense Qty, Apply Button ── */}
+            <div className="form-group rx-calc-row4-start">
+              <label className="form-label" style={{ fontSize: '11.5px' }}>Frequency</label>
+              <select
+                className="form-select"
+                value={calcFrequency}
+                onChange={(e) => setCalcFrequency(e.target.value)}
+              >
+                {availableFrequencies.map((f, idx) => (
+                  <option key={`calc-freq-${f}-${idx}`} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+
+            <DoseCalcNumericField
+              label="Duration (Days)"
+              value={calcDurationDays}
+              onChange={(val) => setCalcDurationDays(parseInt(val, 10) || 0)}
+              unit="days"
+              placeholder="e.g. 5"
+              min={1}
+            />
+
+            <div className="form-group">
+              <label className="form-label" style={{ fontSize: '11.5px' }}>Total Dispense Qty</label>
+              <div className="rx-calc-badge-display grand">
+                {doseCalcMetrics.totalDispenseQty > 0
+                  ? `${doseCalcMetrics.totalDispenseQty} ${
+                      calcMethod === 'volume_per_weight'
+                        ? calcDoseVolumeUnit
+                        : calcMethod === 'reconstituted_liquid'
+                        ? calcReconAdminUnit
+                        : calcMethod === 'reconstituted_drops'
+                        ? 'drops'
+                        : calcVolumeUnit || medForm.unit
+                    }`
+                  : '—'}
+              </div>
+            </div>
+
+            <div className="form-group rx-calc-action-cell">
+              <label className="form-label rx-calc-action-label" style={{ fontSize: '11.5px', visibility: 'hidden' }}>Apply</label>
+              <button
+                type="button"
+                className="btn btn-secondary rx-apply-calc-btn"
+                onClick={handleApplyDoseCalculation}
+                title="Apply calculated dose, unit, frequency, duration and quantity into prescription medicine fields"
+              >
+                <Icon name="check" size={15} />
+                <span>Apply to Medicine</span>
+              </button>
+            </div>
+
+            {/* Formula & Warning Feedback */}
+            {doseCalcMetrics.formula && (
+              <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: 'var(--color-primary)', background: 'var(--color-primary-container-low, #f0fdf4)', border: '1px solid #bbf7d0', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
+                <strong>Formula: </strong>{doseCalcMetrics.formula}
+              </div>
+            )}
+            {doseCalcMetrics.warning && (
+              <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Icon name="warning" size={14} />
+                <span>{doseCalcMetrics.warning}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
   // Matches Stitch: vetrx_new_prescription_clinical_details_desktop
   // ============================================================
   return (
@@ -2720,6 +3202,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 {/* Primary Add Medicine Button */}
                 <button
                   type="button"
+                  id="rx-add-medicine-btn"
                   className="btn btn-primary btn-sm"
                   onClick={openAddMedModal}
                 >
@@ -2766,6 +3249,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                           <span className="rx-med-name">
                             {itm.brandName}
                             {itm.strength ? ` • ${itm.strength}` : ''}
+                            {itm.presentation ? ` • ${itm.presentation}` : ''}
                             {itm.packSize ? ` [${itm.packSize}]` : ''}
                           </span>
                           <span className="rx-med-qty-badge">
@@ -2774,6 +3258,12 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         </div>
 
                         <div className="rx-med-regimen-pills">
+                          {itm.presentation && (
+                            <span style={{ fontWeight: 600, color: 'var(--color-on-surface-variant)' }}>
+                              Form: {itm.presentation}
+                            </span>
+                          )}
+                          {itm.presentation && itm.dose && <span>•</span>}
                           {itm.dose && (
                             <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
                               Dose: {itm.dose} {itm.doseUnit || ''}
@@ -3048,6 +3538,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
               <button
                 type="button"
+                id="rx-save-draft-btn"
                 className="btn btn-secondary"
                 style={{ height: 42, width: '100%' }}
                 disabled={isSaving}
@@ -3099,6 +3590,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 <label className="form-label">Search Formulation / Brand Name</label>
                 <div style={{ position: 'relative', zIndex: 60 }}>
                   <input
+                    id="rx-med-search"
                     type="text"
                     className="form-input"
                     placeholder="e.g. Amoxicillin, Enrofloxacin, Antibiotic..."
@@ -3132,9 +3624,23 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   {/* Live Search Results / Empty State */}
                   {medModalSearch.trim().length > 0 && !selectedMedRef && (
                     matchingMedicines.length === 0 ? (
-                      <div className="formulation-empty-state rx-live-med-empty" role="status" aria-live="polite">
-                        <Icon name="search" size={16} />
-                        <span>No matching medicines found.</span>
+                      <div className="formulation-empty-state rx-live-med-empty" role="status" aria-live="polite" style={{ flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '16px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-outline)' }}>
+                          <Icon name="search" size={16} />
+                          <span>No matching medicines found in formulary.</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          style={{ marginTop: '4px', gap: '6px', fontSize: '12.5px', fontWeight: 600 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCreateMedicineModalOpen(true);
+                          }}
+                        >
+                          <Icon name="plus" size={14} />
+                          <span>Create New Formulary Medicine</span>
+                        </button>
                       </div>
                     ) : (
                       <div className="rx-live-med-dropdown" role="listbox">
@@ -3168,7 +3674,54 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       </div>
                     )
                   )}
+
+                  {/* "Can't find it?" create-new link — always visible below search */}
+                  {!selectedMedRef && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--color-primary)',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          textDecoration: 'underline',
+                          textUnderlineOffset: '2px',
+                        }}
+                        onClick={() => setCreateMedicineModalOpen(true)}
+                      >
+                        Can&apos;t find it? Create a new medicine →
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* Quick suggestions from formulary when search field is empty */}
+                {(!medModalSearch.trim() || !selectedMedRef) && availableMedicines && availableMedicines.length > 0 && !selectedMedRef && (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="text-xs text-outline mb-1.5 flex items-center gap-1">
+                      <Icon name="sparkles" size={12} />
+                      <span>Quick suggestions from formulary:</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {availableMedicines.slice(0, 6).map((med, idx) => (
+                        <button
+                          key={`sugg-${med.id}-${idx}`}
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ height: 26, fontSize: 11, borderRadius: 'var(--radius-full)' }}
+                          onClick={() => handleSelectMedRef(med)}
+                        >
+                          <Icon name="plus" size={11} />
+                          <span>{med.brandName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Selected Medicine Banner */}
                 {selectedMedRef && (
@@ -3199,604 +3752,33 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     </button>
                   </div>
                 )}
-
-                {/* ── Optional Dose Calculation Section (UAT Issue 3 & 4) ── */}
-                <div className="rx-dose-calc-accordion">
-                  <button
-                    type="button"
-                    className="rx-dose-calc-accordion-toggle"
-                    onClick={() => setIsDoseCalcOpen(!isDoseCalcOpen)}
-                  >
-                    <div className="rx-dose-calc-header-left">
-                      <div className="rx-dose-calc-icon">
-                        <Icon name="calculator" size={16} />
-                      </div>
-                      <div className="rx-dose-calc-text-col">
-                        <span className="rx-dose-calc-title">Optional dose calculation</span>
-                        <span className="rx-dose-calc-subtitle">Weight-based dose, concentration &amp; quantity calculator</span>
-                      </div>
-                    </div>
-                    <div className="rx-dose-calc-header-right">
-                      <span>{isDoseCalcOpen ? 'Hide calculator' : 'Show calculator'}</span>
-                      <Icon name={isDoseCalcOpen ? 'chevron-up' : 'chevron-down'} size={14} />
-                    </div>
-                  </button>
-
-                  {isDoseCalcOpen && (
-                    <div className="rx-dose-calc-accordion-body">
-                      {/* Method Selector */}
-                      <div className="form-group" style={{ marginBottom: '12px' }}>
-                        <label className="form-label" style={{ fontSize: '11.5px', fontWeight: 600 }}>Calculation Method</label>
-                        <select
-                          className="form-select"
-                          value={calcMethod}
-                          onChange={(e) => handleCalcMethodChange(e.target.value as DosingMethod)}
-                        >
-                          {DOSING_METHOD_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="rx-dose-calc-grid">
-                        {/* ── METHOD A: VOLUME PER BODY WEIGHT ── */}
-                        {calcMethod === 'volume_per_weight' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Patient Weight"
-                              value={calcWeight}
-                              onChange={(val) => {
-                                setCalcWeight(val);
-                                handleInlineWeightChange(val);
-                              }}
-                              unit="kg"
-                              placeholder="e.g. 20"
-                            />
-
-                            <DoseCalcNumericField
-                              label="2. Dose Volume"
-                              value={calcDoseVolumeAmount}
-                              onChange={setCalcDoseVolumeAmount}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcDoseVolumeUnit}
-                              onUnitChange={setCalcDoseVolumeUnit}
-                              placeholder="e.g. 1"
-                              min={0.01}
-                            />
-
-                            <DoseCalcNumericField
-                              label="3. Weight Basis"
-                              value={calcWeightBasis}
-                              onChange={setCalcWeightBasis}
-                              unit="kg"
-                              placeholder="e.g. 20"
-                              min={0.01}
-                            />
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Volume</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.calculatedVolume > 0
-                                  ? `${doseCalcMetrics.calculatedVolume} ${calcDoseVolumeUnit}`
-                                  : '—'}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD B: RECONSTITUTED TABLET/UNIT -> LIQUID VOLUME ── */}
-                        {calcMethod === 'reconstituted_liquid' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Source Quantity"
-                              value={calcReconSourceQty}
-                              onChange={setCalcReconSourceQty}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcReconSourceUnit}
-                              onUnitChange={setCalcReconSourceUnit}
-                              placeholder="e.g. 1"
-                              min={0.01}
-                            />
-
-                            <DoseCalcNumericField
-                              label="2. Diluent Volume"
-                              value={calcReconDiluentVol}
-                              onChange={setCalcReconDiluentVol}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcReconDiluentUnit}
-                              onUnitChange={setCalcReconDiluentUnit}
-                              placeholder="e.g. 20"
-                              min={0.01}
-                            />
-
-                            <DoseCalcNumericField
-                              label="3. Dose Volume"
-                              value={calcReconAdminVol}
-                              onChange={setCalcReconAdminVol}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcReconAdminUnit}
-                              onUnitChange={setCalcReconAdminUnit}
-                              placeholder="e.g. 1"
-                              min={0.01}
-                            />
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Source Equivalent</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.sourceEquiv || '—'}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD C: RECONSTITUTED TABLET/UNIT -> DROPS ── */}
-                        {calcMethod === 'reconstituted_drops' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Source Quantity"
-                              value={calcReconSourceQty}
-                              onChange={setCalcReconSourceQty}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcReconSourceUnit}
-                              onUnitChange={setCalcReconSourceUnit}
-                              placeholder="e.g. 1"
-                              min={0.01}
-                            />
-
-                            <DoseCalcNumericField
-                              label="2. Diluent Volume"
-                              value={calcReconDiluentVol}
-                              onChange={setCalcReconDiluentVol}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcReconDiluentUnit}
-                              onUnitChange={setCalcReconDiluentUnit}
-                              placeholder="e.g. 20"
-                              min={0.01}
-                            />
-
-                            <DoseCalcNumericField
-                              label="3. Drops per mL (Calibrated)"
-                              required
-                              value={calcDropsPerMl}
-                              onChange={setCalcDropsPerMl}
-                              unit="drops/mL"
-                              placeholder="e.g. 20"
-                              min={1}
-                            />
-
-                            <DoseCalcNumericField
-                              label="4. Dose in Drops"
-                              value={calcDoseDrops}
-                              onChange={setCalcDoseDrops}
-                              unit="drops"
-                              placeholder="e.g. 20"
-                              min={1}
-                            />
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>5. Calculated Volume</label>
-                              <div className="rx-calc-badge-display">
-                                {doseCalcMetrics.calculatedVolume > 0 ? `${doseCalcMetrics.calculatedVolume} mL` : '—'}
-                              </div>
-                            </div>
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>6. Source Equivalent</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.sourceEquiv || '—'}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD: WEIGHT-BASED (DEFAULT) ── */}
-                        {calcMethod === 'weight_based' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Patient Weight"
-                              value={calcWeight}
-                              onChange={(val) => {
-                                setCalcWeight(val);
-                                handleInlineWeightChange(val);
-                              }}
-                              unit="kg"
-                              placeholder="e.g. 24"
-                            />
-
-                            <DoseCalcNumericField
-                              label="2. Dose per kg"
-                              value={calcDosePerKg}
-                              onChange={setCalcDosePerKg}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcDoseUnit}
-                              onUnitChange={setCalcDoseUnit}
-                              placeholder="e.g. 10"
-                            />
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>3. Calculated Dose</label>
-                              <div className="rx-calc-badge-display">
-                                {doseCalcMetrics.calculatedDose > 0
-                                  ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}`
-                                  : '—'}
-                              </div>
-                            </div>
-
-                            <DoseCalcNumericField
-                              label="4. Strength of Active Ingredient"
-                              value={calcStrength}
-                              onChange={setCalcStrength}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcStrengthUnit}
-                              onUnitChange={setCalcStrengthUnit}
-                              placeholder="e.g. 5 or 250"
-                            />
-
-                            <DoseCalcNumericField
-                              label="5. Base Volume"
-                              value={calcBaseVolume}
-                              onChange={setCalcBaseVolume}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcVolumeUnit}
-                              onUnitChange={setCalcVolumeUnit}
-                              placeholder="1"
-                            />
-
-                            <div className="form-group rx-calc-row3-item">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>6. Calculated Volume / Qty per Dose</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.calculatedVolume > 0
-                                  ? `${Math.round(doseCalcMetrics.calculatedVolume * 100) / 100} ${calcVolumeUnit}`
-                                  : (doseCalcMetrics.calculatedDose > 0 ? `${Math.round(doseCalcMetrics.calculatedDose * 100) / 100} ${calcDoseUnit}` : '—')}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD: WEIGHT-BASED RANGE ── */}
-                        {calcMethod === 'weight_range' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Patient Weight"
-                              value={calcWeight}
-                              onChange={(val) => {
-                                setCalcWeight(val);
-                                handleInlineWeightChange(val);
-                              }}
-                              unit="kg"
-                              placeholder="e.g. 24"
-                            />
-
-                            <DoseCalcNumericField
-                              label="2. Min Dose per kg"
-                              value={calcMinDosePerKg}
-                              onChange={setCalcMinDosePerKg}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcDoseUnit}
-                              onUnitChange={setCalcDoseUnit}
-                              placeholder="e.g. 10"
-                            />
-
-                            <DoseCalcNumericField
-                              label="3. Max Dose per kg"
-                              value={calcMaxDosePerKg}
-                              onChange={setCalcMaxDosePerKg}
-                              unit={calcDoseUnit}
-                              placeholder="e.g. 20"
-                            />
-
-                            <div className="form-group rx-calc-row3-item">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>4. Calculated Range</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.displayDose}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD: WEIGHT-BAND ── */}
-                        {calcMethod === 'weight_band' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Patient Weight"
-                              value={calcWeight}
-                              onChange={(val) => {
-                                setCalcWeight(val);
-                                handleInlineWeightChange(val);
-                              }}
-                              unit="kg"
-                              placeholder="e.g. 15"
-                            />
-
-                            {calcWeightBands && calcWeightBands.length > 0 ? (
-                              <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                <label className="form-label" style={{ fontSize: '11.5px' }}>Configured Bands</label>
-                                <div style={{ fontSize: '11.5px', color: 'var(--color-on-surface-variant)', background: 'var(--color-surface-container-low)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
-                                  {calcWeightBands.map((b, i) => (
-                                    <div key={i}>
-                                      • {b.label || `${b.minWeightKg ?? 0}–${b.maxWeightKg ?? '∞'} kg`}: <strong>{b.doseValue} {b.doseUnit}</strong>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <DoseCalcNumericField
-                                  label="2. Minimum Band Range"
-                                  value={calcBandMinWeight}
-                                  onChange={setCalcBandMinWeight}
-                                  unit="kg"
-                                  placeholder="0"
-                                  min={0}
-                                />
-
-                                <DoseCalcNumericField
-                                  label="3. Maximum Band Range"
-                                  value={calcBandMaxWeight}
-                                  onChange={setCalcBandMaxWeight}
-                                  unit="kg"
-                                  placeholder="10"
-                                  min={0.1}
-                                />
-
-                                <DoseCalcNumericField
-                                  label="4. Band Dose & Unit"
-                                  value={calcBandDoseValue}
-                                  onChange={setCalcBandDoseValue}
-                                  unitOptions={availableUnits}
-                                  selectedUnit={calcBandDoseUnit}
-                                  onUnitChange={setCalcBandDoseUnit}
-                                  placeholder="1"
-                                  min={0.01}
-                                />
-                              </>
-                            )}
-
-                            <div className="form-group">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>Matched Band Dose</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.displayDose}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD: FIXED DOSE ── */}
-                        {calcMethod === 'fixed' && (
-                          <>
-                            <DoseCalcNumericField
-                              label="1. Fixed Dose Value"
-                              value={calcFixedDose}
-                              onChange={setCalcFixedDose}
-                              unitOptions={availableUnits}
-                              selectedUnit={calcFixedDoseUnit}
-                              onUnitChange={(val) => {
-                                setCalcFixedDoseUnit(val);
-                                setMedForm((prev) => ({ ...prev, unit: val }));
-                              }}
-                              placeholder="e.g. 1"
-                              min={0.01}
-                            />
-
-                            <div className="form-group rx-calc-row3-item">
-                              <label className="form-label" style={{ fontSize: '11.5px' }}>Administer per Dose</label>
-                              <div className="rx-calc-badge-display highlight">
-                                {doseCalcMetrics.displayDose}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {/* ── METHOD: NONE (MANUAL) ── */}
-                        {calcMethod === 'none' && (
-                          <div style={{ gridColumn: '1 / -1', padding: '10px 14px', background: 'var(--color-surface-container-low)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-outline-variant)' }}>
-                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                              <strong>Manual Mode:</strong> No automated dosing formula is applied for this medication. Please enter the clinical dose, route, frequency, and dispense quantity manually in the medicine form above.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* ── SHARED: Frequency, Duration, Total Dispense Qty, Apply Button ── */}
-                        <div className="form-group rx-calc-row4-start">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>Frequency</label>
-                          <select
-                            className="form-select"
-                            value={calcFrequency}
-                            onChange={(e) => setCalcFrequency(e.target.value)}
-                          >
-                            {availableFrequencies.map((f, idx) => (
-                              <option key={`calc-freq-${f}-${idx}`} value={f}>{f}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <DoseCalcNumericField
-                          label="Duration (Days)"
-                          value={calcDurationDays}
-                          onChange={(val) => setCalcDurationDays(parseInt(val, 10) || 0)}
-                          unit="days"
-                          placeholder="e.g. 5"
-                          min={1}
-                        />
-
-                        <div className="form-group">
-                          <label className="form-label" style={{ fontSize: '11.5px' }}>Total Dispense Qty</label>
-                          <div className="rx-calc-badge-display grand">
-                            {doseCalcMetrics.totalDispenseQty > 0
-                              ? `${doseCalcMetrics.totalDispenseQty} ${
-                                  calcMethod === 'volume_per_weight'
-                                    ? calcDoseVolumeUnit
-                                    : calcMethod === 'reconstituted_liquid'
-                                    ? calcReconAdminUnit
-                                    : calcMethod === 'reconstituted_drops'
-                                    ? 'drops'
-                                    : calcVolumeUnit || medForm.unit
-                                }`
-                              : '—'}
-                          </div>
-                        </div>
-
-                        <div className="form-group rx-calc-action-cell">
-                          <label className="form-label rx-calc-action-label" style={{ fontSize: '11.5px', visibility: 'hidden' }}>Apply</label>
-                          <button
-                            type="button"
-                            className="btn btn-secondary rx-apply-calc-btn"
-                            onClick={handleApplyDoseCalculation}
-                            title="Apply calculated dose, unit, frequency, duration and quantity into prescription medicine fields"
-                          >
-                            <Icon name="check" size={15} />
-                            <span>Apply to Medicine</span>
-                          </button>
-                        </div>
-
-                        {/* Formula & Warning Feedback */}
-                        {doseCalcMetrics.formula && (
-                          <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: 'var(--color-primary)', background: 'var(--color-primary-container-low, #f0fdf4)', border: '1px solid #bbf7d0', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontWeight: 500 }}>
-                            <strong>Formula: </strong>{doseCalcMetrics.formula}
-                          </div>
-                        )}
-                        {doseCalcMetrics.warning && (
-                          <div style={{ gridColumn: '1 / -1', fontSize: '11.5px', color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', padding: '6px 10px', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <Icon name="warning" size={14} />
-                            <span>{doseCalcMetrics.warning}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Quick suggestions from formulary when search field is empty */}
-                {(!medModalSearch.trim() || !selectedMedRef) && availableMedicines && availableMedicines.length > 0 && !selectedMedRef && (
-                  <div style={{ marginTop: 8 }}>
-                    <div className="text-xs text-outline mb-1.5 flex items-center gap-1">
-                      <Icon name="sparkles" size={12} />
-                      <span>Quick suggestions from formulary:</span>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {availableMedicines.slice(0, 6).map((med, idx) => (
-                        <button
-                          key={`sugg-${med.id}-${idx}`}
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          style={{ height: 26, fontSize: 11, borderRadius: 'var(--radius-full)' }}
-                          onClick={() => handleSelectMedRef(med)}
-                        >
-                          <Icon name="plus" size={11} />
-                          <span>{med.brandName}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* ── Medicine Specification: Brand, Formulation, Strength & Presentation (Defect 3) ── */}
-              <div
-                style={{
-                  background: 'var(--color-surface-container-low, #f8fafc)',
-                  border: '1px solid var(--color-surface-container, #e2e8f0)',
-                  borderRadius: 'var(--radius-lg, 12px)',
-                  padding: '14px 16px',
-                  marginBottom: '16px',
+              {/* ── Authoritative Medicine Formulation Details (Shared Formulation Component) ── */}
+              <MedicineFormulationSection
+                values={{
+                  brandName: medForm.brandName || selectedMedRef?.brandName || medModalSearch.trim() || '',
+                  genericName: medForm.genericName || selectedMedRef?.genericName || '',
+                  strength: medForm.strength || selectedMedRef?.strength || selectedMedRef?.strengthVolume || '',
+                  presentation: medForm.presentation || selectedMedRef?.presentation || 'Tablet',
+                  packSize: medForm.packSize || selectedMedRef?.packSize || '',
                 }}
-              >
-                <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-outline)', marginBottom: '12px' }}>
-                  Medicine Formulation &amp; Presentation Specification
-                </div>
-
-                {/* Row 1: Brand Name *, Chemical / Formulation, Strength / Concentration */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '12px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-brand-name">
-                      Brand Name <span style={{ color: 'var(--color-error)' }}>*</span>
-                    </label>
-                    <input
-                      id="med-brand-name"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Brand XYZ, Amoxil"
-                      value={medForm.brandName}
-                      onChange={(e) => setMedForm((prev) => ({ ...prev, brandName: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-chemical-formulation">
-                      Chemical / Formulation
-                    </label>
-                    <input
-                      id="med-chemical-formulation"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Amoxicillin, Prednisolone"
-                      value={medForm.genericName}
-                      onChange={(e) => setMedForm((prev) => ({ ...prev, genericName: e.target.value }))}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-strength">
-                      Strength / Concentration
-                    </label>
-                    <input
-                      id="med-strength"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 125 mg/tablet, 5 mg/mL, 20 mg/g"
-                      value={medForm.strength}
-                      onChange={(e) => setMedForm((prev) => ({ ...prev, strength: e.target.value }))}
-                    />
-                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                      Active concentration (e.g. 5 mg/mL, 125 mg/tablet)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Row 2: Presentation / Form *, Presentation / Pack Size */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-presentation">
-                      Presentation / Form <span style={{ color: 'var(--color-error)' }}>*</span>
-                    </label>
-                    <select
-                      id="med-presentation"
-                      className="form-select"
-                      value={medForm.presentation || 'Tablet'}
-                      onChange={(e) => setMedForm((prev) => ({ ...prev, presentation: e.target.value }))}
-                    >
-                      {COMMON_PRESENTATIONS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                      {medForm.presentation && !COMMON_PRESENTATIONS.includes(medForm.presentation) && (
-                        <option value={medForm.presentation}>{medForm.presentation}</option>
-                      )}
-                    </select>
-                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                      Dosage form (e.g. Tablet, Syrup, Injection)
-                    </span>
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }} htmlFor="med-pack-size">
-                      Presentation / Pack Size
-                    </label>
-                    <input
-                      id="med-pack-size"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. 10 tablets/strip, 30 mL bottle, 2 mL vial"
-                      value={medForm.packSize}
-                      onChange={(e) => setMedForm((prev) => ({ ...prev, packSize: e.target.value }))}
-                    />
-                    <span style={{ fontSize: '10.5px', color: 'var(--color-outline)', marginTop: '2px', display: 'block' }}>
-                      Physical pack unit (e.g. 30 mL bottle, 10 tablets/strip)
-                    </span>
-                  </div>
-                </div>
-              </div>
+                onChange={(field, val) => {
+                  setMedForm((prev) => ({
+                    ...prev,
+                    [field === 'genericName' ? 'genericName' : field]: val,
+                    ...(field === 'brandName' ? { brandName: val } : {}),
+                    ...(field === 'strength' ? { strengthVolume: val } : {}),
+                  }));
+                }}
+                readOnly={Boolean(selectedMedRef)}
+                isFromFormulary={Boolean(selectedMedRef)}
+                onEditInFormulary={() => setCreateMedicineModalOpen(true)}
+                onCreateInFormulary={() => setCreateMedicineModalOpen(true)}
+                showFormularyStatus={true}
+                idPrefix="rx-form"
+                layout="embedded"
+              />
 
               {/* Dosing parameters */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 'var(--space-md)' }}>
@@ -3936,6 +3918,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   onChange={(e) => setMedForm({ ...medForm, directions: e.target.value })}
                 />
               </div>
+
+              {/* ── Optional Dose Calculation Section ── */}
+              {renderDoseCalculatorAccordion()}
             </div>
 
             <div className="rx-modal-footer">
@@ -3956,6 +3941,29 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── NESTED MODAL: Create New Formulary Medicine (authoritative MedicineFormModal) ── */}
+      {createMedicineModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 10100 }}>
+          <MedicineFormModal
+            isOpen={createMedicineModalOpen}
+            medicine={
+              selectedMedRef ||
+              (medModalSearch.trim() ? ({ brandName: medModalSearch.trim() } as unknown as Medicine) : null)
+            }
+            initialBrandName={!selectedMedRef && medModalSearch.trim() ? medModalSearch.trim() : undefined}
+            onClose={() => setCreateMedicineModalOpen(false)}
+            onSaved={async (medicineId: number) => {
+              // Fetch the newly created medicine from Dexie and auto-select it
+              const newMed = await db.medicines.get(medicineId);
+              if (newMed) {
+                handleSelectMedRef(newMed);
+              }
+              setCreateMedicineModalOpen(false);
+            }}
+          />
         </div>
       )}
 

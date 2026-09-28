@@ -148,10 +148,12 @@ export async function ensureSeeded(): Promise<void> {
   // Demo records are opt-in only via ?demo=1
   const demoMode = new URLSearchParams(window.location.search).get('demo') === '1'
     || localStorage.getItem('vetrx_demo_mode') === '1';
-  const seedFlag = localStorage.getItem(SEED_KEY);
+  const tenantSeedKey = `${SEED_KEY}_${activeDbInstance.name}`;
+  const seedFlag = localStorage.getItem(tenantSeedKey);
   if (demoMode && !seedFlag) {
     const { seed } = await import('./seed');
     await seed();
+    localStorage.setItem(tenantSeedKey, '1');
     localStorage.setItem(SEED_KEY, '1');
   }
 

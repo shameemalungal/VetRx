@@ -13,29 +13,19 @@ import { formatControlledNumber } from '../../utils/doseCalculator';
 interface MedicineFormModalProps {
   isOpen: boolean;
   medicine?: Medicine | null;
+  initialBrandName?: string;
   onClose: () => void;
   onSaved: (medicineId: number) => void;
 }
 
-const ALL_SPECIES: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
+import {
+  MedicineFormulationSection,
+  type MedicineFormulationValues,
+  COMMON_PRESENTATIONS,
+} from './MedicineFormulationSection';
+export { COMMON_PRESENTATIONS };
 
-export const COMMON_PRESENTATIONS = [
-  'Tablet',
-  'Ear Drops',
-  'Eye Drops',
-  'Syrup',
-  'Injection',
-  'Sachet',
-  'Capsule',
-  'Topical Spot-on',
-  'Ointment',
-  'Cream',
-  'Oral Suspension',
-  'Spray',
-  'Shampoo',
-  'Powder',
-  'Other',
-];
+const ALL_SPECIES: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
 
 const COMMON_CATEGORIES = [
   'Antibiotic / Antimicrobial',
@@ -123,6 +113,7 @@ const FALLBACK_FREQUENCIES = [
 export function MedicineFormModal({
   isOpen,
   medicine,
+  initialBrandName,
   onClose,
   onSaved,
 }: MedicineFormModalProps) {
@@ -327,9 +318,11 @@ export function MedicineFormModal({
       setDefaultDurationDays(medicine.defaultDurationDays !== undefined ? String(medicine.defaultDurationDays) : '5');
       setDefaultDirections(medicine.defaultDirections || '');
     } else {
-      setBrandName('');
+      setBrandName(initialBrandName || '');
       setGenericName('');
       setPresentation('Tablet');
+      setPackSize('');
+      setStrength('');
       setStrengthVolume('');
       setDefaultUnit('tablets');
       setCategory('Antibiotic / Antimicrobial');
@@ -367,7 +360,7 @@ export function MedicineFormModal({
       setDefaultDirections('');
     }
     setErrors({});
-  }, [medicine, isOpen]);
+  }, [medicine, isOpen, initialBrandName]);
 
   if (!isOpen) return null;
 
@@ -505,6 +498,23 @@ export function MedicineFormModal({
     );
   };
 
+  const handleFormulationChange = (field: keyof MedicineFormulationValues, val: string) => {
+    if (field === 'brandName') {
+      setBrandName(val);
+      if (errors.brandName) setErrors((prev) => ({ ...prev, brandName: undefined }));
+    } else if (field === 'genericName') {
+      setGenericName(val);
+    } else if (field === 'presentation') {
+      setPresentation(val);
+      if (errors.presentation) setErrors((prev) => ({ ...prev, presentation: undefined }));
+    } else if (field === 'packSize') {
+      setPackSize(val);
+    } else if (field === 'strength') {
+      setStrength(val);
+      setStrengthVolume(val);
+    }
+  };
+
   return (
     <div
       className="medicine-modal-backdrop"
@@ -537,111 +547,24 @@ export function MedicineFormModal({
         {/* Form Body */}
         <form onSubmit={handleSubmit} id="medicine-form">
           <div className="medicine-modal-body">
-            <div className="medicine-form-grid">
-              {/* Brand Name */}
-              <div className="medicine-form-group full-width">
-                <label className="medicine-form-label" htmlFor="med-brand-name">
-                  Medicine / Brand Name <span className="required">*</span>
-                </label>
-                <input
-                  id="med-brand-name"
-                  type="text"
-                  className={`medicine-form-input ${errors.brandName ? 'error' : ''}`}
-                  placeholder="e.g. Amoxicillin 500mg, Posatex Otic Drops 15ml"
-                  value={brandName}
-                  onChange={(e) => {
-                    setBrandName(e.target.value);
-                    if (errors.brandName) setErrors((prev) => ({ ...prev, brandName: undefined }));
-                  }}
-                  autoFocus
-                />
-                {errors.brandName && (
-                  <span className="medicine-form-error-msg">{errors.brandName}</span>
-                )}
-              </div>
+            {/* Authoritative Single Formulation Component */}
+            <MedicineFormulationSection
+              values={{
+                brandName,
+                genericName,
+                presentation,
+                packSize,
+                strength,
+              }}
+              onChange={handleFormulationChange}
+              errors={errors}
+              autoFocus
+              idPrefix="med"
+              layout="modal"
+              showHints
+            />
 
-              {/* Generic / Chemical Name */}
-              <div className="medicine-form-group full-width">
-                <label className="medicine-form-label" htmlFor="med-generic-name">
-                  Generic / Chemical Composition
-                </label>
-                <input
-                  id="med-generic-name"
-                  type="text"
-                  className="medicine-form-input"
-                  placeholder="e.g. Amoxicillin Trihydrate, Orbifloxacin / Mometasone"
-                  value={genericName}
-                  onChange={(e) => setGenericName(e.target.value)}
-                />
-                <span className="medicine-form-hint">
-                  Displays on prescriptions for drug substitution and pharmacy guidance.
-                </span>
-              </div>
-
-              {/* Form / Presentation */}
-              <div className="medicine-form-group">
-                <label className="medicine-form-label" htmlFor="med-presentation">
-                  Presentation / Form <span className="required">*</span>
-                </label>
-                <select
-                  id="med-presentation"
-                  className={`medicine-form-select ${errors.presentation ? 'error' : ''}`}
-                  value={presentation}
-                  onChange={(e) => {
-                    setPresentation(e.target.value);
-                    if (errors.presentation) setErrors((prev) => ({ ...prev, presentation: undefined }));
-                  }}
-                >
-                  {COMMON_PRESENTATIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-                {errors.presentation && (
-                  <span className="medicine-form-error-msg">{errors.presentation}</span>
-                )}
-              </div>
-
-              {/* Presentation / Pack Size */}
-              <div className="medicine-form-group">
-                <label className="medicine-form-label" htmlFor="med-pack-size">
-                  Presentation / Pack Size
-                </label>
-                <input
-                  id="med-pack-size"
-                  type="text"
-                  className="medicine-form-input"
-                  placeholder="e.g. 30 mL bottle, 2 mL vial, 10 tablets/strip"
-                  value={packSize}
-                  onChange={(e) => setPackSize(e.target.value)}
-                />
-                <span className="medicine-form-hint">
-                  Commercial container or strip size (e.g. 30 mL bottle, 10 tablets/strip)
-                </span>
-              </div>
-
-              {/* Strength / Concentration */}
-              <div className="medicine-form-group">
-                <label className="medicine-form-label" htmlFor="med-strength">
-                  Strength / Concentration
-                </label>
-                <input
-                  id="med-strength"
-                  type="text"
-                  className="medicine-form-input"
-                  placeholder="e.g. 5 mg/mL, 125 mg/tablet, 500 mg"
-                  value={strength}
-                  onChange={(e) => {
-                    setStrength(e.target.value);
-                    setStrengthVolume(e.target.value);
-                  }}
-                />
-                <span className="medicine-form-hint">
-                  Active ingredient potency (e.g. 5 mg/mL, 125 mg/tablet)
-                </span>
-              </div>
-
+            <div className="medicine-form-grid" style={{ marginTop: 'var(--space-md)' }}>
               {/* Default Unit (from Master Data) */}
               <div className="medicine-form-group">
                 <label className="medicine-form-label" htmlFor="med-default-unit">

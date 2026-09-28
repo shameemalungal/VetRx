@@ -19,6 +19,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Test & Temp files
+artifacts/
+reference-pdfs/
 .chrome-test/
 web/.chrome-test/
 coverage/

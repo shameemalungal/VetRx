@@ -284,32 +284,24 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
           {/* Right Profile Controls */}
           <div className="platform-header-right">
             <div className="platform-user-identity">
-              <div className="platform-user-avatar">
+              <div className="platform-user-avatar" aria-hidden="true">
                 {user?.name ? user.name.slice(0, 2).toUpperCase() : 'SA'}
               </div>
-              <div>
-                <div className="platform-user-name">{user?.name || 'Super Admin'}</div>
-                <div className="platform-user-role">Platform Super Admin</div>
+              <div className="platform-user-details">
+                <div className="platform-user-name" title={user?.name || 'Super Admin'}>
+                  {user?.name || 'Super Admin'}
+                </div>
+                <div className="platform-user-badges">
+                  <span className="platform-context-badge">PLATFORM</span>
+                  <span className="platform-role-badge">SUPER ADMIN</span>
+                </div>
               </div>
             </div>
 
             <button
               type="button"
               id="platform-context-switch-btn"
-              className="platform-switch-practice-btn"
-              style={{
-                background: 'rgba(0, 104, 95, 0.08)',
-                color: 'var(--color-primary, #00685f)',
-                border: '1px solid rgba(0, 104, 95, 0.25)',
-                padding: '6px 12px',
-                borderRadius: '8px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
+              className="platform-switch-practice-btn platform-header-switch-btn"
               onClick={() => setIsPracticeSwitcherOpen(true)}
               title="Switch to veterinary practice"
             >
