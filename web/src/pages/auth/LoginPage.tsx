@@ -36,7 +36,11 @@ export const LoginPage: React.FC = () => {
     try {
       await login(email, password);
       const params = new URLSearchParams(location.search);
-      const redirectUrl = params.get('redirect') || '/';
+      const rawRedirect = params.get('redirect');
+      const redirectUrl =
+        rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && rawRedirect !== '/'
+          ? rawRedirect
+          : '/dashboard';
       navigate(redirectUrl);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Invalid credentials.');
@@ -47,8 +51,11 @@ export const LoginPage: React.FC = () => {
 
   const handleGoogleSignIn = () => {
     const params = new URLSearchParams(location.search);
-    const redirectUrl = params.get('redirect') || '/';
-    const safeReturnTo = redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') ? redirectUrl : '/';
+    const rawRedirect = params.get('redirect');
+    const safeReturnTo =
+      rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && rawRedirect !== '/'
+        ? rawRedirect
+        : '/dashboard';
     window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
   };
 

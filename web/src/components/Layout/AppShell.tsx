@@ -7,7 +7,7 @@
 // =============================================================
 
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../ui/Icon';
@@ -20,7 +20,7 @@ import './AppShell.css';
 
 // ── Nav items — order and icons match Stitch screens ──────────
 const NAV_ITEMS = [
-  { label: 'Home',               path: '/',                icon: 'home'        },
+  { label: 'Home',               path: '/dashboard',       icon: 'home'        },
   { label: 'Patients',           path: '/patients',        icon: 'patients'    },
   { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
   { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
@@ -30,7 +30,7 @@ const NAV_ITEMS = [
 
 // Bottom nav shows the 4 most-used items (matches Stitch mobile)
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home',     path: '/',              icon: 'home',         ariaLabel: 'Home' },
+  { label: 'Home',     path: '/dashboard',     icon: 'home',         ariaLabel: 'Home' },
   { label: 'Patients', path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
   { label: 'Rx',       path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
   { label: 'Invoices', path: '/invoices',      icon: 'invoices',     ariaLabel: 'Invoices & Receipts' },
@@ -239,7 +239,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   // ── Derive current page label for mobile header ──────────────
   const currentNav =
     [...NAV_ITEMS].reverse().find((n) =>
-      n.path === '/' ? location.pathname === '/' : location.pathname.startsWith(n.path)
+      n.path === '/dashboard'
+        ? location.pathname === '/' || location.pathname === '/dashboard'
+        : location.pathname.startsWith(n.path)
     ) ?? NAV_ITEMS[0];
 
   const handleSelectResult = (url: string) => {
@@ -260,7 +262,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       <aside className="sidebar" aria-label="Main navigation">
         {/* Logo + clinic */}
         <div className="sidebar-header">
-          <VetRxLogo size={28} />
+          <Link to="/dashboard" aria-label="VetRx Dashboard" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+            <VetRxLogo size={28} />
+          </Link>
           <div className="sidebar-clinic-tag">
             <span className="sidebar-clinic-dot" aria-hidden="true" />
             <span className="truncate">
@@ -275,7 +279,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <NavLink
               key={path}
               to={path}
-              end={path === '/'}
+              end={path === '/dashboard'}
               className={({ isActive }) =>
                 `sidebar-nav-item${isActive ? ' active' : ''}`
               }
@@ -773,7 +777,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <NavLink
               key={path}
               to={path}
-              end={path === '/'}
+              end={path === '/dashboard'}
               className={({ isActive }) =>
                 `bottom-nav-item${isActive ? ' active' : ''}`
               }

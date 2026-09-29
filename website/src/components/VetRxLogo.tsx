@@ -1,5 +1,5 @@
 // =============================================================
-// VetRx — Canonical VetRxLogo component
+// VetRx — Canonical VetRxLogo component for Marketing Website
 // Source of truth: Stitch VetRx Brand Logo (teal cross + paw mark)
 // =============================================================
 

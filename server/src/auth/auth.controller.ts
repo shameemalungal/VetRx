@@ -432,15 +432,22 @@ authRouter.get('/google/callback', async (req, res) => {
     SessionService.setCookie(res, token);
 
     // Redirect to frontend application
-    const destination = new URL(returnTo.startsWith('/') ? returnTo : '/', env.APP_URL);
+    const appBase = env.APP_URL.includes('vetrx.brightbase.in') && !env.APP_URL.includes('app.vetrx.brightbase.in')
+      ? 'https://app.vetrx.brightbase.in'
+      : env.APP_URL;
+    const targetPath = returnTo.startsWith('/') && returnTo !== '/' ? returnTo : '/dashboard';
+    const destination = new URL(targetPath, appBase);
     if (parsedPayload.action === 'link') {
       destination.searchParams.set('google_connected', 'true');
     }
     res.redirect(destination.toString());
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Google authentication failed';
+    const appBase = env.APP_URL.includes('vetrx.brightbase.in') && !env.APP_URL.includes('app.vetrx.brightbase.in')
+      ? 'https://app.vetrx.brightbase.in'
+      : env.APP_URL;
     const fallbackPath = returnTo.startsWith('/settings') ? '/settings' : '/login';
-    const redirectUrl = new URL(fallbackPath, env.APP_URL);
+    const redirectUrl = new URL(fallbackPath, appBase);
     redirectUrl.searchParams.set('error', message);
     res.redirect(redirectUrl.toString());
   }

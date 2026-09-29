@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { VetRxLogo } from './VetRxLogo';
 
 export const APP_LOGIN_URL = 'https://app.vetrx.brightbase.in/login';
 export const APP_REGISTER_URL = 'https://app.vetrx.brightbase.in/register';
@@ -37,33 +38,12 @@ export const Navbar: React.FC = () => {
           <Link
             to="/"
             aria-label="VetRx Home"
-            className="flex items-center gap-3 group focus:outline-none focus:ring-2 focus:ring-teal rounded-xl p-1 transition-transform hover:scale-[1.02]"
+            className="flex items-center gap-2.5 group focus:outline-none focus:ring-2 focus:ring-teal rounded-xl p-1 transition-transform hover:scale-[1.02]"
           >
-            <div className="w-10 h-10 rounded-xl gradient-teal-aqua p-0.5 shadow-sm flex items-center justify-center">
-              <div className="w-full h-full rounded-[10px] bg-white flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-teal"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 2v20M2 12h20" />
-                  <circle cx="12" cy="12" r="9" stroke="#19B8A5" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.75" />
-                </svg>
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1.5">
-                <span className="font-heading font-extrabold text-2xl tracking-tight text-teal-deep">VetRx</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-aqua animate-gentle-pulse"></span>
-              </div>
-              <span className="text-[10px] uppercase font-mono tracking-widest text-content-muted -mt-1 font-semibold">
-                Clinical OS
-              </span>
-            </div>
+            <VetRxLogo size={36} />
+            <span className="hidden sm:inline-flex items-center text-[10px] uppercase font-mono tracking-widest text-teal-deep font-semibold bg-teal-soft/80 px-2 py-0.5 rounded-md border border-teal/20">
+              Clinical OS
+            </span>
           </Link>
 
           {/* Desktop Navigation Links */}

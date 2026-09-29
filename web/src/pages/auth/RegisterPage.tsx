@@ -18,9 +18,13 @@ export const RegisterPage: React.FC = () => {
   const location = useLocation();
 
   const params = new URLSearchParams(location.search);
-  const redirectUrl = params.get('redirect') || '/';
+  const rawRedirect = params.get('redirect');
+  const redirectUrl =
+    rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && rawRedirect !== '/'
+      ? rawRedirect
+      : '/dashboard';
   let invitationToken: string | undefined;
-  const inviteMatch = redirectUrl.match(/\/invite\/([a-zA-Z0-9_-]+)/);
+  const inviteMatch = (rawRedirect || '').match(/\/invite\/([a-zA-Z0-9_-]+)/);
   if (inviteMatch && inviteMatch[1]) {
     invitationToken = inviteMatch[1];
   }
@@ -119,7 +123,10 @@ export const RegisterPage: React.FC = () => {
   };
 
   const handleGoogleSignIn = () => {
-    const safeReturnTo = redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') ? redirectUrl : '/';
+    const safeReturnTo =
+      redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') && redirectUrl !== '/'
+        ? redirectUrl
+        : '/dashboard';
     window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
   };
 

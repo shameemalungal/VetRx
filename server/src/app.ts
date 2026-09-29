@@ -41,7 +41,15 @@ export function createApp() {
   );
 
   // CORS Configuration (Strict Origins Only)
-  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  const defaultOrigins = [
+    'https://app.vetrx.brightbase.in',
+    'https://vetrx.brightbase.in',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+  ];
+  const configuredOrigins = env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',').map((o) => o.trim()) : [];
+  const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
   app.use(
     cors({
       origin: (origin, callback) => {

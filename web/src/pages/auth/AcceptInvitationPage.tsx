@@ -191,7 +191,7 @@ export const AcceptInvitationPage: React.FC = () => {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/dashboard')}
               style={{ width: '100%', padding: '12px 20px', fontSize: '15px', fontWeight: 600 }}
             >
               Go to Clinic
@@ -207,7 +207,7 @@ export const AcceptInvitationPage: React.FC = () => {
                 <p style={{ color: '#059669', fontWeight: 600, marginBottom: '16px' }}>
                   This invitation has already been accepted and consumed.
                 </p>
-                <Link to="/" className="btn btn-primary" style={{ textDecoration: 'none' }}>
+                <Link to="/dashboard" className="btn btn-primary" style={{ textDecoration: 'none' }}>
                   Go to Practice Dashboard
                 </Link>
               </div>

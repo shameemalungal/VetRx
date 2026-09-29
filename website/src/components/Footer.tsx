@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { APP_LOGIN_URL } from './Navbar';
+import { VetRxLogo } from './VetRxLogo';
 
 export const Footer: React.FC = () => {
   return (
@@ -13,23 +14,8 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 pb-14 border-b border-white/10">
           {/* Col 1: Brand */}
           <div className="lg:col-span-2 space-y-4">
-            <Link to="/" className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal to-aqua flex items-center justify-center p-1.5 shadow-md shadow-teal/30 group-hover:scale-105 transition-transform">
-                <svg
-                  className="w-5 h-5 text-white"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 2v20M2 12h20" />
-                </svg>
-              </div>
-              <span className="font-heading font-black text-2xl tracking-tight text-white group-hover:text-aqua transition-colors">
-                Vet<span className="text-aqua">Rx</span>
-              </span>
+            <Link to="/" className="inline-flex items-center group focus:outline-none hover:opacity-95 transition-opacity" aria-label="VetRx Home">
+              <VetRxLogo size={36} variant="white" />
             </Link>
             <p className="text-xs sm:text-sm text-teal-100/70 leading-relaxed max-w-sm font-normal">
               Simplify your practice. Focus on better treatment. Built in India, engineered around the real day-to-day
@@ -43,7 +29,7 @@ export const Footer: React.FC = () => {
                 rel="noopener noreferrer"
                 className="underline hover:text-white transition-colors"
               >
-                vetrx.brightbase.in
+                app.vetrx.brightbase.in
               </a>
             </div>
             <div className="text-xs text-teal-100/75 pt-1 leading-relaxed">

@@ -132,7 +132,7 @@ class PlatformErrorBoundary extends React.Component<
               Reload Console
             </button>
             <a
-              href="/"
+              href="/dashboard"
               className="btn btn-primary"
               style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
             >
@@ -214,7 +214,7 @@ function PlatformAccessDeniedPage() {
             type="button"
             className="btn btn-primary"
             style={{ width: '100%', height: '42px', justifyContent: 'center' }}
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
           >
             Return to Practice Workspace
           </button>
@@ -262,7 +262,8 @@ function AuthenticatedAppRoutes() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         {/* Patients Module (Phase 2) */}
         <Route path="/patients" element={<PatientsListPage />} />
         <Route path="/patients/new" element={<PatientFormPage mode="new" />} />
@@ -293,11 +294,11 @@ function AuthenticatedAppRoutes() {
         <Route path="/invite/:token" element={<AcceptInvitationPage />} />
 
         {/* Auth routes when already authenticated redirect to dashboard */}
-        <Route path="/login" element={<Navigate to="/" replace />} />
-        <Route path="/register" element={<Navigate to="/" replace />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/register" element={<Navigate to="/dashboard" replace />} />
 
         {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AppShell>
   );
