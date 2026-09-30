@@ -308,6 +308,48 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Footer — Settings + practitioner */}
         <div className="sidebar-footer">
+          {isPlatformAdmin?.() && (
+            <button
+              type="button"
+              className="sidebar-nav-item"
+              id="sidebar-switch-to-platform-btn"
+              onClick={() => navigate('/platform/dashboard')}
+              style={{
+                background: 'rgba(0, 104, 95, 0.08)',
+                color: 'var(--color-primary, #00685f)',
+                border: '1px solid rgba(0, 104, 95, 0.2)',
+                marginBottom: '8px',
+                width: '100%',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+              title="Switch to Platform Super Admin context"
+            >
+              <Icon name="swap-horiz" size={18} />
+              <span style={{ flex: 1 }}>Switch to Platform</span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  background: 'var(--color-primary, #00685f)',
+                  color: '#fff',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Admin
+              </span>
+            </button>
+          )}
+
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -710,14 +752,15 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       <button
                         type="button"
                         className="profile-popover-item"
-                        id="profile-menu-platform-console"
+                        id="switch-to-platform-btn"
+                        data-testid="profile-menu-platform-console"
                         onClick={() => {
                           setIsProfileMenuOpen(false);
-                          navigate('/platform');
+                          navigate('/platform/dashboard');
                         }}
                       >
-                        <Icon name="shield" size={16} />
-                        <span>Platform Super Admin Console</span>
+                        <Icon name="swap-horiz" size={16} />
+                        <span>Switch to Platform</span>
                       </button>
                     )}
 

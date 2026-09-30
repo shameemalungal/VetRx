@@ -66,9 +66,14 @@ export async function handlePaymentReturn(req: Request, res: Response) {
     paymentStatus = 'failed';
   }
 
+  const appBaseUrl =
+    process.env.APP_BASE_URL ||
+    process.env.APP_URL ||
+    'https://app.vetrx.brightbase.in';
+
   res.redirect(
     303,
-    `/settings?tab=subscription&payment_status=${paymentStatus}&txnid=${encodeURIComponent(txnid)}`
+    `${appBaseUrl}/settings?tab=subscription&payment_status=${paymentStatus}&txnid=${encodeURIComponent(txnid)}`
   );
 }
 

@@ -168,20 +168,6 @@ export class PaymentService {
     // Enforce integer paise validation on the authoritative price
     this.validatePaise(planConfig.pricePaisa);
 
-    // 2. Fetch User and Practice information for customer details
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    const settings = await prisma.practiceSettings.findUnique({
-      where: { practiceId },
-    });
-
-    const activeSub = await prisma.subscription.findFirst({
-      where: { practiceId },
-      orderBy: { createdAt: 'desc' },
-    });
-
     // 3. Generate unique internal transaction reference
     const internalReference = `TXN-VRX-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 
@@ -230,6 +216,19 @@ export class PaymentService {
     }
 
     // 4. Create internal Payment record in PENDING state
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    const settings = await prisma.practiceSettings.findUnique({
+      where: { practiceId },
+    });
+
+    const activeSub = await prisma.subscription.findFirst({
+      where: { practiceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const payment = await prisma.payment.create({
       data: {
         practiceId,

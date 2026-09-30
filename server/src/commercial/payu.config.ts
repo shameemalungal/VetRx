@@ -33,7 +33,13 @@ export function getPayUConfig(): PayUConfig {
     ? 'https://info.payu.in/merchant/postservice?form=2'
     : 'https://test.payu.in/merchant/postservice?form=2';
 
-  const baseUrl = process.env.VETRX_BASE_URL || 'https://vetrx.brightbase.in';
+  const baseUrl =
+    process.env.APP_BASE_URL ||
+    process.env.APP_URL ||
+    (process.env.VETRX_BASE_URL && !process.env.VETRX_BASE_URL.includes('app.')
+      ? 'https://app.vetrx.brightbase.in'
+      : process.env.VETRX_BASE_URL) ||
+    'https://app.vetrx.brightbase.in';
   const successUrl = `${baseUrl}/api/commercial/payments/return`;
   const failureUrl = `${baseUrl}/api/commercial/payments/return`;
 
