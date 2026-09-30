@@ -641,3 +641,357 @@ export function formatControlledNumber(val: number | string | undefined | null):
   if (isNaN(Number(str)) && str !== '-' && str !== '.') return '';
   return str;
 }
+
+// =============================================================================
+// VetRx Background Arithmetic Calculation Engine
+// Strictly arithmetic conversions based on veterinarian-entered values.
+// VetRx does NOT recommend, infer, or prescribe clinical dosages.
+// =============================================================================
+
+export interface StructuredStrengthInfo {
+  strengthValue?: number;
+  strengthUnit?: string;
+  strengthPerValue?: number;
+  strengthPerUnit?: string;
+}
+
+export interface StructuredPackSizeInfo {
+  packSizeValue?: number;
+  packSizeUnit?: string;
+}
+
+/**
+ * Formats structured strength fields into canonical display string:
+ * e.g. "5 mg / 1 mL" or "125 mg / 1 tablet"
+ */
+export function formatStructuredStrength(
+  value?: number,
+  unit?: string,
+  perValue?: number,
+  perUnit?: string
+): string {
+  if (value === undefined || value === null || isNaN(value)) return '';
+  const sUnit = unit?.trim() || 'mg';
+  const pVal = perValue !== undefined && perValue !== null && !isNaN(perValue) ? perValue : 1;
+  const pUnit = perUnit?.trim() || '';
+
+  if (pUnit) {
+    return `${value} ${sUnit} / ${pVal} ${pUnit}`;
+  }
+  return `${value} ${sUnit}`;
+}
+
+/**
+ * Formats structured pack size fields into canonical display string:
+ * e.g. "30 mL", "10 tablets"
+ */
+export function formatStructuredPackSize(
+  value?: number,
+  unit?: string
+): string {
+  if (value === undefined || value === null || isNaN(value)) return '';
+  const pUnit = unit?.trim() || '';
+  return pUnit ? `${value} ${pUnit}` : `${value}`;
+}
+
+/**
+ * Parses existing or free-text strength strings into structured components.
+ * Handles patterns such as:
+ * - "5 mg / 1 mL", "5mg/1ml", "5 mg / mL"
+ * - "125 mg / 1 tablet", "125mg/tablet"
+ * - "500 mg", "500mg"
+ */
+export function parseStructuredStrength(
+  strengthStr?: string,
+  presentation?: string
+): StructuredStrengthInfo {
+  if (!strengthStr || !strengthStr.trim()) {
+    return {};
+  }
+  const s = strengthStr.trim();
+
+  // Pattern: "Value Unit / PerValue PerUnit" e.g. "5 mg / 1 mL" or "5mg/mL"
+  const slashMatch = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z%µ]+)?\s*(?:\/|\bper\b)\s*([0-9]+(?:\.[0-9]+)?)?\s*([a-zA-Z]+)?$/i);
+  if (slashMatch) {
+    const val = parseFloat(slashMatch[1]);
+    const unit = slashMatch[2]?.trim() || 'mg';
+    const perVal = slashMatch[3] ? parseFloat(slashMatch[3]) : 1;
+    const perUnit = slashMatch[4]?.trim() || (presentation ? defaultPerUnitForPresentation(presentation) : 'mL');
+    return {
+      strengthValue: isNaN(val) ? undefined : val,
+      strengthUnit: unit,
+      strengthPerValue: isNaN(perVal) ? 1 : perVal,
+      strengthPerUnit: perUnit,
+    };
+  }
+
+  // Pattern: Simple value + unit e.g. "500 mg", "500mg", "10%"
+  const simpleMatch = s.match(/^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z%µ]+)?$/i);
+  if (simpleMatch) {
+    const val = parseFloat(simpleMatch[1]);
+    const unit = simpleMatch[2]?.trim() || 'mg';
+    const perUnit = presentation ? defaultPerUnitForPresentation(presentation) : 'tablet';
+    return {
+      strengthValue: isNaN(val) ? undefined : val,
+      strengthUnit: unit,
+      strengthPerValue: 1,
+      strengthPerUnit: perUnit,
+    };
+  }
+
+  return {};
+}
+
+/**
+ * Parses free-text pack size strings into structured value and unit:
+ * e.g. "30 mL", "30 mL bottle", "10 tablets/strip"
+ */
+export function parseStructuredPackSize(packSizeStr?: string): StructuredPackSizeInfo {
+  if (!packSizeStr || !packSizeStr.trim()) return {};
+  const match = packSizeStr.trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*([a-zA-Z]+)?/i);
+  if (match) {
+    const val = parseFloat(match[1]);
+    const unit = match[2]?.trim() || '';
+    return {
+      packSizeValue: isNaN(val) ? undefined : val,
+      packSizeUnit: unit || undefined,
+    };
+  }
+  return {};
+}
+
+export function defaultPerUnitForPresentation(presentation?: string): string {
+  if (!presentation) return 'tablet';
+  const p = presentation.toLowerCase();
+  if (p === 'bolus') return 'bolus';
+  if (p.includes('capsule')) return 'capsule';
+  if (p.includes('tablet')) return 'tablet';
+  if (
+    p.includes('suspension') ||
+    p.includes('solution') ||
+    p.includes('syrup') ||
+    p.includes('injection') ||
+    p.includes('emulsion') ||
+    p.includes('spray') ||
+    p.includes('lotion') ||
+    p.includes('shampoo')
+  ) {
+    return 'mL';
+  }
+  if (p.includes('drop')) return 'drop';
+  if (p.includes('powder') || p.includes('granule')) return 'g';
+  if (p.includes('paste') || p.includes('gel') || p.includes('cream') || p.includes('ointment')) return 'g';
+  if (p.includes('sachet')) return 'sachet';
+  if (p.includes('vial')) return 'vial';
+  return 'tablet';
+}
+
+export function defaultPackSizeUnitForPresentation(presentation?: string): string {
+  if (!presentation) return 'tablet';
+  const p = presentation.toLowerCase();
+  if (p === 'bolus') return 'bolus';
+  if (p.includes('capsule')) return 'capsule';
+  if (p.includes('tablet')) return 'tablet';
+  if (
+    p.includes('suspension') ||
+    p.includes('solution') ||
+    p.includes('syrup') ||
+    p.includes('injection') ||
+    p.includes('emulsion') ||
+    p.includes('spray') ||
+    p.includes('lotion') ||
+    p.includes('shampoo')
+  ) {
+    return 'mL';
+  }
+  if (p.includes('paste') || p.includes('gel') || p.includes('cream') || p.includes('ointment')) return 'tube';
+  if (p.includes('sachet')) return 'sachet';
+  if (p.includes('vial')) return 'vial';
+  if (p.includes('drop')) return 'bottle';
+  return 'pack';
+}
+
+export interface ArithmeticCalculationInput {
+  patientWeightKg?: number;
+  doseValue?: number;
+  doseUnit?: string;
+  strengthValue?: number;
+  strengthUnit?: string;
+  strengthPerValue?: number;
+  strengthPerUnit?: string;
+  frequency?: string;
+  durationDays?: number;
+}
+
+export interface ArithmeticCalculationResult {
+  hasValidCalculation: boolean;
+  requiredActiveDose?: number;
+  requiredActiveDoseUnit?: string;
+  calculatedDosePerAdministration?: number;
+  calculatedDoseUnit?: string;
+  calculatedTotalQuantity?: number;
+  totalQuantityUnit?: string;
+  formulaSummary?: string;
+  warning?: string;
+  isWeightBased: boolean;
+}
+
+/**
+ * Pure arithmetic dosage calculation assistant based solely on veterinarian-entered values.
+ * Does not make clinical decisions, recommend dosages, or infer diagnoses.
+ */
+export function calculateDoseArithmetic(input: ArithmeticCalculationInput): ArithmeticCalculationResult {
+  const {
+    patientWeightKg,
+    doseValue,
+    doseUnit = 'mg/kg',
+    strengthValue,
+    strengthUnit = 'mg',
+    strengthPerValue = 1,
+    strengthPerUnit = 'mL',
+    frequency,
+    durationDays = 1,
+  } = input;
+
+  const dosesPerDay = getDosesPerDay(frequency) || 1;
+  const isPerKg = doseUnit.toLowerCase().includes('/kg');
+
+  // If no dose has been entered by the veterinarian yet
+  if (doseValue === undefined || doseValue === null || isNaN(doseValue) || doseValue <= 0) {
+    return {
+      hasValidCalculation: false,
+      isWeightBased: isPerKg,
+      warning: isPerKg ? 'Enter dose per kg to calculate arithmetic result.' : 'Enter dose to calculate quantity.',
+    };
+  }
+
+  // Weight-based calculation
+  if (isPerKg) {
+    if (patientWeightKg === undefined || patientWeightKg === null || isNaN(patientWeightKg) || patientWeightKg <= 0) {
+      return {
+        hasValidCalculation: false,
+        isWeightBased: true,
+        warning: 'Patient body weight required for weight-based calculation.',
+      };
+    }
+
+    // Step 1: Required active ingredient dose = Weight × Dose/kg
+    // Extract base active unit from e.g. "mg/kg" -> "mg", "g/kg" -> "g"
+    const activeUnit = doseUnit.replace(/\/kg/i, '').trim() || 'mg';
+    const activeDose = Number((patientWeightKg * doseValue).toFixed(4));
+
+    // Step 2: Convert active dose to administration volume/units using structured strength
+    if (strengthValue && strengthValue > 0) {
+      let normalizedActiveDose = activeDose;
+      if (activeUnit.toLowerCase() !== strengthUnit.toLowerCase()) {
+        const conv = convertUnits(activeDose, activeUnit, strengthUnit);
+        if (conv.isValid && conv.convertedValue !== undefined) {
+          normalizedActiveDose = conv.convertedValue;
+        } else {
+          return {
+            hasValidCalculation: false,
+            requiredActiveDose: activeDose,
+            requiredActiveDoseUnit: activeUnit,
+            isWeightBased: true,
+            warning: `Cannot convert dose unit (${activeUnit}) to medicine strength unit (${strengthUnit}). Manual quantity entry required.`,
+          };
+        }
+      }
+
+      // Calculated Volume/Units per dose = (normalizedActiveDose / strengthValue) * strengthPerValue
+      const effectivePerVal = strengthPerValue && strengthPerValue > 0 ? strengthPerValue : 1;
+      const calculatedVolume = Number(((normalizedActiveDose / strengthValue) * effectivePerVal).toFixed(3));
+      const adminUnit = strengthPerUnit || 'mL';
+
+      // Step 3: Total dispense quantity = volume per dose × doses per day × duration
+      const totalQuantity = durationDays > 0
+        ? Number((calculatedVolume * dosesPerDay * durationDays).toFixed(2))
+        : calculatedVolume;
+
+      const formulaSummary = `${patientWeightKg} kg × ${doseValue} ${doseUnit} = ${activeDose} ${activeUnit} → ÷ (${strengthValue} ${strengthUnit} / ${effectivePerVal} ${adminUnit}) = ${calculatedVolume} ${adminUnit}`;
+
+      return {
+        hasValidCalculation: true,
+        requiredActiveDose: activeDose,
+        requiredActiveDoseUnit: activeUnit,
+        calculatedDosePerAdministration: calculatedVolume,
+        calculatedDoseUnit: adminUnit,
+        calculatedTotalQuantity: totalQuantity,
+        totalQuantityUnit: adminUnit,
+        formulaSummary,
+        isWeightBased: true,
+      };
+    }
+
+    // No structured strength value available — return required active dose
+    const totalActiveQty = durationDays > 0
+      ? Number((activeDose * dosesPerDay * durationDays).toFixed(2))
+      : activeDose;
+
+    return {
+      hasValidCalculation: true,
+      requiredActiveDose: activeDose,
+      requiredActiveDoseUnit: activeUnit,
+      calculatedDosePerAdministration: activeDose,
+      calculatedDoseUnit: activeUnit,
+      calculatedTotalQuantity: totalActiveQty,
+      totalQuantityUnit: activeUnit,
+      formulaSummary: `${patientWeightKg} kg × ${doseValue} ${doseUnit} = ${activeDose} ${activeUnit}`,
+      isWeightBased: true,
+    };
+  }
+
+  // Absolute dose entered directly (e.g. 2 mg, 1 tablet, 0.4 mL)
+  const directUnit = doseUnit.trim();
+
+  // If unit is identical to strengthPerUnit (e.g. 0.4 mL or 1 tablet)
+  if (strengthPerUnit && directUnit.toLowerCase() === strengthPerUnit.toLowerCase()) {
+    const totalQty = durationDays > 0
+      ? Number((doseValue * dosesPerDay * durationDays).toFixed(2))
+      : doseValue;
+    return {
+      hasValidCalculation: true,
+      calculatedDosePerAdministration: doseValue,
+      calculatedDoseUnit: directUnit,
+      calculatedTotalQuantity: totalQty,
+      totalQuantityUnit: directUnit,
+      isWeightBased: false,
+    };
+  }
+
+  // If unit matches active strength unit (e.g. entered 2 mg and medicine is 5 mg / 1 mL)
+  if (strengthValue && strengthValue > 0 && directUnit.toLowerCase() === strengthUnit.toLowerCase()) {
+    const effectivePerVal = strengthPerValue && strengthPerValue > 0 ? strengthPerValue : 1;
+    const calculatedVolume = Number(((doseValue / strengthValue) * effectivePerVal).toFixed(3));
+    const adminUnit = strengthPerUnit || 'mL';
+    const totalQty = durationDays > 0
+      ? Number((calculatedVolume * dosesPerDay * durationDays).toFixed(2))
+      : calculatedVolume;
+
+    return {
+      hasValidCalculation: true,
+      requiredActiveDose: doseValue,
+      requiredActiveDoseUnit: directUnit,
+      calculatedDosePerAdministration: calculatedVolume,
+      calculatedDoseUnit: adminUnit,
+      calculatedTotalQuantity: totalQty,
+      totalQuantityUnit: adminUnit,
+      formulaSummary: `${doseValue} ${directUnit} ÷ (${strengthValue} ${strengthUnit} / ${effectivePerVal} ${adminUnit}) = ${calculatedVolume} ${adminUnit}`,
+      isWeightBased: false,
+    };
+  }
+
+  // Default quantity calculation for direct presentation units
+  const totalQty = durationDays > 0
+    ? Number((doseValue * dosesPerDay * durationDays).toFixed(2))
+    : doseValue;
+
+  return {
+    hasValidCalculation: true,
+    calculatedDosePerAdministration: doseValue,
+    calculatedDoseUnit: directUnit,
+    calculatedTotalQuantity: totalQty,
+    totalQuantityUnit: directUnit,
+    isWeightBased: false,
+  };
+}

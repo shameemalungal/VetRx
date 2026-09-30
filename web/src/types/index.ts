@@ -157,6 +157,16 @@ export interface Medicine {
   notes?: string;
   source?: 'prescription' | 'manual' | 'seed';
 
+  // Structured Strength (Master Data)
+  strengthValue?: number;
+  strengthUnit?: string;
+  strengthPerValue?: number;
+  strengthPerUnit?: string;
+
+  // Structured Pack Size (Commercial Packaging)
+  packSizeValue?: number;
+  packSizeUnit?: string;
+
   // Dosing rules (deterministic, veterinarian-configured)
   dosingMethod?: DosingMethod;
   targetSpecies?: Species[];
