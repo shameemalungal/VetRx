@@ -21,6 +21,8 @@ import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFor
 import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
 import { formatInvoiceItemDescription } from '../../utils/documentFormat';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi } from '../../services/inventoryApi';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -57,6 +59,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
 
   const queryRxId = searchParams.get('prescriptionId') || searchParams.get('fromRx');
   const queryPatientId = searchParams.get('patientId');
@@ -739,6 +742,20 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       });
 
       await db.invoiceItems.bulkAdd(itemsToInsert);
+
+      // Inventory FEFO stock deduction when invoice is finalized
+      if (saveStatus === 'Issued' && isInventoryEntitled) {
+        try {
+          const invItemsPayload = itemsToInsert.map((it) => ({
+            medicineId: it.medicineId,
+            medicineName: it.description,
+            quantity: it.quantity,
+          }));
+          await inventoryApi.deductInvoiceStock(savedInvoiceId.toString(), invItemsPayload);
+        } catch (stockErr) {
+          console.warn('Inventory deduction notice:', stockErr);
+        }
+      }
 
       navigate(`/invoices/${savedInvoiceId}`);
     } catch (err: any) {

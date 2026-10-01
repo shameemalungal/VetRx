@@ -36,6 +36,16 @@ import { PlatformPaymentsPage } from './pages/platform/PlatformPaymentsPage';
 import { PlatformIssuesPage } from './pages/platform/PlatformIssuesPage';
 import { PlatformAuditPage } from './pages/platform/PlatformAuditPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { InventoryEntitlementProvider } from './context/InventoryEntitlementContext';
+import {
+  InventoryDashboardPage,
+  InventoryStockPage,
+  InventoryPurchasesPage,
+  InventoryAlertsPage,
+  InventoryMovementsPage,
+  InventoryReportsPage,
+  InventoryRouteGate,
+} from './pages/inventory';
 import { useSettingsStore } from './store/settingsStore';
 import { ensureSeeded } from './db/schema';
 
@@ -283,6 +293,15 @@ function AuthenticatedAppRoutes() {
         <Route path="/packages/:id/edit" element={<PackageFormPage mode="edit" />} />
         <Route path="/medicines" element={<MedicinesListPage />} />
 
+        {/* Inventory & Stock Management Module (Add-on V1) */}
+        <Route path="/inventory" element={<InventoryRouteGate><InventoryDashboardPage /></InventoryRouteGate>} />
+        <Route path="/inventory/dashboard" element={<Navigate to="/inventory" replace />} />
+        <Route path="/inventory/stock" element={<InventoryRouteGate><InventoryStockPage /></InventoryRouteGate>} />
+        <Route path="/inventory/purchases" element={<InventoryRouteGate><InventoryPurchasesPage /></InventoryRouteGate>} />
+        <Route path="/inventory/alerts" element={<InventoryRouteGate><InventoryAlertsPage /></InventoryRouteGate>} />
+        <Route path="/inventory/movements" element={<InventoryRouteGate><InventoryMovementsPage /></InventoryRouteGate>} />
+        <Route path="/inventory/reports" element={<InventoryRouteGate><InventoryReportsPage /></InventoryRouteGate>} />
+
         {/* Invoices Module (Phase 6) */}
         <Route path="/invoices" element={<InvoicesListPage />} />
         <Route path="/invoices/new" element={<InvoiceBuilderPage mode="new" />} />
@@ -415,9 +434,11 @@ function MainContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <MainContent />
-      </BrowserRouter>
+      <InventoryEntitlementProvider>
+        <BrowserRouter>
+          <MainContent />
+        </BrowserRouter>
+      </InventoryEntitlementProvider>
     </AuthProvider>
   );
 }

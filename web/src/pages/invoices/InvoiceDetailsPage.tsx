@@ -14,6 +14,8 @@ import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { InvoiceDocument } from '../../components/documents/InvoiceDocument';
 import { ReceiptDocument } from '../../components/documents/ReceiptDocument';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi } from '../../services/inventoryApi';
 import './Invoices.css';
 
 export const InvoiceDetailsPage: React.FC = () => {
@@ -126,11 +128,23 @@ export const InvoiceDetailsPage: React.FC = () => {
   const activeOrganisation =
     storeOrganisation && storeOrganisation.isActive !== false ? storeOrganisation : null;
 
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+
   const handleCancelInvoice = async () => {
     if (!invoice?.id || invoice.status === 'Cancelled') return;
     const reason = window.prompt('Enter cancellation reason:');
     if (reason === null) return;
     await db.invoices.update(invoice.id, { status: 'Cancelled', notes: `${invoice.notes || ''}${invoice.notes ? '\n' : ''}Cancelled: ${reason.trim() || 'No reason recorded'}`, updatedAt: new Date() });
+
+    // Inventory audit reversal
+    if (isInventoryEntitled) {
+      try {
+        await inventoryApi.reverseInvoiceStock(invoice.id.toString(), reason?.trim() || 'Invoice cancelled');
+      } catch (revErr) {
+        console.warn('Inventory reversal notice:', revErr);
+      }
+    }
+
     navigate(`/invoices/${invoice.id}`);
   };
 

@@ -37,6 +37,9 @@ import { ClinicalCombobox } from '../../components/common/ClinicalCombobox';
 import { DISPENSE_UNITS, convertUnits } from '../../utils/unitConverter';
 import { MedicineFormModal } from '../medicines/MedicineFormModal';
 import { MedicineFormulationSection } from '../medicines/MedicineFormulationSection';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi, type PrescriptionStockResolution } from '../../services/inventoryApi';
+import { ExternalPrescriptionModal } from './ExternalPrescriptionModal';
 
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
@@ -179,6 +182,40 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
   // Step 3: Prescribed Medicines
   const [items, setItems] = useState<DraftItem[]>([]);
+
+  // Inventory Stock Resolution
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+  const [stockResolutions, setStockResolutions] = useState<PrescriptionStockResolution[]>([]);
+  const [hasExternalPurchases, setHasExternalPurchases] = useState(false);
+  const [showExternalPrescriptionModal, setShowExternalPrescriptionModal] = useState(false);
+
+  useEffect(() => {
+    if (!isInventoryEntitled || items.length === 0) {
+      setStockResolutions([]);
+      setHasExternalPurchases(false);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const payload = items.map((itm) => ({
+          medicineId: itm.medicineId,
+          medicineName: itm.brandName,
+          quantity: itm.quantity,
+        }));
+        const res = await inventoryApi.resolvePrescriptionStock(payload);
+        setStockResolutions(res.resolutions || []);
+        setHasExternalPurchases(Boolean(res.hasExternalPurchases));
+      } catch {
+        // Fallback gracefully
+      }
+    })();
+  }, [isInventoryEntitled, items]);
+
+  const getResolutionForItem = (item: DraftItem, index: number): PrescriptionStockResolution | undefined => {
+    if (!isInventoryEntitled || stockResolutions.length === 0) return undefined;
+    return stockResolutions[index] || stockResolutions.find((r) => r.medicineName.toLowerCase() === item.brandName.toLowerCase());
+  };
 
   // Package Popover state
   const [showPkgPopover, setShowPkgPopover] = useState(false);
@@ -2665,9 +2702,41 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                             {itm.presentation ? ` • ${itm.presentation}` : ''}
                             {itm.packSize ? ` [${itm.packSize}]` : ''}
                           </span>
-                          <span className="rx-med-qty-badge">
-                            Dispense: {itm.quantity} {itm.dispenseUnit || itm.unit}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span className="rx-med-qty-badge">
+                              Dispense: {itm.quantity} {itm.dispenseUnit || itm.unit}
+                            </span>
+                            {isInventoryEntitled && (() => {
+                              const res = getResolutionForItem(itm, idx);
+                              if (!res) return null;
+                              if (res.status === 'IN_STOCK') {
+                                return (
+                                  <span className="inv-status-pill inv-status-in_stock" style={{ fontSize: '11px' }}>
+                                    <Icon name="check" size={12} />
+                                    <span>IN STOCK: {res.internalStockQuantity}</span>
+                                  </span>
+                                );
+                              }
+                              if (res.status === 'PARTIAL') {
+                                return (
+                                  <span style={{ display: 'inline-flex', gap: '4px' }}>
+                                    <span className="inv-status-pill inv-status-in_stock" style={{ fontSize: '11px' }}>
+                                      IN STOCK: {res.internalStockQuantity}
+                                    </span>
+                                    <span className="inv-status-pill inv-status-low_stock" style={{ fontSize: '11px' }}>
+                                      EXTERNAL SOURCE: {res.externalQuantity}
+                                    </span>
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="inv-status-pill inv-status-out_of_stock" style={{ fontSize: '11px' }}>
+                                  <Icon name="alert-triangle" size={12} />
+                                  <span>EXTERNAL SOURCE: {res.externalQuantity}</span>
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
 
                         <div className="rx-med-regimen-pills">
@@ -2857,6 +2926,37 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {isInventoryEntitled && hasExternalPurchases && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  fontSize: '12px',
+                  color: '#92400e',
+                  marginTop: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, marginBottom: '4px' }}>
+                  <Icon name="alert-triangle" size={14} color="#d97706" />
+                  <span>External Pharmacy Sourcing Required</span>
+                </div>
+                <div style={{ lineHeight: 1.4 }}>
+                  Some prescribed items exceed internal clinic stock. Prescription 1 preserves all items with source status.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginTop: '8px', width: '100%', fontSize: '11.5px', padding: '4px 8px' }}
+                  onClick={() => setShowExternalPrescriptionModal(true)}
+                  id="btn-preview-external-rx"
+                >
+                  Preview External Prescription (Rx 2)
+                </button>
               </div>
             )}
 
@@ -4080,6 +4180,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           </button>
         )}
       </div>
+
+      <ExternalPrescriptionModal
+        isOpen={showExternalPrescriptionModal}
+        onClose={() => setShowExternalPrescriptionModal(false)}
+        patientName={selectedPatient?.name}
+        patientSubtitle={selectedPatient ? formatAnimalSubtitle(selectedPatient) : undefined}
+        ownerName={selectedOwner?.name}
+        resolutions={stockResolutions}
+      />
     </div>
   );
 };

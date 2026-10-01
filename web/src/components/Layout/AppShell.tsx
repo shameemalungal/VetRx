@@ -14,19 +14,12 @@ import { Icon } from '../ui/Icon';
 import { VetRxLogo } from '../ui/VetRxLogo';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAuth } from '../../context/AuthContext';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './AppShell.css';
 
-// ── Nav items — order and icons match Stitch screens ──────────
-const NAV_ITEMS = [
-  { label: 'Home',               path: '/dashboard',       icon: 'home'        },
-  { label: 'Patients',           path: '/patients',        icon: 'patients'    },
-  { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
-  { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
-  { label: 'Medicines',          path: '/medicines',       icon: 'pill'        },
-  { label: 'Invoices & Receipts',path: '/invoices',        icon: 'invoices'    },
-] as const;
+// ── Bottom nav shows the 4 most-used items (matches Stitch mobile) ──────────
 
 // Bottom nav shows the 4 most-used items (matches Stitch mobile)
 const BOTTOM_NAV_ITEMS = [
@@ -236,13 +229,30 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const pendingApprovalsCount = pendingRx?.length || 0;
   const totalNotifications = pendingApprovalsCount + (draftRx?.length || 0) + (draftInvs?.length || 0);
 
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+
+  const navItems = React.useMemo(() => {
+    const items = [
+      { label: 'Home',               path: '/dashboard',       icon: 'home'        },
+      { label: 'Patients',           path: '/patients',        icon: 'patients'    },
+      { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
+      { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
+      { label: 'Medicines',          path: '/medicines',       icon: 'pill'        },
+    ];
+    if (isInventoryEntitled) {
+      items.push({ label: 'Inventory', path: '/inventory', icon: 'inventory' });
+    }
+    items.push({ label: 'Invoices & Receipts', path: '/invoices', icon: 'invoices' });
+    return items;
+  }, [isInventoryEntitled]);
+
   // ── Derive current page label for mobile header ──────────────
   const currentNav =
-    [...NAV_ITEMS].reverse().find((n) =>
+    [...navItems].reverse().find((n) =>
       n.path === '/dashboard'
         ? location.pathname === '/' || location.pathname === '/dashboard'
         : location.pathname.startsWith(n.path)
-    ) ?? NAV_ITEMS[0];
+    ) ?? navItems[0];
 
   const handleSelectResult = (url: string) => {
     navigate(url);
@@ -275,7 +285,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Nav links */}
         <nav className="sidebar-nav" aria-label="Sections">
-          {NAV_ITEMS.map(({ label, path, icon }) => (
+          {navItems.map(({ label, path, icon }) => (
             <NavLink
               key={path}
               to={path}

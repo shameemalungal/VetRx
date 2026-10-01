@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../ui/Icon';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import './SubscriptionBillingSection.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
@@ -65,6 +66,8 @@ interface PaymentRecord {
 }
 
 export const SubscriptionBillingSection: React.FC = () => {
+  const { isEntitled: isInventoryEntitled, toggleDevEntitlement, mockMode } = useInventoryEntitlement();
+  const [togglingInventory, setTogglingInventory] = useState(false);
   const [status, setStatus] = useState<CommercialStatus | null>(null);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -726,6 +729,113 @@ export const SubscriptionBillingSection: React.FC = () => {
       <p className="gst-disclaimer">
         Simple, transparent pricing. No per-patient or per-prescription charges. Applicable taxes, if any, will be reflected in the applicable invoice.
       </p>
+
+      {/* ── ADD-ON MODULES ────────────────────────────────────────── */}
+      <div className="payment-history-card" style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Icon name="box" size={20} color="var(--color-primary, #00685f)" />
+              <h3 className="payment-history-title" style={{ margin: 0 }}>Available Add-on Modules</h3>
+            </div>
+            <p className="payment-history-subtitle" style={{ margin: '4px 0 0 0' }}>
+              Specialized plug-in capabilities requiring an active base subscription and independent module entitlement.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: '16px',
+            padding: '20px',
+            borderRadius: '14px',
+            background: isInventoryEntitled ? 'rgba(0, 104, 95, 0.04)' : '#f8fafc',
+            border: `1px solid ${isInventoryEntitled ? 'rgba(0, 104, 95, 0.2)' : '#e2e8f0'}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ maxWidth: '640px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>
+                Inventory &amp; Stock Management V1
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: '#f1f5f9',
+                  color: '#475569',
+                }}
+              >
+                inventory_management
+              </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  background: isInventoryEntitled ? '#dcfce7' : '#f1f5f9',
+                  color: isInventoryEntitled ? '#15803d' : '#64748b',
+                }}
+              >
+                {isInventoryEntitled ? 'ACTIVE (ENTITLED)' : 'INACTIVE'}
+              </span>
+              {mockMode && (
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: '#e0f2fe',
+                    color: '#0369a1',
+                  }}
+                >
+                  Dev Mock Mode
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '13.5px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+              Universal purchase invoice importer (PDF/images/text), batch-level physical stock tracking,
+              immutable audit ledger, FEFO stock deduction, physical stocktake, and prescription internal/external source resolution.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              className={`btn ${isInventoryEntitled ? 'btn-secondary' : 'btn-primary'}`}
+              id="btn-toggle-inventory-dev"
+              disabled={togglingInventory}
+              onClick={async () => {
+                setTogglingInventory(true);
+                try {
+                  await toggleDevEntitlement(!isInventoryEntitled);
+                } finally {
+                  setTogglingInventory(false);
+                }
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name={isInventoryEntitled ? 'block' : 'check'} size={16} />
+              <span>
+                {togglingInventory
+                  ? 'Updating...'
+                  : isInventoryEntitled
+                  ? 'Disable Module (Dev Toggle)'
+                  : 'Enable Inventory (Dev / Test Mode)'}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* ── PAYMENT HISTORY ────────────────────────────────────── */}
       <div className="payment-history-card">
