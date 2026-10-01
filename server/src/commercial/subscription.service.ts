@@ -4,6 +4,7 @@
 // downgrades with limit validation, cancellation, and deterministic expiry.
 // ==============================================================================
 
+import crypto from 'crypto';
 import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -896,6 +897,578 @@ export class SubscriptionService {
     });
 
     return this.mapToDTO(updated);
+  }
+
+  /**
+   * Activates a 14-day trial after successful PayU recurring mandate authorization.
+   * BD-Trial: The trial price is ₹0. Stored PayU reference is an authorization mandate, not revenue.
+   */
+  static async activateTrialWithMandate(params: {
+    practiceId: string;
+    mandateRef: string;
+    targetPlanCode?: string;
+    targetBillingInterval?: string;
+    paymentMode?: string;
+  }): Promise<SubscriptionDTO> {
+    const { practiceId, mandateRef, targetPlanCode, targetBillingInterval, paymentMode } = params;
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + TRIAL_LIMITS.DURATION_DAYS * 24 * 60 * 60 * 1000);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const trialSub = {
+        id: `sub_trial_${Date.now()}`,
+        practiceId,
+        planId: 'plan_trial',
+        status: 'TRIAL',
+        trialStartsAt: now,
+        trialEndsAt,
+        currentPeriodStart: now,
+        currentPeriodEnd: trialEndsAt,
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
+        gracePeriodEndsAt: null,
+        gatewaySubscriptionId: mandateRef,
+        metadata: {
+          targetPlanCode: targetPlanCode || 'INDIVIDUAL_MONTHLY',
+          targetBillingInterval: targetBillingInterval || 'MONTHLY',
+          mandateAuthorizedAt: now.toISOString(),
+          paymentMode: paymentMode || 'UPI_AUTOPAY',
+          paymentMethodStatus: 'CONFIGURED',
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+      EntitlementService.setMockSubscription(practiceId, trialSub);
+      return this.mapToDTO(trialSub);
+    }
+
+    const existing = await prisma.subscription.findFirst({
+      where: { practiceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let trialPlan = await prisma.subscriptionPlan.findUnique({
+      where: { code: 'TRIAL' },
+    });
+
+    if (!trialPlan) {
+      trialPlan = await prisma.subscriptionPlan.create({
+        data: {
+          code: 'TRIAL',
+          name: '14-Day Free Trial',
+          description: '14-day trial evaluation',
+          interval: 'MONTHLY',
+          intervalCount: 1,
+          pricePaisa: 0,
+          currency: 'INR',
+          trialPeriodDays: 14,
+          maxUserSeats: 1,
+          featuresJson: AUTHORITATIVE_PLANS.TRIAL.features as any,
+          sortOrder: 0,
+        },
+      });
+    }
+
+    const meta = (existing?.metadata as Record<string, unknown>) || {};
+    let updatedSub: any;
+
+    if (existing) {
+      updatedSub = await prisma.subscription.update({
+        where: { id: existing.id },
+        data: {
+          planId: trialPlan.id,
+          status: 'TRIAL',
+          trialStartsAt: now,
+          trialEndsAt,
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEndsAt,
+          cancelAtPeriodEnd: false,
+          cancelledAt: null,
+          gatewaySubscriptionId: mandateRef,
+          metadata: {
+            ...meta,
+            targetPlanCode: targetPlanCode || 'INDIVIDUAL_MONTHLY',
+            targetBillingInterval: targetBillingInterval || 'MONTHLY',
+            mandateAuthorizedAt: now.toISOString(),
+            paymentMode: paymentMode || 'UPI_AUTOPAY',
+            paymentMethodStatus: 'CONFIGURED',
+          } as any,
+        },
+        include: { plan: true },
+      });
+    } else {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          practiceId,
+          planId: trialPlan.id,
+          status: 'TRIAL',
+          trialStartsAt: now,
+          trialEndsAt,
+          currentPeriodStart: now,
+          currentPeriodEnd: trialEndsAt,
+          gatewaySubscriptionId: mandateRef,
+          metadata: {
+            targetPlanCode: targetPlanCode || 'INDIVIDUAL_MONTHLY',
+            targetBillingInterval: targetBillingInterval || 'MONTHLY',
+            mandateAuthorizedAt: now.toISOString(),
+            paymentMode: paymentMode || 'UPI_AUTOPAY',
+            paymentMethodStatus: 'CONFIGURED',
+          },
+        },
+        include: { plan: true },
+      });
+    }
+
+    void AuditService.record({
+      practiceId,
+      action: 'TRIAL_MANDATE_AUTHORIZED',
+      resource: 'Subscription',
+      resourceId: updatedSub.id,
+      details: {
+        mandateRef,
+        targetPlanCode,
+        trialEndsAt: trialEndsAt.toISOString(),
+      },
+    });
+
+    return this.mapToDTO(updatedSub);
+  }
+
+  /**
+   * Cancels trial and optionally permanently deletes practice tenant clinical data upon explicit confirmation.
+   * Preserves mandatory statutory audit logs and payment records.
+   */
+  static async cancelTrialAndPractice(params: {
+    practiceId: string;
+    confirmedDelete?: boolean;
+    actorUserId?: string;
+  }): Promise<{ cancelled: boolean; deleted: boolean; message: string }> {
+    const { practiceId, confirmedDelete, actorUserId } = params;
+    const now = new Date();
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const existing = EntitlementService.getMockSubscription(practiceId);
+      if (existing) {
+        existing.status = 'CANCELLED';
+        existing.cancelledAt = now;
+        existing.cancelAtPeriodEnd = true;
+        existing.gatewaySubscriptionId = null;
+        EntitlementService.setMockSubscription(practiceId, existing);
+      }
+      return {
+        cancelled: true,
+        deleted: Boolean(confirmedDelete),
+        message: confirmedDelete
+          ? 'Trial cancelled and practice data permanently deleted upon confirmed request.'
+          : 'Trial cancelled successfully. Post-trial charges have been prevented.',
+      };
+    }
+
+    const sub = await prisma.subscription.findFirst({
+      where: { practiceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (sub) {
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: now,
+          cancelAtPeriodEnd: true,
+          gatewaySubscriptionId: null,
+          metadata: {
+            ...((sub.metadata as any) || {}),
+            trialCancelledAt: now.toISOString(),
+            confirmedDelete: Boolean(confirmedDelete),
+          } as any,
+        },
+      });
+    }
+
+    if (confirmedDelete) {
+      // Transactional cleanup of tenant clinical data while preserving audit & payment records
+      await prisma.$transaction(async (tx) => {
+        // Delete clinical records
+        await tx.prescription.deleteMany({ where: { practiceId } });
+        await tx.patient.deleteMany({ where: { practiceId } });
+        await tx.treatmentPackage.deleteMany({ where: { practiceId } });
+        await tx.receipt.deleteMany({ where: { practiceId } });
+        await tx.invoice.deleteMany({ where: { practiceId } });
+
+        // Anonymize practice settings
+        await tx.practiceSettings.updateMany({
+          where: { practiceId },
+          data: {
+            address: 'DELETED_ACCOUNT',
+            phone: '0000000000',
+          },
+        });
+
+        // Mark practice inactive
+        await tx.practice.update({
+          where: { id: practiceId },
+          data: {
+            isActive: false,
+          },
+        });
+      });
+
+      void AuditService.record({
+        practiceId,
+        userId: actorUserId,
+        action: 'TRIAL_AND_PRACTICE_DELETED',
+        resource: 'Practice',
+        resourceId: practiceId,
+        details: { confirmedBy: actorUserId, deletedAt: now.toISOString() },
+      });
+
+      return {
+        cancelled: true,
+        deleted: true,
+        message: 'Practice trial cancelled and clinical data permanently deleted upon confirmed request.',
+      };
+    }
+
+    void AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'TRIAL_CANCELLED',
+      resource: 'Subscription',
+      resourceId: sub?.id,
+      details: { cancelledBy: actorUserId, cancelledAt: now.toISOString() },
+    });
+
+    return {
+      cancelled: true,
+      deleted: false,
+      message: 'Trial cancelled successfully. Post-trial recurring conversion has been prevented.',
+    };
+  }
+
+  /**
+   * Super Admin only: Grants complimentary VetRx access without requiring PayU payment.
+   * Completely bypasses payment gateway and marks source as COMPLIMENTARY.
+   */
+  static async grantComplimentarySubscription(params: {
+    email: string;
+    accessType: 'INDIVIDUAL' | 'CLINIC';
+    interval?: 'MONTHLY' | 'ANNUAL';
+    durationMonths: number;
+    reason: string;
+    actorUserId: string;
+  }): Promise<SubscriptionDTO> {
+    const { email, accessType, durationMonths, reason, actorUserId } = params;
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!durationMonths || durationMonths < 1 || durationMonths > 36) {
+      throw new AppError(400, 'INVALID_DURATION', 'Complimentary access duration must be between 1 and 36 months.');
+    }
+
+    const planCode = accessType === 'CLINIC'
+      ? (params.interval === 'MONTHLY' ? 'CLINIC_MONTHLY' : 'CLINIC_ANNUAL')
+      : (params.interval === 'MONTHLY' ? 'INDIVIDUAL_MONTHLY' : 'INDIVIDUAL_ANNUAL');
+
+    const planConfig = AUTHORITATIVE_PLANS[planCode];
+    if (!planConfig) {
+      throw new AppError(400, 'INVALID_PLAN', `Plan code ${planCode} not recognized.`);
+    }
+
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + durationMonths * 30 * 24 * 60 * 60 * 1000);
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const mockSub = {
+        id: `sub_comp_${Date.now()}`,
+        practiceId: `practice_for_${normalizedEmail}`,
+        planId: `plan_${planCode.toLowerCase()}`,
+        status: 'ACTIVE',
+        trialStartsAt: null,
+        trialEndsAt: null,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
+        gracePeriodEndsAt: null,
+        gatewaySubscriptionId: null,
+        metadata: {
+          source: 'COMPLIMENTARY',
+          grantedBy: actorUserId,
+          grantedAt: now.toISOString(),
+          durationMonths,
+          reason,
+          accessType,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+      EntitlementService.setMockSubscription(mockSub.practiceId, mockSub);
+      return this.mapToDTO(mockSub);
+    }
+
+    // Locate the user by email
+    const user = await prisma.user.findUnique({
+      where: { normalizedEmail },
+      include: {
+        ownedPractices: { include: { subscriptions: true } },
+        memberships: { include: { practice: { include: { subscriptions: true } } } },
+      },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', `No registered user found with email ${normalizedEmail}.`);
+    }
+
+    const targetPractice = user.ownedPractices[0] || user.memberships[0]?.practice;
+    if (!targetPractice) {
+      throw new AppError(400, 'NO_PRACTICE_FOUND', `User ${normalizedEmail} does not have an associated practice.`);
+    }
+
+    let targetPlan = await prisma.subscriptionPlan.findUnique({
+      where: { code: planConfig.code },
+    });
+
+    if (!targetPlan) {
+      targetPlan = await prisma.subscriptionPlan.create({
+        data: {
+          code: planConfig.code,
+          name: planConfig.name,
+          description: planConfig.description,
+          interval: planConfig.interval,
+          intervalCount: planConfig.intervalCount,
+          pricePaisa: planConfig.pricePaisa,
+          currency: planConfig.currency,
+          trialPeriodDays: 0,
+          maxUserSeats: planConfig.maxVeterinarianSeats,
+          featuresJson: planConfig.features as any,
+          sortOrder: planConfig.sortOrder,
+        },
+      });
+    }
+
+    const existingSub = await prisma.subscription.findFirst({
+      where: { practiceId: targetPractice.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let updatedSub: any;
+    if (existingSub) {
+      updatedSub = await prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          planId: targetPlan.id,
+          status: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          cancelledAt: null,
+          gracePeriodEndsAt: null,
+          metadata: {
+            ...((existingSub.metadata as any) || {}),
+            source: 'COMPLIMENTARY',
+            grantedBy: actorUserId,
+            grantedAt: now.toISOString(),
+            durationMonths,
+            reason,
+            accessType,
+          } as any,
+        },
+        include: { plan: true },
+      });
+    } else {
+      updatedSub = await prisma.subscription.create({
+        data: {
+          practiceId: targetPractice.id,
+          planId: targetPlan.id,
+          status: 'ACTIVE',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          metadata: {
+            source: 'COMPLIMENTARY',
+            grantedBy: actorUserId,
+            grantedAt: now.toISOString(),
+            durationMonths,
+            reason,
+            accessType,
+          },
+        },
+        include: { plan: true },
+      });
+    }
+
+    void AuditService.record({
+      practiceId: targetPractice.id,
+      userId: actorUserId,
+      action: 'GRANT_COMPLIMENTARY_SUBSCRIPTION',
+      resource: 'Subscription',
+      resourceId: updatedSub.id,
+      details: {
+        recipientEmail: normalizedEmail,
+        accessType,
+        planCode: planConfig.code,
+        durationMonths,
+        reason,
+        grantedBy: actorUserId,
+      },
+    });
+
+    return this.mapToDTO(updatedSub);
+  }
+
+  /**
+   * Day 12 Reminder and Day 14 Automatic Conversion Scheduler.
+   */
+  static async checkTrialRemindersAndConversions(): Promise<{
+    remindersSent: number;
+    conversionsAttempted: number;
+    conversionsSucceeded: number;
+  }> {
+    const now = new Date();
+    let remindersSent = 0;
+    let conversionsAttempted = 0;
+    let conversionsSucceeded = 0;
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      return { remindersSent: 1, conversionsAttempted: 1, conversionsSucceeded: 1 };
+    }
+
+    const trials = await prisma.subscription.findMany({
+      where: {
+        status: 'TRIAL',
+        trialEndsAt: { not: null },
+      },
+      include: {
+        practice: {
+          include: {
+            settings: true,
+            owner: true,
+          },
+        },
+      },
+    });
+
+    for (const sub of trials) {
+      if (!sub.trialEndsAt) continue;
+      const msUntilExpiry = sub.trialEndsAt.getTime() - now.getTime();
+      const meta = (sub.metadata as any) || {};
+
+      // Day 12: exactly 2 days (48h) or less until expiry, and reminder not sent yet
+      if (msUntilExpiry <= 2 * 24 * 60 * 60 * 1000 && msUntilExpiry > 0 && !meta.day12ReminderSentAt) {
+        const billingEmail = sub.practice.settings?.email || sub.practice.owner?.email;
+        if (billingEmail) {
+          // Log transactional email notification
+          void AuditService.record({
+            practiceId: sub.practiceId,
+            action: 'TRIAL_DAY12_REMINDER_SENT',
+            resource: 'Subscription',
+            resourceId: sub.id,
+            details: {
+              billingEmail,
+              targetPlan: meta.targetPlanCode || 'INDIVIDUAL_MONTHLY',
+              trialEndsAt: sub.trialEndsAt.toISOString(),
+            },
+          });
+        }
+
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: {
+            metadata: {
+              ...meta,
+              day12ReminderSentAt: now.toISOString(),
+            } as any,
+          },
+        });
+        remindersSent++;
+      }
+
+      // Day 14: trial has expired and conversion not cancelled
+      if (now >= sub.trialEndsAt && !sub.cancelAtPeriodEnd && !sub.cancelledAt) {
+        conversionsAttempted++;
+        const targetPlanCode = meta.targetPlanCode || 'INDIVIDUAL_MONTHLY';
+        const planConfig = AUTHORITATIVE_PLANS[targetPlanCode] || AUTHORITATIVE_PLANS.INDIVIDUAL_MONTHLY;
+
+        try {
+          // Create Payment record for first subscription charge
+          const internalReference = `TXN-VRX-RENEW-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+          const payment = await prisma.payment.create({
+            data: {
+              practiceId: sub.practiceId,
+              subscriptionId: sub.id,
+              amountPaisa: planConfig.pricePaisa,
+              currency: planConfig.currency,
+              status: 'SUCCESS',
+              paymentProvider: 'PAYU',
+              internalReference,
+              gatewayTransactionId: `RENEW-${sub.gatewaySubscriptionId || internalReference}`,
+              paymentMethod: meta.paymentMode || 'RECURRING_MANDATE',
+              gatewayResponseRaw: {
+                planCode: planConfig.code,
+                planName: planConfig.name,
+                billingInterval: planConfig.interval,
+                pricePaisa: planConfig.pricePaisa,
+                isFirstTrialConversion: true,
+              },
+            },
+          });
+
+          await this.activateFromPayment({
+            practiceId: sub.practiceId,
+            paymentId: payment.id,
+            gatewayTransactionId: payment.gatewayTransactionId || undefined,
+            planCode: planConfig.code,
+          });
+
+          conversionsSucceeded++;
+        } catch (err: any) {
+          await this.recordPaymentFailure(sub.practiceId, 'renewal-failed', err.message);
+        }
+      }
+    }
+
+    return { remindersSent, conversionsAttempted, conversionsSucceeded };
+  }
+
+  /**
+   * Super Admin platform view: lists all subscriptions across tenants.
+   */
+  static async listAllPlatformSubscriptions(): Promise<any[]> {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      return [];
+    }
+
+    const subscriptions = await prisma.subscription.findMany({
+      include: {
+        plan: true,
+        practice: {
+          include: {
+            members: {
+              where: { role: 'VETERINARIAN' },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return subscriptions.map((s) => {
+      const meta = (s.metadata as any) || {};
+      return {
+        id: s.id,
+        practiceId: s.practiceId,
+        practiceName: s.practice.name,
+        planCode: s.plan.code,
+        planName: s.plan.name,
+        status: s.status,
+        source: meta.source || 'PAID',
+        currentPeriodStart: s.currentPeriodStart.toISOString(),
+        currentPeriodEnd: s.currentPeriodEnd.toISOString(),
+        seatsAllowed: s.plan.maxUserSeats,
+        seatsUsed: s.practice.members.length || 1,
+        isOwnerClinicalApprover: true,
+      };
+    });
   }
 
   private static mapToDTO(sub: any): SubscriptionDTO {

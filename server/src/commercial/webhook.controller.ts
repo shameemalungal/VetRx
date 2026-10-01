@@ -78,5 +78,7 @@ export async function handlePaymentReturn(req: Request, res: Response) {
 }
 
 export const publicPaymentsRouter = Router();
+publicPaymentsRouter.post('/', handlePaymentReturn);
+publicPaymentsRouter.get('/', handlePaymentReturn);
 publicPaymentsRouter.post('/return', handlePaymentReturn);
 publicPaymentsRouter.get('/return', handlePaymentReturn);

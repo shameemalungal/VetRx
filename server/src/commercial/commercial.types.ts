@@ -71,9 +71,39 @@ export interface PaymentDTO {
   internalReference: string;
   gatewayTransactionId: string | null;
   paymentMethod: string | null;
+  receiptNumber?: string | null;
+  isReceiptAvailable?: boolean;
   gatewayResponseRaw?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PaymentReceiptDTO {
+  receiptNumber: string;
+  paidAt: string;
+  paymentId: string;
+  internalReference: string;
+  gatewayTransactionId: string;
+  practiceName: string;
+  billingEmail: string;
+  planName: string;
+  billingInterval: string;
+  amountPaisa: number;
+  amountRupees: string;
+  currency: string;
+  paymentMethod: string;
+  status: 'PAID';
+  entityName: string;
+  entityAddress: string;
+  taxNotice: string;
+}
+
+export interface ComplimentarySubscriptionRequestDTO {
+  email: string;
+  accessType: 'INDIVIDUAL' | 'CLINIC';
+  interval?: 'MONTHLY' | 'ANNUAL';
+  durationMonths: number;
+  reason: string;
 }
 
 export interface PaymentEventDTO {

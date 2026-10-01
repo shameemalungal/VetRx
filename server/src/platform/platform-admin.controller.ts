@@ -9,6 +9,7 @@ import { Role, PracticeType, IssueCategory, IssuePriority, IssueStatus } from '@
 import { requireAuth } from '../middleware/auth.js';
 import { requirePlatformPermission } from '../middleware/authorization.js';
 import { PlatformAdminService } from './platform-admin.service.js';
+import { SubscriptionService } from '../commercial/subscription.service.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { AuthenticatedRequest } from '../types/index.js';
@@ -847,3 +848,48 @@ const listAuditHandler = async (req: AuthenticatedRequest, res: any, next: any) 
 };
 platformAdminRouter.get('/audit', listAuditHandler);
 platformAdminRouter.get('/audit-logs', listAuditHandler);
+
+// ==============================================================================
+// 9. Subscriptions Management & Complimentary Access (Super Admin Only)
+// ==============================================================================
+
+platformAdminRouter.get('/subscriptions', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const subscriptions = await SubscriptionService.listAllPlatformSubscriptions();
+    res.status(200).json(subscriptions);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const complimentaryAccessSchema = z.object({
+  email: z.string().email('Valid recipient email address is required'),
+  accessType: z.enum(['INDIVIDUAL', 'CLINIC']),
+  interval: z.enum(['MONTHLY', 'ANNUAL']).optional(),
+  durationMonths: z.number().int().min(1).max(36),
+  reason: z.string().min(1, 'Internal reason or note is required'),
+});
+
+platformAdminRouter.post('/subscriptions/complimentary', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const { email, accessType, interval, durationMonths, reason } = complimentaryAccessSchema.parse(req.body);
+    const subscription = await SubscriptionService.grantComplimentarySubscription({
+      email,
+      accessType,
+      interval,
+      durationMonths,
+      reason,
+      actorUserId,
+    });
+    res.status(201).json({
+      message: 'Complimentary access granted successfully.',
+      subscription,
+    });
+  } catch (err) {
+    next(err);
+  }
+});

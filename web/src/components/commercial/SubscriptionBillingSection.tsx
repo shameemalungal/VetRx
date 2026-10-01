@@ -55,10 +55,12 @@ interface PaymentRecord {
   gatewayTransactionId: string | null;
   paymentMethod: string | null;
   createdAt: string;
+  receiptNumber?: string | null;
   gatewayResponseRaw?: {
     planCode?: string;
     planName?: string;
     billingInterval?: string;
+    receiptNumber?: string;
   };
 }
 
@@ -78,6 +80,7 @@ export const SubscriptionBillingSection: React.FC = () => {
     planCode?: string;
     planName?: string;
   } | null>(null);
+  const [confirmDataDeletion, setConfirmDataDeletion] = useState(false);
 
   const fetchCommercialData = async () => {
     try {
@@ -200,7 +203,12 @@ export const SubscriptionBillingSection: React.FC = () => {
         endpoint = `${API_BASE}/api/commercial/subscription/downgrade`;
         body = JSON.stringify({ planCode: confirmModal.planCode });
       } else if (confirmModal.type === 'CANCEL') {
-        endpoint = `${API_BASE}/api/commercial/subscription/cancel`;
+        if (status?.isTrial) {
+          endpoint = `${API_BASE}/api/commercial/trial/cancel`;
+          body = JSON.stringify({ confirmDelete: confirmDataDeletion });
+        } else {
+          endpoint = `${API_BASE}/api/commercial/subscription/cancel`;
+        }
       } else if (confirmModal.type === 'REACTIVATE') {
         endpoint = `${API_BASE}/api/commercial/subscription/reactivate`;
       }
@@ -217,8 +225,15 @@ export const SubscriptionBillingSection: React.FC = () => {
         throw new Error(data.message || 'Operation failed.');
       }
 
+      if (confirmModal.type === 'CANCEL' && status?.isTrial && confirmDataDeletion) {
+        alert('Your trial has been cancelled and practice data permanently deleted. Redirecting to home.');
+        window.location.href = 'https://vetrx.brightbase.in';
+        return;
+      }
+
       setActionSuccess(data.message || 'Subscription successfully updated.');
       setConfirmModal(null);
+      setConfirmDataDeletion(false);
       await fetchCommercialData();
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'An error occurred.');
@@ -227,20 +242,42 @@ export const SubscriptionBillingSection: React.FC = () => {
     }
   };
 
-  const handleActivateTrial = async () => {
+  const handleAuthorizeMandate = async (paymentMethod: 'CARD' | 'UPI' | 'NETBANKING' = 'CARD') => {
     setSubmittingAction(true);
     setActionError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/commercial/trial/activate`, {
+      const res = await fetch(`${API_BASE}/api/commercial/trial/mandate/create`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({
+          planCode: status?.activePlan?.code?.startsWith('CLINIC') ? 'CLINIC' : 'INDIVIDUAL',
+          billingInterval,
+          paymentMethod,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Trial activation failed.');
-      setActionSuccess('14-day trial successfully activated!');
+      if (!res.ok) throw new Error(data.message || 'Mandate initiation failed.');
+
+      if (data.checkoutUrl && data.formParameters) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = data.checkoutUrl;
+        for (const [k, v] of Object.entries(data.formParameters)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = k;
+          input.value = String(v);
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+      setActionSuccess('Mandate registration completed.');
       await fetchCommercialData();
     } catch (err: unknown) {
-      setActionError(err instanceof Error ? err.message : 'Failed to activate trial.');
+      setActionError(err instanceof Error ? err.message : 'Failed to initiate mandate registration.');
     } finally {
       setSubmittingAction(false);
     }
@@ -326,13 +363,22 @@ export const SubscriptionBillingSection: React.FC = () => {
               >
                 Cancel Subscription
               </button>
+            ) : status?.isTrial ? (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ color: '#b91c1c', borderColor: '#fca5a5' }}
+                onClick={() => setConfirmModal({ type: 'CANCEL' })}
+              >
+                Cancel Trial
+              </button>
             ) : null}
           </div>
         </div>
 
         {/* Trial Countdown Banner */}
         {status?.isTrial && (
-          <div className="trial-banner">
+          <div className="trial-banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <div className="trial-banner-left">
               <span className="trial-countdown-badge">
                 {status.daysRemainingInPeriod ?? 14} Days Left
@@ -341,25 +387,30 @@ export const SubscriptionBillingSection: React.FC = () => {
                 Your 14-day full-featured trial is active. You have full access to clinical tools and practice features.
               </p>
             </div>
-            {status.paymentMethodStatus === 'PENDING' && (
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ fontSize: '0.8125rem', padding: '6px 12px' }}
-                onClick={handleActivateTrial}
-                disabled={submittingAction}
-              >
-                Activate Trial (Test Mode)
-              </button>
+            {status.paymentMethodStatus !== 'CONFIGURED' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ fontSize: '0.8125rem', padding: '6px 14px', whiteSpace: 'nowrap' }}
+                  onClick={() => handleAuthorizeMandate('CARD')}
+                  disabled={submittingAction}
+                >
+                  Authorize Payment Method (₹2 Auth)
+                </button>
+                <span style={{ fontSize: '0.72rem', color: '#64748b', textAlign: 'right' }}>
+                  Cards/UPI: ₹2 verification • Net Banking: ₹0 verification
+                </span>
+              </div>
             )}
           </div>
         )}
 
-        {/* Payment Method Notice (BD-01, BD-22) */}
+        {/* Payment Method Notice */}
         <div className="payment-req-banner">
           <Icon name="info" size={16} />
           <span>
-            <strong>Payment Method Notice:</strong> Subscriptions are processed securely in INR through PayU payment gateway.
+            <strong>Payment Method Notice:</strong> Subscriptions are processed securely in INR through PayU payment gateway. PayU may process a small authorization transaction during recurring mandate registration (₹2 for Cards/UPI, ₹0 for Net Banking). This is an authorization verification transaction and is not your VetRx subscription fee. No subscription fee is charged during the 14-day trial.
           </span>
         </div>
 
@@ -673,7 +724,7 @@ export const SubscriptionBillingSection: React.FC = () => {
       </div>
 
       <p className="gst-disclaimer">
-        Prices shown are exclusive of GST. Official GST treatment will be finalized before live production billing activation.
+        Simple, transparent pricing. No per-patient or per-prescription charges. Applicable taxes, if any, will be reflected in the applicable invoice.
       </p>
 
       {/* ── PAYMENT HISTORY ────────────────────────────────────── */}
@@ -691,23 +742,45 @@ export const SubscriptionBillingSection: React.FC = () => {
                   <th>Description</th>
                   <th>Amount</th>
                   <th>Status</th>
+                  <th>Receipt Number</th>
                   <th>Transaction Reference</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {payments.map((p) => (
-                  <tr key={p.id}>
-                    <td>{new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                    <td>{p.gatewayResponseRaw?.planName || 'VetRx Subscription'} ({p.gatewayResponseRaw?.billingInterval || 'Standard'})</td>
-                    <td>₹{(p.amountPaisa / 100).toLocaleString('en-IN')}</td>
-                    <td>
-                      <span className={`billing-status-badge ${p.status === 'SUCCESS' ? 'active' : p.status === 'PENDING' ? 'trial' : 'expired'}`}>
-                        {p.status}
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{p.gatewayTransactionId || p.internalReference}</td>
-                  </tr>
-                ))}
+                {payments.map((p) => {
+                  const receiptNo = p.receiptNumber || p.gatewayResponseRaw?.receiptNumber || `REC-VRX-${p.id.slice(0, 8).toUpperCase()}`;
+                  return (
+                    <tr key={p.id}>
+                      <td>{new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                      <td>{p.gatewayResponseRaw?.planName || 'VetRx Subscription'} ({p.gatewayResponseRaw?.billingInterval || 'Standard'})</td>
+                      <td>₹{(p.amountPaisa / 100).toLocaleString('en-IN')}</td>
+                      <td>
+                        <span className={`billing-status-badge ${p.status === 'SUCCESS' ? 'active' : p.status === 'PENDING' ? 'trial' : 'expired'}`}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem', fontWeight: 600, color: '#0f172a' }}>
+                        {p.status === 'SUCCESS' ? receiptNo : '—'}
+                      </td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{p.gatewayTransactionId || p.internalReference}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {p.status === 'SUCCESS' ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                            onClick={() => window.open(`${API_BASE}/api/commercial/payments/${p.id}/receipt?format=html`, '_blank')}
+                          >
+                            Download Receipt
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -727,6 +800,8 @@ export const SubscriptionBillingSection: React.FC = () => {
                 ? `Subscribe to ${confirmModal.planName}`
                 : confirmModal.type === 'DOWNGRADE'
                 ? `Downgrade to ${confirmModal.planName}`
+                : confirmModal.type === 'CANCEL' && status?.isTrial
+                ? 'Cancel Trial & Delete Account'
                 : confirmModal.type === 'CANCEL'
                 ? 'Cancel Subscription Renewal'
                 : 'Reactivate Renewal'}
@@ -737,19 +812,40 @@ export const SubscriptionBillingSection: React.FC = () => {
                 ? `You will proceed to secure PayU checkout for the ${confirmModal.planName} plan (${billingInterval === 'ANNUAL' ? 'Annual: ₹' + (confirmModal.planName === 'Clinic' ? '14,999' : '5,999') + '/yr' : 'Monthly: ₹' + (confirmModal.planName === 'Clinic' ? '1,499' : '599') + '/mo'}).`
                 : confirmModal.type === 'DOWNGRADE'
                 ? `Your plan will downgrade to ${confirmModal.planName} at the end of your current billing period. Please ensure your active veterinarian seats do not exceed the plan limit.`
+                : confirmModal.type === 'CANCEL' && status?.isTrial
+                ? 'Cancelling your trial will cancel pending subscription conversion and prevent any post-trial charges.'
                 : confirmModal.type === 'CANCEL'
                 ? 'Your subscription will not renew automatically. Your full access remains intact until the end of your current billing period.'
                 : 'Your automatic renewal will be restored at the end of your current billing period.'}
             </p>
+
+            {confirmModal.type === 'CANCEL' && status?.isTrial && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginTop: '12px', marginBottom: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '0.8125rem', color: '#991b1b' }}>
+                  <input
+                    type="checkbox"
+                    checked={confirmDataDeletion}
+                    onChange={(e) => setConfirmDataDeletion(e.target.checked)}
+                    style={{ marginTop: '2px', accentColor: '#dc2626' }}
+                  />
+                  <span>
+                    <strong>Permanent Deletion:</strong> Permanently delete practice data and remove practice from active VetRx use upon cancellation.
+                  </span>
+                </label>
+              </div>
+            )}
 
             <div className="billing-modal-actions">
               <button
                 type="button"
                 className="btn btn-secondary"
                 disabled={submittingAction}
-                onClick={() => setConfirmModal(null)}
+                onClick={() => {
+                  setConfirmModal(null);
+                  setConfirmDataDeletion(false);
+                }}
               >
-                Cancel
+                {confirmModal.type === 'CANCEL' && status?.isTrial ? 'Keep Trial' : 'Cancel'}
               </button>
               <button
                 type="button"
@@ -757,7 +853,15 @@ export const SubscriptionBillingSection: React.FC = () => {
                 disabled={submittingAction}
                 onClick={handleExecuteAction}
               >
-                {submittingAction ? 'Processing…' : confirmModal.type === 'UPGRADE' ? 'Proceed to PayU' : 'Confirm'}
+                {submittingAction
+                  ? 'Processing…'
+                  : confirmModal.type === 'UPGRADE'
+                  ? 'Proceed to PayU'
+                  : confirmModal.type === 'CANCEL' && status?.isTrial
+                  ? confirmDataDeletion
+                    ? 'Cancel & Delete Practice'
+                    : 'Cancel Trial'
+                  : 'Confirm'}
               </button>
             </div>
           </div>

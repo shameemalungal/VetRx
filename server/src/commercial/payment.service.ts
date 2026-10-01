@@ -284,6 +284,143 @@ export class PaymentService {
   }
 
   /**
+   * Initiates a PayU free-trial recurring mandate authorization order.
+   * PayU Hosted Checkout recurring registration documentation specifies:
+   * Cards: ₹2.00 (200 paise) authorization
+   * UPI: ₹2.00 (200 paise) authorization
+   * Net Banking: ₹0.00 (0 paise) authorization
+   * This is an authorization verification transaction and is NOT subscription revenue.
+   * Subscription fee during trial remains ₹0.
+   */
+  static async initiateTrialAuthorization(params: {
+    practiceId: string;
+    userId: string;
+    planCode: string;
+    billingInterval?: BillingInterval;
+    instrumentType?: 'CARD' | 'UPI' | 'NETBANKING';
+    gateway?: PaymentGateway;
+  }): Promise<InitiatePaymentResponseDTO> {
+    const { practiceId, userId, planCode, instrumentType } = params;
+    const gateway = params.gateway || this.getDefaultGateway();
+
+    const planConfig = AUTHORITATIVE_PLANS[planCode];
+    if (!planConfig) {
+      throw new AppError(400, 'INVALID_PLAN', `Plan code ${planCode} is not recognized.`);
+    }
+
+    // PayU recurring registration amount rules: NetBanking = 0, Cards/UPI = ₹2.00 (200 paise)
+    const authAmountPaisa = instrumentType === 'NETBANKING' ? 0 : 200;
+    const internalReference = `AUTH-VRX-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const activeSub = EntitlementService.getMockSubscription(practiceId);
+      const payment = {
+        id: `pay_auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        practiceId,
+        subscriptionId: activeSub?.id || null,
+        amountPaisa: authAmountPaisa,
+        currency: 'INR',
+        status: 'PENDING',
+        paymentProvider: gateway.providerName,
+        internalReference,
+        gatewayResponseRaw: {
+          isTrialMandateAuth: true,
+          planCode: planConfig.code,
+          planName: planConfig.name,
+          billingInterval: planConfig.interval,
+          targetPlanPricePaisa: planConfig.pricePaisa,
+          authAmountPaisa,
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.setMockPayment(payment);
+
+      const orderResponse = await gateway.createPaymentOrder({
+        practiceId,
+        subscriptionId: activeSub?.id,
+        amountPaisa: authAmountPaisa,
+        currency: 'INR',
+        customerName: 'Practitioner',
+        customerEmail: 'doctor@vetrx.in',
+        productInfo: `VetRx 14-Day Trial Recurring Authorization - ${planConfig.name}`,
+        returnUrl: '',
+        cancelUrl: '',
+        internalReference,
+        planCode: planConfig.code,
+        billingInterval: planConfig.interval,
+      });
+
+      return {
+        payment: this.mapToDTO(payment),
+        checkoutUrl: orderResponse.redirectUrl || '',
+        formParameters: orderResponse.formParameters || {},
+      };
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const settings = await prisma.practiceSettings.findUnique({ where: { practiceId } });
+    const activeSub = await prisma.subscription.findFirst({
+      where: { practiceId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const payment = await prisma.payment.create({
+      data: {
+        practiceId,
+        subscriptionId: activeSub?.id || null,
+        amountPaisa: authAmountPaisa,
+        currency: 'INR',
+        status: 'PENDING',
+        paymentProvider: gateway.providerName,
+        internalReference,
+        gatewayResponseRaw: {
+          isTrialMandateAuth: true,
+          planCode: planConfig.code,
+          planName: planConfig.name,
+          billingInterval: planConfig.interval,
+          targetPlanPricePaisa: planConfig.pricePaisa,
+          authAmountPaisa,
+        },
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'TRIAL_MANDATE_AUTH_INITIATED',
+      resource: 'Payment',
+      resourceId: payment.id,
+      details: {
+        targetPlanCode: planConfig.code,
+        authAmountPaisa,
+        internalReference,
+      },
+    });
+
+    const orderResponse = await gateway.createPaymentOrder({
+      practiceId,
+      subscriptionId: activeSub?.id,
+      amountPaisa: authAmountPaisa,
+      currency: 'INR',
+      customerName: user?.name || 'Practitioner',
+      customerEmail: user?.email || 'doctor@vetrx.in',
+      customerPhone: settings?.phone || undefined,
+      productInfo: `VetRx 14-Day Trial Recurring Authorization - ${planConfig.name}`,
+      returnUrl: '',
+      cancelUrl: '',
+      internalReference,
+      planCode: planConfig.code,
+      billingInterval: planConfig.interval,
+    });
+
+    return {
+      payment: this.mapToDTO(payment),
+      checkoutUrl: orderResponse.redirectUrl || '',
+      formParameters: orderResponse.formParameters || {},
+    };
+  }
+
+  /**
    * Verifies an inbound browser return/callback from PayU and applies subscription effects.
    */
   static async verifyPaymentReturn(params: {
@@ -386,15 +523,21 @@ export class PaymentService {
     });
 
     if (verification.isVerified && verification.status === 'SUCCESS') {
+      const isTrialAuth = (payment.gatewayResponseRaw as any)?.isTrialMandateAuth === true;
+      const receiptNumber = !isTrialAuth
+        ? `REC-VRX-${new Date().getFullYear()}-${payment.id.slice(-6).toUpperCase()}`
+        : null;
+
       let updatedPayment = payment;
       if (process.env.VETRX_FAST_TEST === '1') {
-        payment.status = 'SUCCESS';
+        payment.status = isTrialAuth ? 'AUTHORIZED' : 'SUCCESS';
         payment.gatewayTransactionId = verification.gatewayTransactionId;
         payment.paymentMethod = verification.paymentMode || 'ONLINE';
         payment.gatewayResponseRaw = {
           ...((payment.gatewayResponseRaw as any) || {}),
           returnPayload: payload,
           verifiedAt: new Date().toISOString(),
+          receiptNumber,
         };
         this.setMockPayment(payment);
         updatedPayment = payment;
@@ -402,42 +545,71 @@ export class PaymentService {
         updatedPayment = await prisma.payment.update({
           where: { id: payment.id },
           data: {
-            status: 'SUCCESS',
+            status: isTrialAuth ? 'AUTHORIZED' : 'SUCCESS',
             gatewayTransactionId: verification.gatewayTransactionId,
             paymentMethod: verification.paymentMode || 'ONLINE',
             gatewayResponseRaw: {
               ...((payment.gatewayResponseRaw as any) || {}),
               returnPayload: payload,
               verifiedAt: new Date().toISOString(),
+              receiptNumber,
             },
           },
         });
       }
 
-      // Activate or upgrade subscription
-      const planCode = (payment.gatewayResponseRaw as any)?.planCode;
-      const updatedSub = await SubscriptionService.activateFromPayment({
-        practiceId,
-        paymentId: payment.id,
-        gatewayTransactionId: verification.gatewayTransactionId,
-        planCode,
-      });
+      if (isTrialAuth) {
+        // Activate 14-day trial with PayU recurring mandate
+        const raw = (payment.gatewayResponseRaw as any) || {};
+        const updatedSub = await SubscriptionService.activateTrialWithMandate({
+          practiceId,
+          mandateRef: verification.gatewayTransactionId,
+          targetPlanCode: raw.planCode,
+          targetBillingInterval: raw.billingInterval,
+          paymentMode: verification.paymentMode,
+        });
 
-      void AuditService.record({
-        practiceId,
-        action: 'PAYMENT_SUCCESS',
-        resource: 'Payment',
-        resourceId: payment.id,
-        details: { txnid, amountPaisa: payment.amountPaisa, gatewayTxnId: verification.gatewayTransactionId },
-      });
+        void AuditService.record({
+          practiceId,
+          action: 'TRIAL_MANDATE_AUTH_SUCCESS',
+          resource: 'Payment',
+          resourceId: payment.id,
+          details: { txnid, mandateRef: verification.gatewayTransactionId },
+        });
 
-      return {
-        isVerified: true,
-        status: 'SUCCESS',
-        payment: this.mapToDTO(updatedPayment),
-        subscription: updatedSub,
-        message: 'Payment verified and subscription successfully activated.',
-      };
+        return {
+          isVerified: true,
+          status: 'AUTHORIZED',
+          payment: this.mapToDTO(updatedPayment),
+          subscription: updatedSub,
+          message: 'PayU recurring mandate successfully authorized. 14-day free trial activated.',
+        };
+      } else {
+        // Activate or upgrade subscription
+        const planCode = (payment.gatewayResponseRaw as any)?.planCode;
+        const updatedSub = await SubscriptionService.activateFromPayment({
+          practiceId,
+          paymentId: payment.id,
+          gatewayTransactionId: verification.gatewayTransactionId,
+          planCode,
+        });
+
+        void AuditService.record({
+          practiceId,
+          action: 'PAYMENT_SUCCESS',
+          resource: 'Payment',
+          resourceId: payment.id,
+          details: { txnid, receiptNumber, amountPaisa: payment.amountPaisa, gatewayTxnId: verification.gatewayTransactionId },
+        });
+
+        return {
+          isVerified: true,
+          status: 'SUCCESS',
+          payment: this.mapToDTO(updatedPayment),
+          subscription: updatedSub,
+          message: 'Payment verified and subscription successfully activated.',
+        };
+      }
     } else {
       let updatedPayment = payment;
       if (process.env.VETRX_FAST_TEST === '1') {
@@ -790,7 +962,159 @@ export class PaymentService {
     return count;
   }
 
+  /**
+   * Generates or fetches authoritative payment receipt details for a confirmed payment.
+   * Strictly enforces tenant isolation: cross-tenant receipt access is rejected.
+   */
+  static async getPaymentReceipt(paymentId: string, practiceId: string): Promise<any> {
+    const payment = await this.getPaymentById(paymentId, practiceId);
+    if (!payment) {
+      throw new AppError(404, 'NOT_FOUND', 'Payment record not found.');
+    }
+    if (payment.status !== 'SUCCESS') {
+      throw new AppError(400, 'RECEIPT_NOT_AVAILABLE', 'Receipt is only available for confirmed successful payments.');
+    }
+
+    let practiceName = 'Veterinary Practice';
+    let billingEmail = 'doctor@vetrx.in';
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      const practice = await prisma.practice.findUnique({
+        where: { id: practiceId },
+        include: {
+          settings: true,
+          owner: true,
+        },
+      });
+      if (practice) {
+        practiceName = practice.name;
+        billingEmail = practice.settings?.email || practice.owner?.email || billingEmail;
+      }
+    }
+
+    const raw = (payment.gatewayResponseRaw as any) || {};
+    const planName = raw.planName || 'VetRx Subscription';
+    const billingInterval = raw.billingInterval || 'Standard';
+    const receiptNumber = payment.receiptNumber || `REC-VRX-${new Date(payment.createdAt).getFullYear()}-${payment.id.slice(-6).toUpperCase()}`;
+
+    const receipt = {
+      receiptNumber,
+      paidAt: payment.createdAt,
+      paymentId: payment.id,
+      internalReference: payment.internalReference,
+      gatewayTransactionId: payment.gatewayTransactionId || payment.internalReference,
+      practiceName,
+      billingEmail,
+      planName,
+      billingInterval,
+      amountPaisa: payment.amountPaisa,
+      amountRupees: (payment.amountPaisa / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      currency: 'INR',
+      paymentMethod: payment.paymentMethod || 'Online Payment',
+      status: 'PAID' as const,
+      entityName: 'Praxivon Technologies Private Limited',
+      entityAddress: 'Melattur PO, Malappuram District, Kerala, India',
+      taxNotice: 'Applicable taxes, if any, will be reflected in the applicable invoice.',
+    };
+
+    return receipt;
+  }
+
+  /**
+   * Generates a clean, professional, print/PDF-ready HTML layout for the payment receipt.
+   */
+  static generateReceiptHtml(receipt: any): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Payment Receipt - ${receipt.receiptNumber}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; color: #0f172a; margin: 0; padding: 40px; background: #f8fafc; }
+    .receipt-container { max-width: 680px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 24px; margin-bottom: 24px; }
+    .brand-title { font-size: 26px; font-weight: 800; color: #0d9488; margin: 0; }
+    .brand-sub { font-size: 13px; color: #475569; margin-top: 4px; }
+    .receipt-badge { background: #ccfbf1; color: #0f766e; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+    .label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .value { font-size: 14px; font-weight: 600; color: #1e293b; }
+    .table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+    .table th { background: #f1f5f9; padding: 12px; text-align: left; font-size: 12px; font-weight: 700; color: #475569; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+    .table td { padding: 14px 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #1e293b; }
+    .total-row { font-size: 16px; font-weight: 800; color: #0d9488; }
+    .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; line-height: 1.6; }
+    .print-btn { display: block; margin: 20px auto 0; padding: 10px 20px; background: #0d9488; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    @media print { .print-btn { display: none; } body { background: #fff; padding: 0; } .receipt-container { border: none; box-shadow: none; padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="receipt-container">
+    <div class="header">
+      <div>
+        <h1 class="brand-title">VetRx</h1>
+        <div class="brand-sub">${receipt.entityName}</div>
+        <div class="brand-sub">${receipt.entityAddress}</div>
+      </div>
+      <div style="text-align: right;">
+        <span class="receipt-badge">PAID</span>
+        <div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Receipt #${receipt.receiptNumber}</div>
+        <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${new Date(receipt.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="label">Billed To</div>
+        <div class="value">${receipt.practiceName}</div>
+        <div style="font-size: 13px; color: #64748b;">${receipt.billingEmail}</div>
+      </div>
+      <div>
+        <div class="label">Payment Details</div>
+        <div class="value">Method: ${receipt.paymentMethod}</div>
+        <div style="font-size: 12px; color: #64748b; font-family: monospace;">Ref: ${receipt.gatewayTransactionId}</div>
+      </div>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th>Billing Cycle</th>
+          <th style="text-align: right;">Amount (INR)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>${receipt.planName}</strong></td>
+          <td>${receipt.billingInterval}</td>
+          <td style="text-align: right; font-weight: 600;">₹${receipt.amountRupees}</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="text-align: right; font-weight: 700;">Total Paid:</td>
+          <td style="text-align: right;" class="total-row">₹${receipt.amountRupees}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="footer">
+      <p><strong>${receipt.taxNotice}</strong></p>
+      <p>Thank you for using VetRx. Built in India, engineered around the real day-to-day realities of veterinary practice.</p>
+      <p>Questions? Contact support: <a href="mailto:supportvetrx@gmail.com" style="color: #0d9488;">supportvetrx@gmail.com</a></p>
+    </div>
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</body>
+</html>`;
+  }
+
   private static mapToDTO(p: any): PaymentDTO {
+    const raw = (p.gatewayResponseRaw as Record<string, unknown>) || null;
+    const isSuccess = p.status === 'SUCCESS';
+    const receiptNumber = isSuccess
+      ? ((raw as any)?.receiptNumber || `REC-VRX-${new Date(p.createdAt).getFullYear()}-${p.id.slice(-6).toUpperCase()}`)
+      : null;
+
     return {
       id: p.id,
       practiceId: p.practiceId,
@@ -802,9 +1126,11 @@ export class PaymentService {
       internalReference: p.internalReference,
       gatewayTransactionId: p.gatewayTransactionId,
       paymentMethod: p.paymentMethod,
-      gatewayResponseRaw: (p.gatewayResponseRaw as Record<string, unknown>) || null,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
+      receiptNumber,
+      isReceiptAvailable: isSuccess,
+      gatewayResponseRaw: raw,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : new Date(p.createdAt).toISOString(),
+      updatedAt: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : new Date(p.updatedAt).toISOString(),
     };
   }
 }

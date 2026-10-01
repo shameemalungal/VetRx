@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { APP_REGISTER_URL } from './Navbar';
+
+const APP_REGISTER_BASE = 'https://app.vetrx.brightbase.in/register';
 
 export const PricingSection: React.FC = () => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
@@ -32,6 +33,7 @@ export const PricingSection: React.FC = () => {
                   ? 'text-teal-dark bg-white shadow-md shadow-slate-200'
                   : 'text-content-secondary hover:text-content-primary'
               }`}
+              aria-pressed={billingCycle === 'monthly'}
             >
               Monthly Billing
             </button>
@@ -43,26 +45,30 @@ export const PricingSection: React.FC = () => {
                   ? 'text-teal-dark bg-white shadow-md shadow-slate-200'
                   : 'text-content-secondary hover:text-content-primary'
               }`}
+              aria-pressed={billingCycle === 'annual'}
             >
               <span>Annual Billing</span>
             </button>
           </div>
         </div>
 
-        {/* Pricing Cards Grid */}
+        {/* Pricing Cards Grid — Consistent hover & focus elevation across all 3 cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
           {/* Plan 1: Individual */}
-          <div className="p-8 sm:p-9 rounded-3xl bg-white/90 backdrop-blur-sm border border-slate-200/90 flex flex-col justify-between shadow-subtle hover:shadow-card-lift hover:border-teal/30 transition-all duration-300 hover:-translate-y-1">
+          <div
+            tabIndex={0}
+            className="group p-8 sm:p-9 rounded-3xl bg-white border border-slate-200/90 flex flex-col justify-between shadow-subtle hover:shadow-card-lift hover:border-teal/50 hover:-translate-y-1.5 focus-within:shadow-card-lift focus-within:border-teal/50 focus-within:-translate-y-1.5 focus:outline-none transition-all duration-300"
+          >
             <div>
               <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-[11px] font-mono font-bold text-teal uppercase tracking-wider mb-2">
                 Solo Practice
               </div>
-              <h3 className="font-heading font-extrabold text-2xl text-content-primary">INDIVIDUAL</h3>
+              <h3 className="font-heading font-extrabold text-2xl text-content-primary group-hover:text-teal-dark transition-colors">INDIVIDUAL</h3>
               <p className="text-xs text-content-secondary mt-1.5 leading-relaxed">
                 Ideal for solo private practitioners and mobile field vets.
               </p>
               
-              <div className="my-7 p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+              <div className="my-7 p-4 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-teal-50/40 group-hover:border-teal-100 transition-colors">
                 <div className="flex items-baseline gap-1.5">
                   <span className="font-heading font-black text-4xl sm:text-5xl text-content-primary tracking-tight">
                     {billingCycle === 'monthly' ? '₹599' : '₹5,999'}
@@ -79,7 +85,11 @@ export const PricingSection: React.FC = () => {
               <ul className="space-y-3.5 text-xs text-content-primary border-t border-slate-100 pt-6 mb-8">
                 <li className="flex items-center gap-2.5">
                   <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span><strong>Single veterinarian</strong> account</span>
+                  <span><strong>1 veterinarian</strong> account</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span><strong>Unlimited</strong> usage</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
@@ -87,7 +97,7 @@ export const PricingSection: React.FC = () => {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span><strong>Unlimited</strong> prescriptions &amp; history</span>
+                  <span><strong>Unlimited</strong> prescriptions &amp; clinical history</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
@@ -97,99 +107,98 @@ export const PricingSection: React.FC = () => {
                   <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
                   <span>Standard treatment packages</span>
                 </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span>Unlimited clinical usage</span>
-                </li>
               </ul>
             </div>
             <a
-              href={APP_REGISTER_URL}
+              href={`${APP_REGISTER_BASE}?plan=INDIVIDUAL&interval=${billingCycle}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold bg-white text-content-primary hover:bg-slate-50 border border-slate-200 transition-all shadow-xs hover:border-slate-300"
+              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold bg-white text-content-primary hover:bg-teal-50 hover:text-teal-dark border border-slate-200 hover:border-teal/40 transition-all shadow-xs"
             >
               Start 14-Day Free Trial
             </a>
           </div>
 
-          {/* Plan 2: Clinic (Elevated / Most Popular) */}
-          <div className="p-8 sm:p-9 rounded-3xl bg-white border-2 border-teal shadow-plan-highlight flex flex-col justify-between relative transform lg:-translate-y-3 transition-all duration-300 hover:-translate-y-4">
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-teal via-teal-dark to-teal text-white text-[11px] font-mono uppercase font-bold tracking-wider shadow-md">
-              Most Popular For Clinics
-            </div>
+          {/* Plan 2: Clinic */}
+          <div
+            tabIndex={0}
+            className="group p-8 sm:p-9 rounded-3xl bg-white border border-slate-200/90 flex flex-col justify-between shadow-subtle hover:shadow-card-lift hover:border-teal/50 hover:-translate-y-1.5 focus-within:shadow-card-lift focus-within:border-teal/50 focus-within:-translate-y-1.5 focus:outline-none transition-all duration-300"
+          >
             <div>
               <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-[11px] font-mono font-bold text-teal uppercase tracking-wider mb-2">
                 Complete Team
               </div>
-              <h3 className="font-heading font-extrabold text-2xl text-content-primary">CLINIC</h3>
+              <h3 className="font-heading font-extrabold text-2xl text-content-primary group-hover:text-teal-dark transition-colors">CLINIC</h3>
               <p className="text-xs text-content-secondary mt-1.5 leading-relaxed">
                 For multi-doctor clinics with receptionist &amp; accounting staff.
               </p>
 
-              <div className="my-7 p-4 rounded-2xl bg-gradient-to-br from-teal-50/70 to-aqua/10 border border-teal-200/50">
+              <div className="my-7 p-4 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-teal-50/40 group-hover:border-teal-100 transition-colors">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="font-heading font-black text-4xl sm:text-5xl text-teal-dark tracking-tight">
+                  <span className="font-heading font-black text-4xl sm:text-5xl text-content-primary tracking-tight">
                     {billingCycle === 'monthly' ? '₹1,499' : '₹14,999'}
                   </span>
                   <span className="text-xs font-mono text-content-secondary font-medium">
                     {billingCycle === 'monthly' ? '/ month' : '/ year'}
                   </span>
                 </div>
-                <p className="text-[11px] font-mono text-teal-800 font-bold mt-1.5 min-h-[18px]">
+                <p className="text-[11px] font-mono text-teal-dark font-semibold mt-1.5 min-h-[18px]">
                   {billingCycle === 'monthly' ? 'Billed monthly' : 'Billed annually'}
                 </p>
               </div>
 
-              <ul className="space-y-3.5 text-xs text-content-primary border-t border-teal-100 pt-6 mb-8">
+              <ul className="space-y-3.5 text-xs text-content-primary border-t border-slate-100 pt-6 mb-8">
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
                   <span><strong>Up to 5 veterinarians</strong></span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span><strong>Receptionist</strong> access</span>
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span><strong>Receptionist access</strong></span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span><strong>Accountant</strong> access</span>
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span><strong>Accountant access</strong></span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span><strong>Unlimited</strong> usage</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
                   <span>Shared clinic records &amp; patient history</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                  <span className="w-5 h-5 rounded-full bg-teal-soft text-teal-dark flex items-center justify-center text-xs font-bold shrink-0">✓</span>
                   <span>Treatment packages library &amp; multi-doctor approvals</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-teal text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
-                  <span>Unlimited clinical usage</span>
                 </li>
               </ul>
             </div>
             <a
-              href={APP_REGISTER_URL}
+              href={`${APP_REGISTER_BASE}?plan=CLINIC&interval=${billingCycle}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-4 px-4 rounded-xl text-center text-sm font-heading font-extrabold bg-gradient-to-r from-teal via-teal-dark to-teal hover:opacity-95 text-white shadow-clinical transition-all hover:shadow-hero-glow"
+              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold bg-white text-content-primary hover:bg-teal-50 hover:text-teal-dark border border-slate-200 hover:border-teal/40 transition-all shadow-xs"
             >
               Start 14-Day Free Trial
             </a>
           </div>
 
           {/* Plan 3: Enterprise */}
-          <div className="p-8 sm:p-9 rounded-3xl bg-white/90 backdrop-blur-sm border border-slate-200/90 flex flex-col justify-between shadow-subtle hover:shadow-card-lift hover:border-teal/30 transition-all duration-300 hover:-translate-y-1">
+          <div
+            tabIndex={0}
+            className="group p-8 sm:p-9 rounded-3xl bg-white border border-slate-200/90 flex flex-col justify-between shadow-subtle hover:shadow-card-lift hover:border-teal/50 hover:-translate-y-1.5 focus-within:shadow-card-lift focus-within:border-teal/50 focus-within:-translate-y-1.5 focus:outline-none transition-all duration-300"
+          >
             <div>
               <div className="inline-flex items-center px-2.5 py-1 rounded-lg bg-teal-50 text-[11px] font-mono font-bold text-teal uppercase tracking-wider mb-2">
                 High Volume
               </div>
-              <h3 className="font-heading font-extrabold text-2xl text-content-primary">ENTERPRISE</h3>
+              <h3 className="font-heading font-extrabold text-2xl text-content-primary group-hover:text-teal-dark transition-colors">ENTERPRISE</h3>
               <p className="text-xs text-content-secondary mt-1.5 leading-relaxed">
                 For larger veterinary hospitals, chains &amp; clinical organizations.
               </p>
 
-              <div className="my-7 p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+              <div className="my-7 p-4 rounded-2xl bg-slate-50/80 border border-slate-100 group-hover:bg-teal-50/40 group-hover:border-teal-100 transition-colors">
                 <div className="flex items-baseline gap-1.5">
                   <span className="font-heading font-black text-4xl sm:text-5xl text-content-primary tracking-tight">Custom</span>
                 </div>
@@ -228,11 +237,16 @@ export const PricingSection: React.FC = () => {
           </div>
         </div>
 
-        {/* Transparent Trial Disclosure Note */}
-        <div className="max-w-2xl mx-auto text-center mt-12 p-4.5 rounded-2xl bg-teal-50/80 border border-teal-200/60 text-xs text-content-secondary shadow-xs">
-          <p>
-            <strong className="text-content-primary font-heading font-bold">Trial Details:</strong> 14 days free. Your selected plan begins after the trial
-            unless you cancel beforehand.
+        {/* Transparent Trial Disclosure & PayU Authorization Information */}
+        <div className="max-w-3xl mx-auto text-center mt-12 p-5 rounded-2xl bg-teal-50/80 border border-teal-200/60 text-xs text-content-secondary shadow-xs space-y-2">
+          <p className="font-heading font-bold text-content-primary text-sm">
+            14 days free. Your selected plan begins after the trial unless you cancel beforehand.
+          </p>
+          <p className="leading-relaxed">
+            Your selected payment method will be authorized during signup for recurring billing. No subscription fee is charged during the 14-day trial. Any authorization/verification amount displayed by the payment provider is handled according to the payment provider&apos;s trial authorization process.
+          </p>
+          <p className="text-[11px] text-content-muted leading-relaxed">
+            For PayU free-trial Hosted Checkout recurring registration: Cards (₹2 authorization transaction), UPI (₹2 authorization transaction), Net Banking (₹0 authorization transaction). This is an authorization verification transaction and is not your VetRx subscription fee. Applicable taxes, if any, will be reflected in the applicable invoice.
           </p>
         </div>
       </div>

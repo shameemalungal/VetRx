@@ -145,6 +145,8 @@ export interface PlatformSubscriptionItem {
   seatsUsed: number;
   seatsAllowed: number;
   isOwnerClinicalApprover: boolean;
+  source?: string;
+  notes?: string;
 }
 
 export interface PlatformPaymentItem {
@@ -434,6 +436,17 @@ export const platformAdminApi = {
 
     return { results, total, page, pageSize };
   },
+
+  grantComplimentarySubscription: (data: {
+    email: string;
+    accessType: 'INDIVIDUAL' | 'CLINIC';
+    durationMonths: number;
+    reason?: string;
+  }) =>
+    request<{ success: boolean; message: string; practiceId: string; subscriptionId: string }>(
+      '/api/platform/admin/subscriptions/complimentary',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
 
   listPayments: async (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();

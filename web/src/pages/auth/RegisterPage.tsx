@@ -29,9 +29,14 @@ export const RegisterPage: React.FC = () => {
     invitationToken = inviteMatch[1];
   }
 
+  const planParam = (params.get('plan') || '').toUpperCase();
+  const intervalParam = (params.get('interval') || '').toLowerCase();
+
   // Wizard state (Steps: 1: Type Selection, 2: Account Details, 3: Add Team)
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [practiceType, setPracticeType] = useState<'INDEPENDENT' | 'CLINIC'>('INDEPENDENT');
+  const [practiceType, setPracticeType] = useState<'INDEPENDENT' | 'CLINIC'>(
+    planParam === 'CLINIC' ? 'CLINIC' : 'INDEPENDENT'
+  );
 
   // Form Fields
   const [name, setName] = useState('');
@@ -258,6 +263,29 @@ export const RegisterPage: React.FC = () => {
             {step === 3 && 'Add your team members to get started'}
           </p>
         </div>
+
+        {planParam && (
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '16px',
+              fontSize: '0.8125rem',
+              color: '#166534',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>14-Day Free Trial:</span>
+            <span>
+              {planParam === 'CLINIC' ? 'Clinic Plan' : 'Individual Practitioner Plan'} (
+              {intervalParam === 'annual' ? 'Annual Billing' : 'Monthly Billing'}) selected. 14 days full access included before recurring billing begins.
+            </span>
+          </div>
+        )}
 
         {/* Step Progress Indicator */}
         <div className="onboarding-steps-indicator">

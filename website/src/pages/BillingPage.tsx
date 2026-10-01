@@ -112,7 +112,7 @@ export const BillingPage: React.FC = () => {
               </div>
               <div className="mt-6 pt-4 border-t border-clinical-border">
                 <a
-                  href="https://app.vetrx.brightbase.in/register"
+                  href="https://app.vetrx.brightbase.in/register?plan=INDIVIDUAL&interval=monthly"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block text-center w-full py-2.5 px-4 rounded-xl bg-teal-soft text-teal-dark font-heading font-semibold text-sm hover:bg-teal hover:text-white transition-colors"
@@ -123,10 +123,7 @@ export const BillingPage: React.FC = () => {
             </div>
 
             {/* Clinic */}
-            <div className="p-6 rounded-2xl border-2 border-teal bg-white shadow-md flex flex-col justify-between relative">
-              <div className="absolute -top-3 right-6 bg-teal text-white text-[11px] font-mono font-bold uppercase tracking-wider px-3 py-0.5 rounded-full shadow-sm">
-                Most Popular
-              </div>
+            <div className="p-6 rounded-2xl border-2 border-clinical-border bg-white shadow-sm hover:border-teal/50 hover:shadow-md transition-all flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-xs font-mono font-bold uppercase tracking-wider text-teal-dark bg-teal-soft px-2.5 py-1 rounded-full">
@@ -166,10 +163,10 @@ export const BillingPage: React.FC = () => {
               </div>
               <div className="mt-6 pt-4 border-t border-clinical-border">
                 <a
-                  href="https://app.vetrx.brightbase.in/register"
+                  href="https://app.vetrx.brightbase.in/register?plan=CLINIC&interval=monthly"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block text-center w-full py-2.5 px-4 rounded-xl bg-teal text-white font-heading font-semibold text-sm hover:bg-teal-dark transition-colors shadow-sm"
+                  className="block text-center w-full py-2.5 px-4 rounded-xl bg-teal-soft text-teal-dark font-heading font-semibold text-sm hover:bg-teal hover:text-white transition-colors"
                 >
                   Start 14-Day Free Trial
                 </a>
@@ -195,15 +192,18 @@ export const BillingPage: React.FC = () => {
         {/* Section 3 */}
         <section id="trial-terms" className="scroll-mt-28 space-y-4">
           <h2 className="font-heading font-bold text-2xl text-content-primary border-b border-clinical-border pb-2">
-            3. 14-Day Free Trial Mechanics
+            3. 14-Day Free Trial Mechanics &amp; Recurring Authorization
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            Every new practice registration begins with a 14-day free trial.
+            Every new practice registration begins with an evaluation period:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-content-secondary">
-            <li>You can explore every clinical tool, customize your prescription templates, and invite staff.</li>
-            <li>Official Trial Policy: <em>&ldquo;14 days free. Your selected plan begins after the trial unless you cancel beforehand.&rdquo;</em></li>
-            <li>If you decide not to continue, you can cancel before the trial period concludes.</li>
+            <li><strong>Official Trial Policy:</strong> <em>&ldquo;14 days free. Your selected plan begins after the trial unless you cancel beforehand.&rdquo;</em></li>
+            <li><strong>Zero Subscription Fee During Trial:</strong> The VetRx subscription trial price is ₹0. No subscription charge is levied during the 14-day evaluation.</li>
+            <li><strong>Payment Method Authorization:</strong> Your chosen payment method is registered and authorized during signup for recurring billing through our authorized gateway (PayU).</li>
+            <li><strong>PayU Free-Trial Authorization Amounts:</strong> PayU Hosted Checkout recurring registration adjusts the authorization transaction to ₹2.00 for Credit/Debit Cards and UPI, and ₹0.00 for Net Banking. This is an authorization verification transaction handled according to payment provider rules and is NOT a VetRx subscription fee.</li>
+            <li><strong>Day 12 Reminder:</strong> Exactly two days before trial conclusion, an automated transactional email is sent to your registered billing email disclosing the scheduled first subscription debit, authorized payment method, and simple cancellation links.</li>
+            <li><strong>Cancellation Before Expiration:</strong> You may cancel anytime before the trial concludes under <strong>Settings &rarr; Subscription &amp; Billing</strong> without paying the subscription fee.</li>
           </ul>
         </section>
 
@@ -216,8 +216,8 @@ export const BillingPage: React.FC = () => {
             Practices can choose between monthly and annual payment cycles:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-content-secondary">
-            <li><strong>Monthly Billing:</strong> Billed every 30 days in advance. Offers maximum operational flexibility with zero long-term commitment.</li>
-            <li><strong>Annual Billing:</strong> Billed once per year in advance. Simple, transparent pricing with no per-patient or per-prescription charges.</li>
+            <li><strong>Monthly Billing:</strong> Billed every 30 days in advance (Individual: ₹599/month; Clinic: ₹1,499/month). Maximum operational flexibility with zero long-term commitment.</li>
+            <li><strong>Annual Billing:</strong> Billed once per year in advance (Individual: ₹5,999/year; Clinic: ₹14,999/year). Simple, transparent pricing with no per-patient or per-prescription charges.</li>
           </ul>
         </section>
 
@@ -227,13 +227,12 @@ export const BillingPage: React.FC = () => {
             5. Supported Payment Methods
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            Subscription payments are processed securely through our authorized payment aggregator, PayU, supporting standard Indian domestic payment instruments:
+            Subscription payments and recurring mandate registrations are processed securely through our authorized payment partner, PayU, supporting standard Indian domestic payment instruments:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-content-secondary text-sm">
-            <li>Unified Payments Interface (UPI / QR Code / VPA)</li>
-            <li>Major Indian Debit and Credit Cards (Visa, Mastercard, RuPay)</li>
-            <li>Net Banking across major banks in India</li>
-            <li>Supported digital wallets</li>
+            <li>Unified Payments Interface (UPI AutoPay / Mandates)</li>
+            <li>Major Indian Debit and Credit Cards (Visa, Mastercard, RuPay e-Mandate)</li>
+            <li>Net Banking recurring standing instructions across major Indian banks</li>
           </ul>
         </section>
 

@@ -284,9 +284,38 @@ commercialRouter.get(
   }
 );
 
+/**
+ * GET /api/commercial/payments/:id/receipt
+ * Returns authoritative payment receipt data, and optionally printable HTML view.
+ */
+commercialRouter.get(
+  '/payments/:id/receipt',
+  requirePracticePermission(PERMISSIONS.BILLING_VIEW),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      if (!id) {
+        throw new AppError(400, 'BAD_REQUEST', 'Missing payment ID parameter.');
+      }
+      const receipt = await PaymentService.getPaymentReceipt(id, practiceId);
+      if (req.query.format === 'html') {
+        const html = PaymentService.generateReceiptHtml(receipt);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+        return;
+      }
+      res.status(200).json(receipt);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 const initiatePaymentSchema = z.object({
   planCode: z.string().min(1, 'Target plan code is required'),
   billingInterval: z.enum(['MONTHLY', 'THREE_MONTHS', 'ANNUAL', 'ONE_TIME']).optional(),
+  instrumentType: z.enum(['CARD', 'UPI', 'NETBANKING']).optional(),
 });
 
 /**
@@ -318,6 +347,63 @@ commercialRouter.post(
 );
 
 /**
+ * POST /api/commercial/trial/mandate/create
+ * Initiates PayU free-trial recurring mandate authorization (Cards/UPI ₹2, Net Banking ₹0).
+ */
+commercialRouter.post(
+  '/trial/mandate/create',
+  requirePracticePermission(PERMISSIONS.BILLING_MANAGE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Authenticated user required.');
+      }
+      const { planCode, billingInterval, instrumentType } = initiatePaymentSchema.parse(req.body);
+      const result = await PaymentService.initiateTrialAuthorization({
+        practiceId,
+        userId,
+        planCode,
+        billingInterval,
+        instrumentType,
+      });
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+const cancelTrialSchema = z.object({
+  confirmedDelete: z.boolean().optional(),
+});
+
+/**
+ * POST /api/commercial/trial/cancel
+ * Cancels 14-day trial and optionally performs double-confirmed tenant data deletion.
+ */
+commercialRouter.post(
+  '/trial/cancel',
+  requirePracticePermission(PERMISSIONS.SUBSCRIPTION_MANAGE),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const actorUserId = req.user?.id;
+      const { confirmedDelete } = cancelTrialSchema.parse(req.body);
+      const result = await SubscriptionService.cancelTrialAndPractice({
+        practiceId,
+        confirmedDelete,
+        actorUserId,
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * POST /api/commercial/payments/verify
  * Verifies returning payment callback from PayU (Phase 13).
  */
@@ -325,18 +411,20 @@ commercialRouter.post(
   '/payments/verify',
   requirePracticePermission(PERMISSIONS.BILLING_MANAGE),
   async (req: AuthenticatedRequest, res, next) => {
-  try {
-    const practiceId = getPracticeId(req);
-    const payload = req.body;
-    if (!payload || typeof payload !== 'object') {
-      throw new AppError(400, 'BAD_REQUEST', 'Missing payment callback payload.');
+    try {
+      const practiceId = getPracticeId(req);
+      const payload = req.body;
+      if (!payload || typeof payload !== 'object') {
+        throw new AppError(400, 'BAD_REQUEST', 'Missing payment callback payload.');
+      }
+      const result = await PaymentService.verifyPaymentReturn({
+        practiceId,
+        payload,
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
     }
-    const result = await PaymentService.verifyPaymentReturn({
-      practiceId,
-      payload,
-    });
-    res.status(200).json(result);
-  } catch (err) {
-    next(err);
   }
-});
+);
+

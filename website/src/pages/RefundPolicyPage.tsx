@@ -56,15 +56,16 @@ export const RefundPolicyPage: React.FC = () => {
         {/* Section 1 */}
         <section id="trial" className="scroll-mt-28 space-y-4">
           <h2 className="font-heading font-bold text-2xl text-content-primary border-b border-clinical-border pb-2">
-            1. 14-Day Free Trial
+            1. 14-Day Free Trial &amp; Recurring Mandate Authorization
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            All newly registered veterinary practices are entitled to an initial fourteen (14) calendar day free trial. During this trial period:
+            All newly registered veterinary practices begin with a fourteen (14) calendar day free trial with full feature access:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-content-secondary">
-            <li>Practitioners receive full access to the selected plan features (Individual or Clinic).</li>
-            <li>No upfront payment card or advance deposit is mandatory to experience the core software capabilities.</li>
-            <li>Practitioners may configure practice profiles, add staff, manage appointments, and generate clinical case records without commercial obligation.</li>
+            <li>Practitioners receive full access to their chosen plan features (Individual or Clinic).</li>
+            <li>No subscription fee is charged during the 14-day trial period (subscription fee is ₹0).</li>
+            <li>Your chosen payment method is authorized during signup for recurring billing via PayU. For PayU Hosted Checkout free-trial registration: Cards (₹2 authorization transaction), UPI (₹2 authorization transaction), and Net Banking (₹0 authorization transaction). This is an authorization verification transaction and is not your VetRx subscription fee.</li>
+            <li>Practitioners may configure practice profiles, add staff, manage appointments, and generate clinical case records without immediate billing.</li>
           </ul>
           <div className="p-4 rounded-lg bg-surface-card border border-clinical-border text-sm text-content-secondary italic">
             <strong>Approved Trial Terms:</strong> &ldquo;14 days free. Your selected plan begins after the trial unless you cancel beforehand.&rdquo;
@@ -74,13 +75,13 @@ export const RefundPolicyPage: React.FC = () => {
         {/* Section 2 */}
         <section id="subscription-commencement" className="scroll-mt-28 space-y-4">
           <h2 className="font-heading font-bold text-2xl text-content-primary border-b border-clinical-border pb-2">
-            2. Subscription Commencement
+            2. Day 12 Reminder &amp; Subscription Commencement
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            Upon conclusion of the 14-day trial period, the practice&apos;s chosen subscription plan will automatically initiate unless the subscription is explicitly cancelled prior to the trial expiration timestamp.
+            Exactly two days before trial expiration (Day 12), an automated transactional reminder email is delivered to the registered billing email address, clearly communicating the scheduled charge date, the approved plan price, and cancellation instructions.
           </p>
           <p className="text-content-secondary leading-relaxed">
-            Notification of approaching trial completion is communicated within the web application console and sent to the practitioner&apos;s registered administrative email address.
+            Upon conclusion of the 14-day trial period (Day 14), the practice&apos;s chosen subscription plan will automatically initiate through the authorized payment method unless the subscription is explicitly cancelled prior to the trial expiration timestamp.
           </p>
         </section>
 
