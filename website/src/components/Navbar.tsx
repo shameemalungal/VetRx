@@ -5,11 +5,25 @@ import { VetRxLogo } from './VetRxLogo';
 export const APP_LOGIN_URL = 'https://app.vetrx.brightbase.in/login';
 export const APP_REGISTER_URL = 'https://app.vetrx.brightbase.in/register';
 
+interface NavItem {
+  name: string;
+  href: string;
+  exact?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { name: 'Home', href: '/', exact: true },
+  { name: 'Features', href: '/features' },
+  { name: 'Pricing', href: '/pricing' },
+  { name: 'About', href: '/about' },
+  { name: 'FAQ', href: '/faq' },
+  { name: 'Contact', href: '/contact' },
+];
+
 export const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const isHomePage = location.pathname === '/';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,8 +33,14 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const getSectionHref = (hash: string) => {
-    return isHomePage ? hash : `/${hash}`;
+  const isItemActive = (item: NavItem) => {
+    if (item.exact || item.href === '/') {
+      return location.pathname === '/';
+    }
+    if (item.href === '/pricing') {
+      return location.pathname === '/pricing' || location.pathname === '/billing';
+    }
+    return location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
   };
 
   return (
@@ -46,15 +66,31 @@ export const Navbar: React.FC = () => {
             </span>
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav aria-label="Main Navigation" className="hidden md:flex items-center gap-7 text-sm font-medium text-content-secondary">
-            <a href={getSectionHref('#product')} className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Product</a>
-            <a href={getSectionHref('#workflow')} className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Workflow</a>
-            <a href={getSectionHref('#features')} className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Features</a>
-            <a href={getSectionHref('#use-cases')} className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Use Cases</a>
-            <a href={getSectionHref('#pricing')} className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Pricing</a>
-            <Link to="/about" className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">About</Link>
-            <Link to="/contact" className="hover:text-teal-deep hover:translate-y-[-1px] transition-all">Contact</Link>
+          {/* Desktop Navigation Links with Accessible Route-Aware Active States */}
+          <nav aria-label="Main Navigation" className="hidden md:flex items-center gap-1 lg:gap-2">
+            {NAV_ITEMS.map((item) => {
+              const active = isItemActive(item);
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative px-3.5 py-2 rounded-lg text-sm transition-all duration-200 flex items-center ${
+                    active
+                      ? 'text-teal-deep font-bold bg-teal-50/80 shadow-xs'
+                      : 'text-content-secondary font-medium hover:text-teal-deep hover:bg-teal-50/40'
+                  }`}
+                >
+                  <span>{item.name}</span>
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute bottom-0 left-3 right-3 h-[2.5px] bg-teal rounded-full"
+                    />
+                  )}
+                </Link>
+              );
+            })}
           </nav>
 
           {/* Right Action Items (Login + Primary CTA) */}
@@ -118,63 +154,28 @@ export const Navbar: React.FC = () => {
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden glass-panel border-b border-clinical-border px-5 pt-3 pb-6 space-y-3 animate-calm-float" style={{ animationDuration: '0.2s' }}>
-          <nav className="flex flex-col space-y-1 text-sm font-medium text-content-secondary">
-            <a
-              href={getSectionHref('#product')}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Product
-            </a>
-            <a
-              href={getSectionHref('#workflow')}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Workflow
-            </a>
-            <a
-              href={getSectionHref('#features')}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Features
-            </a>
-            <a
-              href={getSectionHref('#use-cases')}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Use Cases
-            </a>
-            <a
-              href={getSectionHref('#pricing')}
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Pricing
-            </a>
-            <Link
-              to="/about"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              to="/contact"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              Contact
-            </Link>
-            <Link
-              to="/faq"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-3.5 py-2.5 rounded-lg hover:bg-teal-50 hover:text-teal-deep transition-colors"
-            >
-              FAQ
-            </Link>
+          <nav className="flex flex-col space-y-1.5 text-sm">
+            {NAV_ITEMS.map((item) => {
+              const active = isItemActive(item);
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-xl transition-all flex items-center justify-between ${
+                    active
+                      ? 'bg-teal-50 text-teal-deep font-bold border-l-4 border-teal shadow-xs'
+                      : 'text-content-secondary font-medium hover:bg-teal-50/60 hover:text-teal-deep'
+                  }`}
+                >
+                  <span>{item.name}</span>
+                  {active && (
+                    <span aria-hidden="true" className="w-2 h-2 rounded-full bg-teal" />
+                  )}
+                </Link>
+              );
+            })}
           </nav>
           <div className="pt-3 border-t border-clinical-border flex flex-col gap-2">
             <a
@@ -191,4 +192,3 @@ export const Navbar: React.FC = () => {
     </header>
   );
 };
-

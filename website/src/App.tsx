@@ -18,6 +18,8 @@ import { GrievancePage } from './pages/GrievancePage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { FaqPage } from './pages/FaqPage';
+import { PricingPage } from './pages/PricingPage';
+import { FeaturesPage } from './pages/FeaturesPage';
 
 // Scroll to top or target hash on route changes
 const ScrollManager: React.FC = () => {
@@ -94,6 +96,8 @@ export const AppContent: React.FC = () => {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/faq" element={<FaqPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/features" element={<FeaturesPage />} />
           {/* Catch-all fallback */}
           <Route path="*" element={<HomePage />} />
         </Routes>

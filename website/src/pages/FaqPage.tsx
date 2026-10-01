@@ -36,6 +36,36 @@ export const FaqPage: React.FC = () => {
       ),
     },
     {
+      id: 'does-vetrx-provide-treatment',
+      category: 'Product & Scope',
+      question: 'Does VetRx provide veterinary treatment?',
+      answer: (
+        <p>
+          No. VetRx is software used by veterinary professionals to manage their practice and clinical workflows. VetRx does not provide veterinary treatment, physical examinations, medical consultations, surgical care, or healthcare services of any kind.
+        </p>
+      ),
+    },
+    {
+      id: 'does-vetrx-sell-medicines',
+      category: 'Product & Scope',
+      question: 'Does VetRx sell veterinary medicines?',
+      answer: (
+        <p>
+          No. VetRx does not sell, dispense, distribute, market, or deliver veterinary medicines, pharmaceuticals, or medical equipment. VetRx is not an online pharmacy, medical distributor, or drug marketplace. The software provides an internal clinic tool for inventory recording and veterinary dosage calculation.
+        </p>
+      ),
+    },
+    {
+      id: 'is-vetrx-telemedicine',
+      category: 'Product & Scope',
+      question: 'Is VetRx an online veterinary consultation service or telemedicine platform?',
+      answer: (
+        <p>
+          No. VetRx is not an online veterinary consultation platform, telemedicine service, or healthcare provider. We do not connect animal owners with veterinarians for remote treatment or medical advice. VetRx is strictly internal cloud practice-management software used by registered veterinary practices for their own day-to-day operations.
+        </p>
+      ),
+    },
+    {
       id: 'is-it-only-for-pets',
       category: 'Product & Scope',
       question: 'Is VetRx only for pet practice?',
@@ -125,12 +155,22 @@ export const FaqPage: React.FC = () => {
       ),
     },
     {
-      id: 'does-vetrx-handle-payments',
+      id: 'does-vetrx-charge-per-prescription',
       category: 'Pricing & Billing',
-      question: 'Does VetRx handle payments?',
+      question: 'Does VetRx charge per prescription or per patient?',
       answer: (
         <p>
-          VetRx records and tracks patient consultation fees, medications, and procedure charges inside your clinic ledger. Subscriptions for the software itself are processed securely via authorized Indian payment aggregators. The public marketing website does not capture or process payment card details.
+          No. VetRx subscriptions provide unlimited patient records and unlimited prescription generation during your active subscription period. There are no per-prescription, per-patient, or hidden transaction platform fees.
+        </p>
+      ),
+    },
+    {
+      id: 'does-vetrx-handle-payments',
+      category: 'Pricing & Billing',
+      question: 'Does VetRx process veterinary patient payments or hold clinic funds?',
+      answer: (
+        <p>
+          No. VetRx does not collect, process, or settle payments made by pet owners to veterinary practices. The invoicing module is an administrative tool that enables veterinarians to calculate, format, and print itemized bills and receipts for their own practice records. Pet owners pay the clinic directly. VetRx only charges subscription fees to the veterinary practice for software platform access.
         </p>
       ),
     },

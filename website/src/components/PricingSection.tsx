@@ -20,7 +20,7 @@ export const PricingSection: React.FC = () => {
             Simple, transparent pricing.
           </h2>
           <p className="text-base sm:text-lg text-content-secondary mt-3 max-w-2xl mx-auto leading-relaxed">
-            No per-patient or per-prescription charges. Choose the tier that matches your practice structure.
+            Choose monthly or annual access. No per-patient or per-prescription charges. Subscriptions provide access to VetRx practice-management features for the selected billing period.
           </p>
 
           {/* Interactive Monthly vs Annual Toggle */}

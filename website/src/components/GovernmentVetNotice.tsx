@@ -14,11 +14,11 @@ export const GovernmentVetNotice: React.FC = () => {
             </div>
 
             <h3 className="font-heading font-extrabold text-2xl sm:text-3xl lg:text-4xl text-content-primary tracking-tight">
-              Designed for government-approved private-practice workflows
+              Supports permitted private-practice workflows
             </h3>
 
             <p className="text-sm sm:text-base text-content-secondary leading-relaxed font-sans">
-              Government veterinary officers may use VetRx for private-practice workflows where such practice is permitted under applicable government orders, service rules, permissions and other requirements.
+              Government veterinary officers may use VetRx for private-practice workflows where such practice is permitted under applicable government orders, service rules, and permissions. VetRx supports invoice workflows that can accommodate applicable State Government prescribed private-practice service rates.
             </p>
 
             <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-content-primary font-medium">

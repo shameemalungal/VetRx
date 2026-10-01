@@ -11,11 +11,19 @@ export const FaqSection: React.FC = () => {
   const faqs: FaqItem[] = [
     {
       q: 'What is VetRx?',
-      a: 'VetRx is a dedicated veterinary practice management and electronic prescribing platform. It connects patient signalment, clinical history, weight-calibrated drug dosages, multi-drug SIG instructions, treatment packages, and itemized INR billing into one unified software console.',
+      a: 'VetRx is a veterinary practice management software platform. It connects patient signalment, clinical history, weight-calibrated drug dosages, multi-drug SIG instructions, treatment packages, and itemized practice billing into one unified software console.',
+    },
+    {
+      q: 'Does VetRx provide veterinary treatment or sell medicines?',
+      a: 'No. VetRx is software used by veterinary professionals to manage their own clinical workflows. VetRx does not provide veterinary medical treatment, diagnostic services, online consultations, nor does it sell, dispense, or broker medicines or medical supplies.',
     },
     {
       q: 'Who is VetRx designed for?',
-      a: 'VetRx is built for veterinary practitioners across private practice, mobile/doorstep services, outpatient surgical clinics, collaborative multi-doctor clinics, and government veterinarians operating permitted evening private-practice consults.',
+      a: 'VetRx is built for veterinary practitioners across private practice, mobile/doorstep services, outpatient surgical clinics, collaborative multi-doctor clinics, and government veterinarians operating permitted private-practice consults.',
+    },
+    {
+      q: 'Does VetRx process payments from pet owners?',
+      a: 'No. Pet owners pay the veterinary clinic directly. VetRx provides invoicing and receipt printing tools for the clinic, but does not collect or process patient consultation payments. Subscriptions are solely for clinic access to the software.',
     },
     {
       q: 'Can an individual veterinarian use VetRx?',

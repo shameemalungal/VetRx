@@ -95,6 +95,10 @@ export const Hero: React.FC = () => {
               Login to your clinical console →
             </a>
           </p>
+
+          <p className="text-xs text-content-secondary/80 max-w-xl mx-auto leading-relaxed pt-1">
+            VetRx is a software platform for veterinary professionals. Subscriptions provide access to VetRx practice-management features for the selected billing period.
+          </p>
         </div>
 
         {/* Hero Visual: Layered Product Composition with Floating Dashboard Cards */}

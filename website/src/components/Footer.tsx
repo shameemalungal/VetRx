@@ -17,9 +17,8 @@ export const Footer: React.FC = () => {
             <Link to="/" className="inline-flex items-center group focus:outline-none hover:opacity-95 transition-opacity" aria-label="VetRx Home">
               <VetRxLogo size={36} variant="white" />
             </Link>
-            <p className="text-xs sm:text-sm text-teal-100/70 leading-relaxed max-w-sm font-normal">
-              Simplify your practice. Focus on better treatment. Built in India, engineered around the real day-to-day
-              realities of veterinary practice.
+            <p className="text-xs text-teal-100/70 leading-relaxed max-w-sm font-normal">
+              VetRx is a software platform for veterinary professionals. Subscriptions provide access to practice-management features for the selected billing period.
             </p>
             <div className="text-xs font-mono text-aqua pt-1">
               Platform Gateway:{' '}
@@ -47,11 +46,11 @@ export const Footer: React.FC = () => {
           <div className="space-y-3.5">
             <h4 className="text-xs font-mono uppercase font-bold text-aqua tracking-wider">Product</h4>
             <ul className="space-y-2.5 text-xs text-teal-100/75">
-              <li><a href="/#features" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="/#workflow" className="hover:text-white transition-colors">Workflow</a></li>
-              <li><a href="/#use-cases" className="hover:text-white transition-colors">Use Cases</a></li>
-              <li><Link to="/billing" className="hover:text-white transition-colors">Pricing &amp; Plans</Link></li>
+              <li><Link to="/features" className="hover:text-white transition-colors">Features</Link></li>
+              <li><Link to="/pricing" className="hover:text-white transition-colors">Pricing &amp; Plans</Link></li>
+              <li><Link to="/about" className="hover:text-white transition-colors">About VetRx</Link></li>
               <li><Link to="/faq" className="hover:text-white transition-colors">FAQ</Link></li>
+              <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
             </ul>
           </div>
 
