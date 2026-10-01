@@ -6,6 +6,8 @@
 // ==============================================================================
 
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuditService } from '../lib/audit.service.js';
@@ -976,7 +978,11 @@ export class PaymentService {
     }
 
     let practiceName = 'Veterinary Practice';
+    let customerName = 'Practice Owner';
     let billingEmail = 'doctor@vetrx.in';
+    let billingPhone = '';
+    let subscriptionPeriod = '';
+
     if (process.env.VETRX_FAST_TEST !== '1') {
       const practice = await prisma.practice.findUnique({
         where: { id: practiceId },
@@ -987,7 +993,22 @@ export class PaymentService {
       });
       if (practice) {
         practiceName = practice.name;
+        customerName = practice.owner?.name || customerName;
         billingEmail = practice.settings?.email || practice.owner?.email || billingEmail;
+        billingPhone = practice.settings?.phone || '';
+      }
+    }
+
+    if (payment.subscriptionId && process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const sub = await prisma.subscription.findUnique({
+          where: { id: payment.subscriptionId },
+        });
+        if (sub) {
+          subscriptionPeriod = `${new Date(sub.currentPeriodStart).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} – ${new Date(sub.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+      } catch (e) {
+        // Safe fallback
       }
     }
 
@@ -1003,9 +1024,12 @@ export class PaymentService {
       internalReference: payment.internalReference,
       gatewayTransactionId: payment.gatewayTransactionId || payment.internalReference,
       practiceName,
+      customerName,
       billingEmail,
+      billingPhone: billingPhone || undefined,
       planName,
       billingInterval,
+      subscriptionPeriod: subscriptionPeriod || raw.subscriptionPeriod || undefined,
       amountPaisa: payment.amountPaisa,
       amountRupees: (payment.amountPaisa / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       currency: 'INR',
@@ -1023,6 +1047,23 @@ export class PaymentService {
    * Generates a clean, professional, print/PDF-ready HTML layout for the payment receipt.
    */
   static generateReceiptHtml(receipt: any): string {
+    let logoSrc = receipt.logoBase64 || '';
+    if (!logoSrc) {
+      try {
+        const logoPath = path.resolve('web/public/vetrx_logo_horizontal.png');
+        if (fs.existsSync(logoPath)) {
+          const b64 = fs.readFileSync(logoPath).toString('base64');
+          logoSrc = `data:image/png;base64,${b64}`;
+        }
+      } catch (e) {
+        // Fallback to URL
+        logoSrc = 'https://app.vetrx.brightbase.in/vetrx_logo_horizontal.png';
+      }
+    }
+    if (!logoSrc) {
+      logoSrc = 'https://app.vetrx.brightbase.in/vetrx_logo_horizontal.png';
+    }
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1031,48 +1072,54 @@ export class PaymentService {
   <title>Payment Receipt - ${receipt.receiptNumber}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; color: #0f172a; margin: 0; padding: 40px; background: #f8fafc; }
-    .receipt-container { max-width: 680px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 24px; margin-bottom: 24px; }
-    .brand-title { font-size: 26px; font-weight: 800; color: #0d9488; margin: 0; }
+    .receipt-container { max-width: 720px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #00685f; padding-bottom: 24px; margin-bottom: 24px; }
+    .brand-title { font-size: 26px; font-weight: 800; color: #00685f; margin: 0; }
     .brand-sub { font-size: 13px; color: #475569; margin-top: 4px; }
     .receipt-badge { background: #ccfbf1; color: #0f766e; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
     .label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; }
-    .value { font-size: 14px; font-weight: 600; color: #1e293b; }
+    .value { font-size: 15px; font-weight: 700; color: #0f172a; }
     .table { width: 100%; border-collapse: collapse; margin: 24px 0; }
     .table th { background: #f1f5f9; padding: 12px; text-align: left; font-size: 12px; font-weight: 700; color: #475569; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
     .table td { padding: 14px 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #1e293b; }
-    .total-row { font-size: 16px; font-weight: 800; color: #0d9488; }
+    .total-row { font-size: 17px; font-weight: 800; color: #00685f; }
     .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center; line-height: 1.6; }
-    .print-btn { display: block; margin: 20px auto 0; padding: 10px 20px; background: #0d9488; color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; }
+    .print-btn { display: block; margin: 24px auto 0; padding: 10px 24px; background: #00685f; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
     @media print { .print-btn { display: none; } body { background: #fff; padding: 0; } .receipt-container { border: none; box-shadow: none; padding: 0; } }
   </style>
 </head>
 <body>
   <div class="receipt-container">
     <div class="header">
-      <div>
-        <h1 class="brand-title">VetRx</h1>
-        <div class="brand-sub">${receipt.entityName}</div>
-        <div class="brand-sub">${receipt.entityAddress}</div>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <img src="${logoSrc}" alt="VetRx Stitch Logo" style="height: 48px; width: auto; max-width: 190px; object-fit: contain;" />
+        <div>
+          <div style="font-size: 15px; font-weight: 800; color: #0f172a; letter-spacing: -0.2px;">${receipt.entityName}</div>
+          <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${receipt.entityAddress}</div>
+        </div>
       </div>
       <div style="text-align: right;">
-        <span class="receipt-badge">PAID</span>
+        <span class="receipt-badge">${receipt.status || 'PAID'}</span>
         <div style="font-size: 13px; font-weight: 700; margin-top: 8px;">Receipt #${receipt.receiptNumber}</div>
-        <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${new Date(receipt.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+        <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Payment Date: ${new Date(receipt.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
       </div>
     </div>
 
     <div class="grid">
       <div>
-        <div class="label">Billed To</div>
+        <div class="label">Billed To Practice</div>
         <div class="value">${receipt.practiceName}</div>
+        ${receipt.customerName ? `<div style="font-size: 13px; font-weight: 600; color: #334155; margin-top: 2px;">Customer: ${receipt.customerName}</div>` : ''}
         <div style="font-size: 13px; color: #64748b;">${receipt.billingEmail}</div>
+        ${receipt.billingPhone ? `<div style="font-size: 12px; color: #64748b;">Phone: ${receipt.billingPhone}</div>` : ''}
       </div>
       <div>
         <div class="label">Payment Details</div>
-        <div class="value">Method: ${receipt.paymentMethod}</div>
+        <div class="value">Payment Status: <span style="color: #00685f; font-weight: 700;">${receipt.status || 'PAID'}</span></div>
+        <div style="font-size: 13px; color: #334155; margin-top: 2px;">Method: ${receipt.paymentMethod}</div>
         <div style="font-size: 12px; color: #64748b; font-family: monospace;">Ref: ${receipt.gatewayTransactionId}</div>
+        ${receipt.subscriptionPeriod ? `<div style="font-size: 12px; color: #64748b; margin-top: 2px;">Coverage: ${receipt.subscriptionPeriod}</div>` : ''}
       </div>
     </div>
 
@@ -1086,7 +1133,10 @@ export class PaymentService {
       </thead>
       <tbody>
         <tr>
-          <td><strong>${receipt.planName}</strong></td>
+          <td>
+            <strong>${receipt.planName}</strong>
+            ${receipt.subscriptionPeriod ? `<div style="font-size: 12px; color: #64748b; margin-top: 3px;">Coverage Period: ${receipt.subscriptionPeriod}</div>` : ''}
+          </td>
           <td>${receipt.billingInterval}</td>
           <td style="text-align: right; font-weight: 600;">₹${receipt.amountRupees}</td>
         </tr>
@@ -1099,8 +1149,8 @@ export class PaymentService {
 
     <div class="footer">
       <p><strong>${receipt.taxNotice}</strong></p>
-      <p>Thank you for using VetRx. Built in India, engineered around the real day-to-day realities of veterinary practice.</p>
-      <p>Questions? Contact support: <a href="mailto:supportvetrx@gmail.com" style="color: #0d9488;">supportvetrx@gmail.com</a></p>
+      <p>Thank you for choosing VetRx by Praxivon Technologies Private Limited.</p>
+      <p>Questions? Contact support: <a href="mailto:supportvetrx@gmail.com" style="color: #00685f;">supportvetrx@gmail.com</a></p>
     </div>
     <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
   </div>

@@ -102,7 +102,8 @@ export interface ComplimentarySubscriptionRequestDTO {
   email: string;
   accessType: 'INDIVIDUAL' | 'CLINIC';
   interval?: 'MONTHLY' | 'ANNUAL';
-  durationMonths: number;
+  durationMonths?: number;
+  isUnlimited?: boolean;
   reason: string;
 }
 

@@ -252,6 +252,35 @@ export const RegisterPage: React.FC = () => {
   return (
     <div className="auth-container">
       <div className={`auth-card ${(step === 3 || (step === 2 && practiceType === 'CLINIC')) ? 'auth-card-wide' : ''}`}>
+        <div className="auth-top-nav">
+          {step === 1 ? (
+            <a
+              href="https://vetrx.brightbase.in/#pricing"
+              className="auth-back-btn"
+              id="register-back-to-pricing"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back to Pricing</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="auth-back-btn"
+              onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
+              id="register-step-back"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+              <span>Back</span>
+            </button>
+          )}
+        </div>
+
         <div className="auth-header">
           <div className="auth-logo-badge">
             <VetRxLogo size={32} />
@@ -264,28 +293,29 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
 
-        {planParam && (
-          <div
-            style={{
-              background: '#f0fdf4',
-              border: '1px solid #bbf7d0',
-              borderRadius: '8px',
-              padding: '10px 14px',
-              marginBottom: '16px',
-              fontSize: '0.8125rem',
-              color: '#166534',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <span style={{ fontWeight: 700 }}>14-Day Free Trial:</span>
-            <span>
-              {planParam === 'CLINIC' ? 'Clinic Plan' : 'Individual Practitioner Plan'} (
-              {intervalParam === 'annual' ? 'Annual Billing' : 'Monthly Billing'}) selected. 14 days full access included before recurring billing begins.
-            </span>
-          </div>
-        )}
+        <div
+          className="auth-trial-banner"
+          id="auth-trial-banner"
+          data-plan={practiceType === 'CLINIC' ? 'CLINIC' : 'INDIVIDUAL'}
+          style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            marginBottom: '16px',
+            fontSize: '0.8125rem',
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>14-Day Free Trial:</span>
+          <span>
+            {practiceType === 'CLINIC' ? 'Clinic Plan' : 'Individual Practitioner Plan'} (
+            {intervalParam === 'annual' ? 'Annual Billing' : 'Monthly Billing'}) selected. 14 days full access included before recurring billing begins.
+          </span>
+        </div>
 
         {/* Step Progress Indicator */}
         <div className="onboarding-steps-indicator">
@@ -324,11 +354,15 @@ export const RegisterPage: React.FC = () => {
             <div className="onboarding-type-options">
               <label
                 className={`onboarding-type-card ${practiceType === 'INDEPENDENT' ? 'selected' : ''}`}
+                id="plan-card-individual"
+                data-testid="plan-card-individual"
                 onClick={() => setPracticeType('INDEPENDENT')}
               >
                 <input
                   type="radio"
                   name="practiceType"
+                  id="radio-practice-individual"
+                  data-testid="radio-practice-individual"
                   className="onboarding-type-radio"
                   checked={practiceType === 'INDEPENDENT'}
                   onChange={() => setPracticeType('INDEPENDENT')}
@@ -342,11 +376,15 @@ export const RegisterPage: React.FC = () => {
 
               <label
                 className={`onboarding-type-card ${practiceType === 'CLINIC' ? 'selected' : ''}`}
+                id="plan-card-clinic"
+                data-testid="plan-card-clinic"
                 onClick={() => setPracticeType('CLINIC')}
               >
                 <input
                   type="radio"
                   name="practiceType"
+                  id="radio-practice-clinic"
+                  data-testid="radio-practice-clinic"
                   className="onboarding-type-radio"
                   checked={practiceType === 'CLINIC'}
                   onChange={() => setPracticeType('CLINIC')}

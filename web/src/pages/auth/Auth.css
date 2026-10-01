@@ -40,6 +40,40 @@
   margin-bottom: 28px;
 }
 
+/* ── Auth Top Navigation ─────────────────────────────────────────── */
+.auth-top-nav {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.auth-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  margin-left: -8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.auth-back-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.auth-back-btn:focus-visible {
+  outline: 2px solid #00685f;
+  outline-offset: 2px;
+}
+
 .auth-logo-badge {
   display: inline-flex;
   align-items: center;

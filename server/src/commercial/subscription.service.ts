@@ -42,6 +42,7 @@ export class SubscriptionService {
     trialEndsAt: Date | null;
     currentPeriodEnd: Date;
     gracePeriodEndsAt: Date | null;
+    metadata?: any;
   }): SubscriptionStatus {
     const now = new Date();
     let status = sub.status as SubscriptionStatus;
@@ -51,6 +52,10 @@ export class SubscriptionService {
     }
 
     if (status === 'ACTIVE' && now > sub.currentPeriodEnd) {
+      const meta = (sub.metadata as any) || {};
+      if (meta.source === 'COMPLIMENTARY' && meta.isUnlimited) {
+        return 'ACTIVE';
+      }
       if (sub.gracePeriodEndsAt && now < sub.gracePeriodEndsAt) {
         return 'GRACE_PERIOD';
       }
@@ -1154,15 +1159,18 @@ export class SubscriptionService {
     email: string;
     accessType: 'INDIVIDUAL' | 'CLINIC';
     interval?: 'MONTHLY' | 'ANNUAL';
-    durationMonths: number;
+    durationMonths?: number;
+    isUnlimited?: boolean;
     reason: string;
     actorUserId: string;
   }): Promise<SubscriptionDTO> {
-    const { email, accessType, durationMonths, reason, actorUserId } = params;
+    const { email, accessType, durationMonths, isUnlimited: reqIsUnlimited, reason, actorUserId } = params;
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!durationMonths || durationMonths < 1 || durationMonths > 36) {
-      throw new AppError(400, 'INVALID_DURATION', 'Complimentary access duration must be between 1 and 36 months.');
+    const isUnlimited = reqIsUnlimited === true;
+
+    if (!isUnlimited && (durationMonths === undefined || durationMonths === null || durationMonths < 1 || durationMonths > 36)) {
+      throw new AppError(400, 'INVALID_DURATION', 'Complimentary access duration must be between 1 and 36 months, or specify isUnlimited=true for unlimited access.');
     }
 
     const planCode = accessType === 'CLINIC'
@@ -1175,13 +1183,22 @@ export class SubscriptionService {
     }
 
     const now = new Date();
-    const periodEnd = new Date(now.getTime() + durationMonths * 30 * 24 * 60 * 60 * 1000);
+    // For unlimited access, currentPeriodEnd is set to 2099-12-31 to represent indefinite access while satisfying Prisma non-null DateTime
+    const periodEnd = isUnlimited
+      ? new Date('2099-12-31T23:59:59.999Z')
+      : new Date(now.getTime() + (durationMonths || 1) * 30 * 24 * 60 * 60 * 1000);
 
     if (process.env.VETRX_FAST_TEST === '1') {
       const mockSub = {
         id: `sub_comp_${Date.now()}`,
         practiceId: `practice_for_${normalizedEmail}`,
         planId: `plan_${planCode.toLowerCase()}`,
+        planCode,
+        plan: {
+          id: `plan_${planCode.toLowerCase()}`,
+          code: planCode,
+          name: planConfig.name,
+        },
         status: 'ACTIVE',
         trialStartsAt: null,
         trialEndsAt: null,
@@ -1195,7 +1212,8 @@ export class SubscriptionService {
           source: 'COMPLIMENTARY',
           grantedBy: actorUserId,
           grantedAt: now.toISOString(),
-          durationMonths,
+          durationMonths: isUnlimited ? null : durationMonths,
+          isUnlimited,
           reason,
           accessType,
         },
@@ -1268,7 +1286,8 @@ export class SubscriptionService {
             source: 'COMPLIMENTARY',
             grantedBy: actorUserId,
             grantedAt: now.toISOString(),
-            durationMonths,
+            durationMonths: isUnlimited ? null : durationMonths,
+            isUnlimited,
             reason,
             accessType,
           } as any,
@@ -1288,7 +1307,8 @@ export class SubscriptionService {
             source: 'COMPLIMENTARY',
             grantedBy: actorUserId,
             grantedAt: now.toISOString(),
-            durationMonths,
+            durationMonths: isUnlimited ? null : durationMonths,
+            isUnlimited,
             reason,
             accessType,
           },
@@ -1307,13 +1327,90 @@ export class SubscriptionService {
         recipientEmail: normalizedEmail,
         accessType,
         planCode: planConfig.code,
-        durationMonths,
+        durationMonths: isUnlimited ? null : durationMonths,
+        isUnlimited,
         reason,
         grantedBy: actorUserId,
       },
     });
 
     return this.mapToDTO(updatedSub);
+  }
+
+  /**
+   * Super Admin only: Revokes complimentary access immediately.
+   */
+  static async revokeComplimentarySubscription(
+    identifier: string,
+    actorUserId: string,
+    reason?: string
+  ): Promise<SubscriptionDTO> {
+    const now = new Date();
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      let sub = EntitlementService.getMockSubscription(identifier);
+      if (!sub) {
+        sub = EntitlementService.getMockSubscription(`practice_for_${identifier}`) || {
+          id: identifier,
+          practiceId: identifier,
+          status: 'ACTIVE',
+          metadata: { source: 'COMPLIMENTARY' },
+        };
+      }
+      sub.status = 'CANCELLED';
+      sub.cancelledAt = now;
+      sub.currentPeriodEnd = now;
+      sub.metadata = {
+        ...(sub.metadata || {}),
+        revokedAt: now.toISOString(),
+        revokedBy: actorUserId,
+        revokeReason: reason,
+      };
+      EntitlementService.setMockSubscription(sub.practiceId, sub);
+      return this.mapToDTO(sub);
+    }
+
+    const sub = await prisma.subscription.findFirst({
+      where: {
+        OR: [{ id: identifier }, { practiceId: identifier }],
+      },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!sub) {
+      throw new AppError(404, 'NOT_FOUND', `Subscription not found for identifier: ${identifier}`);
+    }
+
+    const updated = await prisma.subscription.update({
+      where: { id: sub.id },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: now,
+        currentPeriodEnd: now,
+        metadata: {
+          ...((sub.metadata as any) || {}),
+          revokedAt: now.toISOString(),
+          revokedBy: actorUserId,
+          revokeReason: reason,
+        } as any,
+      },
+      include: { plan: true },
+    });
+
+    void AuditService.record({
+      practiceId: sub.practiceId,
+      userId: actorUserId,
+      action: 'REVOKE_COMPLIMENTARY_SUBSCRIPTION',
+      resource: 'Subscription',
+      resourceId: sub.id,
+      details: {
+        revokedBy: actorUserId,
+        reason: reason || 'Revoked by Platform Super Admin',
+      },
+    });
+
+    return this.mapToDTO(updated);
   }
 
   /**
@@ -1462,6 +1559,8 @@ export class SubscriptionService {
         planName: s.plan.name,
         status: s.status,
         source: meta.source || 'PAID',
+        isUnlimited: !!meta.isUnlimited,
+        metadata: meta,
         currentPeriodStart: s.currentPeriodStart.toISOString(),
         currentPeriodEnd: s.currentPeriodEnd.toISOString(),
         seatsAllowed: s.plan.maxUserSeats,

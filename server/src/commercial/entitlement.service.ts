@@ -76,7 +76,10 @@ export class EntitlementService {
       if (status === 'TRIAL' && sub.trialEndsAt && now > new Date(sub.trialEndsAt)) {
         status = 'EXPIRED';
       } else if (status === 'ACTIVE' && sub.currentPeriodEnd && now > new Date(sub.currentPeriodEnd)) {
-        if (sub.gracePeriodEndsAt && now < new Date(sub.gracePeriodEndsAt)) {
+        const meta = (sub.metadata as any) || {};
+        if (meta.source === 'COMPLIMENTARY' && meta.isUnlimited) {
+          // Unlimited complimentary access never expires unless revoked
+        } else if (sub.gracePeriodEndsAt && now < new Date(sub.gracePeriodEndsAt)) {
           status = 'GRACE_PERIOD';
         } else {
           status = 'EXPIRED';

@@ -113,7 +113,7 @@ export const PricingSection: React.FC = () => {
               href={`${APP_REGISTER_BASE}?plan=INDIVIDUAL&interval=${billingCycle}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold bg-white text-content-primary hover:bg-teal-50 hover:text-teal-dark border border-slate-200 hover:border-teal/40 transition-all shadow-xs"
+              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold text-white gradient-teal-aqua hover:opacity-95 shadow-md hover:shadow-card-lift hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-teal focus:ring-offset-2 transition-all duration-200 block"
             >
               Start 14-Day Free Trial
             </a>
@@ -178,7 +178,7 @@ export const PricingSection: React.FC = () => {
               href={`${APP_REGISTER_BASE}?plan=CLINIC&interval=${billingCycle}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold bg-white text-content-primary hover:bg-teal-50 hover:text-teal-dark border border-slate-200 hover:border-teal/40 transition-all shadow-xs"
+              className="w-full py-3.5 px-4 rounded-xl text-center text-xs font-heading font-bold text-white gradient-teal-aqua hover:opacity-95 shadow-md hover:shadow-card-lift hover:-translate-y-0.5 active:translate-y-0 focus:outline-none focus:ring-2 focus:ring-teal focus:ring-offset-2 transition-all duration-200 block"
             >
               Start 14-Day Free Trial
             </a>

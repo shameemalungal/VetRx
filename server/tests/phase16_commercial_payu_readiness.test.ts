@@ -428,13 +428,54 @@ describe('Phase 16: Commercial & PayU Production Readiness Master Test Suite', (
           await SubscriptionService.grantComplimentarySubscription({
             email: 'collaborator2@vetrx.in',
             accessType: 'INDIVIDUAL',
-            durationMonths: 0, // Invalid: min 1 month
+            durationMonths: 0, // Invalid: min 1 month when not unlimited
             reason: 'Test',
             actorUserId: 'super-admin-root',
           });
         },
         (err: any) => err instanceof AppError && err.statusCode === 400
       );
+    });
+
+    it('I3: Grants unlimited complimentary access without expiry and verifies entitlement status remains active', async () => {
+      const sub = await SubscriptionService.grantComplimentarySubscription({
+        email: 'founder-fellow@vetrx.in',
+        accessType: 'CLINIC',
+        isUnlimited: true,
+        reason: 'Lifetime Research Fellow',
+        actorUserId: 'super-admin-root',
+      });
+
+      assert.ok(sub.id);
+      assert.strictEqual(sub.status, 'ACTIVE');
+      assert.strictEqual((sub.metadata as any)?.source, 'COMPLIMENTARY');
+      assert.strictEqual((sub.metadata as any)?.isUnlimited, true);
+
+      // Verify entitlement evaluation never flags as expired
+      const entitlement = await EntitlementService.resolvePracticeEntitlements(sub.practiceId);
+      assert.strictEqual(entitlement.status, 'ACTIVE');
+      assert.strictEqual(entitlement.isReadOnly, false);
+      assert.strictEqual(entitlement.limits.maxVeterinarianSeats, 5);
+    });
+
+    it('I4: Revokes complimentary access and verifies immediate status update', async () => {
+      const sub = await SubscriptionService.grantComplimentarySubscription({
+        email: 'temp-guest@vetrx.in',
+        accessType: 'INDIVIDUAL',
+        durationMonths: 1,
+        reason: 'Short audit access',
+        actorUserId: 'super-admin-root',
+      });
+
+      const revoked = await SubscriptionService.revokeComplimentarySubscription(
+        sub.practiceId,
+        'super-admin-root',
+        'Audit concluded'
+      );
+
+      assert.strictEqual(revoked.status, 'CANCELLED');
+      assert.strictEqual((revoked.metadata as any)?.revokedBy, 'super-admin-root');
+      assert.strictEqual((revoked.metadata as any)?.revokeReason, 'Audit concluded');
     });
   });
 

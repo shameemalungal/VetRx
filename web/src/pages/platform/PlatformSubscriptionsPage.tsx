@@ -164,7 +164,9 @@ export const PlatformSubscriptionsPage: React.FC = () => {
                   </td>
                   <td style={{ fontSize: '0.8125rem', color: '#475569' }}>
                     {new Date(s.currentPeriodStart).toLocaleDateString('en-IN')} –{' '}
-                    {new Date(s.currentPeriodEnd).toLocaleDateString('en-IN')}
+                    {(s as any).isUnlimited || (s.metadata as any)?.isUnlimited || new Date(s.currentPeriodEnd).getFullYear() > 2090
+                      ? 'Unlimited Access'
+                      : new Date(s.currentPeriodEnd).toLocaleDateString('en-IN')}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>
@@ -246,7 +248,7 @@ export const PlatformSubscriptionsPage: React.FC = () => {
                     style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.875rem', background: '#fff' }}
                   >
                     <option value="INDIVIDUAL">Individual (1 Vet)</option>
-                    <option value="CLINIC">Clinic (Up to 5 Vets)</option>
+                    <option value="CLINIC">Clinic (1 Veterinarian + 5 Staff)</option>
                   </select>
                 </div>
 
@@ -265,6 +267,7 @@ export const PlatformSubscriptionsPage: React.FC = () => {
                     <option value={12}>12 Months (1 Year)</option>
                     <option value={24}>24 Months (2 Years)</option>
                     <option value={36}>36 Months (3 Years)</option>
+                    <option value={0}>Unlimited Access</option>
                   </select>
                 </div>
               </div>

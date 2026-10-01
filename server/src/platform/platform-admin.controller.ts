@@ -868,7 +868,8 @@ const complimentaryAccessSchema = z.object({
   email: z.string().email('Valid recipient email address is required'),
   accessType: z.enum(['INDIVIDUAL', 'CLINIC']),
   interval: z.enum(['MONTHLY', 'ANNUAL']).optional(),
-  durationMonths: z.number().int().min(1).max(36),
+  durationMonths: z.number().int().min(0).max(36).optional(),
+  isUnlimited: z.boolean().optional(),
   reason: z.string().min(1, 'Internal reason or note is required'),
 });
 
@@ -876,17 +877,41 @@ platformAdminRouter.post('/subscriptions/complimentary', async (req: Authenticat
   try {
     const actorUserId = req.user?.id;
     if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
-    const { email, accessType, interval, durationMonths, reason } = complimentaryAccessSchema.parse(req.body);
+    const { email, accessType, interval, durationMonths, isUnlimited, reason } = complimentaryAccessSchema.parse(req.body);
     const subscription = await SubscriptionService.grantComplimentarySubscription({
       email,
       accessType,
       interval,
-      durationMonths,
+      durationMonths: durationMonths === 0 ? undefined : durationMonths,
+      isUnlimited: isUnlimited === true || durationMonths === 0,
       reason,
       actorUserId,
     });
     res.status(201).json({
       message: 'Complimentary access granted successfully.',
+      subscription,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const revokeComplimentarySchema = z.object({
+  reason: z.string().optional(),
+});
+
+platformAdminRouter.post('/subscriptions/:id/revoke', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const { reason } = revokeComplimentarySchema.parse(req.body || {});
+    const subscription = await SubscriptionService.revokeComplimentarySubscription(
+      String(req.params.id),
+      actorUserId,
+      reason
+    );
+    res.status(200).json({
+      message: 'Complimentary access revoked successfully.',
       subscription,
     });
   } catch (err) {

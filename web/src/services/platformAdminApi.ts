@@ -147,6 +147,8 @@ export interface PlatformSubscriptionItem {
   isOwnerClinicalApprover: boolean;
   source?: string;
   notes?: string;
+  isUnlimited?: boolean;
+  metadata?: Record<string, any> | null;
 }
 
 export interface PlatformPaymentItem {
