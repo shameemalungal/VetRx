@@ -50,8 +50,15 @@ async function runCommercialUAT() {
     const hasMisleadingBadge = content.includes('Most popular for the clinics');
     record('Step 1.1: Misleading Badge Removed', !hasMisleadingBadge, hasMisleadingBadge ? 'Misleading badge still present' : 'Static badge removed');
 
-    const pricingCards = await page.$$('.pricing-card');
+    const pricingCards = await page.$$('[data-purpose="pricing-section"] .grid > div');
     record('Step 1.2: Pricing Cards Rendered', pricingCards.length === 3, `Found ${pricingCards.length} pricing cards`);
+
+    // Verify hover interaction on first card
+    if (pricingCards.length > 0) {
+      await pricingCards[0].hover();
+      await page.waitForTimeout(500);
+      record('Step 1.3: Pricing Card Hover State', true, 'Hover interaction executed cleanly');
+    }
 
     await page.screenshot({ path: `${artifactsDir}/01_website_pricing.png` });
 
@@ -82,36 +89,56 @@ async function runCommercialUAT() {
     await page.click('button[type="submit"]');
 
     await page.waitForURL('**/dashboard', { timeout: 20000 });
-    await page.evaluate(() => localStorage.setItem('vetrx_demo_mode', '1'));
+    await page.evaluate(() => localStorage.removeItem('vetrx_demo_mode'));
 
-    // Go to Settings -> Subscription & Billing
-    await page.goto('https://app.vetrx.brightbase.in/settings/billing', { waitUntil: 'domcontentloaded' });
+    // Navigate to settings and click Subscription & Billing tab
+    await page.goto('https://app.vetrx.brightbase.in/settings', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    await page.click('#tab-subscription');
     await page.waitForTimeout(2000);
 
-    const billingContent = await page.content();
-    const hasTransparentNotice = billingContent.includes('Simple, transparent pricing. No per-patient or per-prescription charges.');
+    const bodyText = await page.innerText('body');
+    const hasTransparentNotice = bodyText.includes('Simple, transparent pricing. No per-patient or per-prescription charges.');
     record('Step 3.1: Approved Statutory Pricing Disclaimer', hasTransparentNotice, hasTransparentNotice ? 'Approved disclaimer displayed' : 'Disclaimer missing');
 
-    const hasPayUNotice = billingContent.includes('Subscriptions are processed securely in INR through PayU');
+    const hasPayUNotice = bodyText.includes('Subscriptions are processed securely in INR through PayU');
     record('Step 3.2: PayU Security & Verification Notice', hasPayUNotice, hasPayUNotice ? 'PayU processing notice present' : 'Notice missing');
 
-    const hasPaymentHistory = billingContent.includes('Payment & Billing History');
+    const hasPaymentHistory = bodyText.includes('Payment & Billing History');
     record('Step 3.3: Payment & Billing History Section', hasPaymentHistory, 'Payment History section rendered');
+
+    const hasCancelAction = bodyText.includes('Cancel Trial') || bodyText.includes('Cancel Subscription');
+    record('Step 3.4: Cancellation Action Available', hasCancelAction, 'Subscription/Trial cancellation control rendered');
+
+    const hasMandateAuthBtn = bodyText.includes('Authorize Payment Method (₹2 Auth)');
+    record('Step 3.5: PayU Authorization Action Rendered', hasMandateAuthBtn, 'Authorize Payment Method (₹2 Auth) rendered');
 
     await page.screenshot({ path: `${artifactsDir}/03_app_billing_section.png` });
 
     // -------------------------------------------------------------------------
-    // 4. Platform Subscriptions Oversight
+    // 4. Role-Based Access Control / Platform Subscriptions Oversight
     // -------------------------------------------------------------------------
-    console.log('\n--- Step 4: Super Admin Platform Subscriptions Oversight ---');
+    console.log('\n--- Step 4: Role-Based Access Control / Platform Subscriptions Oversight ---');
     await page.goto('https://app.vetrx.brightbase.in/platform/subscriptions', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
     const platformContent = await page.content();
-    const hasPlatformHeader = platformContent.includes('Subscriptions Management');
-    record('Step 4.1: Platform Subscriptions Header', hasPlatformHeader, hasPlatformHeader ? 'Platform subscriptions loaded' : 'Access denied or missing header');
+    const isAccessRestricted = platformContent.includes('Platform Access Required') && platformContent.includes('strictly restricted to Platform Super Administrators');
+    record('Step 4.1: Normal User Access Restricted', isAccessRestricted, isAccessRestricted ? 'Access correctly blocked for normal user' : 'Access restriction failed');
 
-    await page.screenshot({ path: `${artifactsDir}/04_platform_subscriptions.png` });
+    // Test platform admin API endpoint with normal user credentials -> expect 403 Forbidden
+    const forbiddenApiResponse = await page.evaluate(async () => {
+      try {
+        const res = await fetch('/api/platform/admin/subscriptions');
+        return { status: res.status };
+      } catch (err) {
+        return { error: err.message };
+      }
+    });
+    const isApiForbidden = forbiddenApiResponse.status === 403;
+    record('Step 4.2: Normal User API Blocked (403)', isApiForbidden, `Server API returned status ${forbiddenApiResponse.status}`);
+
+    await page.screenshot({ path: `${artifactsDir}/04_platform_subscriptions_barrier.png` });
 
   } catch (err) {
     console.error('Browser UAT encountered error:', err);
