@@ -6,6 +6,8 @@ import { logger } from '../lib/logger.js';
 import type { ApiErrorResponse, AuthenticatedRequest } from '../types/index.js';
 
 export class AppError extends Error {
+  public errorCode: string;
+
   constructor(
     public statusCode: number,
     public code: string,
@@ -14,6 +16,7 @@ export class AppError extends Error {
   ) {
     super(message);
     this.name = 'AppError';
+    this.errorCode = code;
   }
 }
 

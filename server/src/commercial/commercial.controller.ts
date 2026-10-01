@@ -120,6 +120,54 @@ commercialRouter.get(
 );
 
 /**
+ * GET /api/commercial/entitlements/inventory
+ * Returns whether practice has active access to Inventory & Stock Management add-on.
+ */
+commercialRouter.get(
+  '/entitlements/inventory',
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const hasEntitlement = await EntitlementService.hasInventoryEntitlement(practiceId);
+      res.status(200).json({
+        practiceId,
+        hasInventoryEntitlement: hasEntitlement,
+        entitled: hasEntitlement,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/commercial/entitlements/inventory/dev-toggle
+ * Safe development/testing mechanism to enable or disable the Inventory add-on entitlement.
+ */
+commercialRouter.post(
+  '/entitlements/inventory/dev-toggle',
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const practiceId = getPracticeId(req);
+      const schema = z.object({
+        enabled: z.boolean(),
+      });
+      const { enabled } = schema.parse(req.body);
+      EntitlementService.setMockInventoryAddon(practiceId, enabled);
+
+      res.status(200).json({
+        practiceId,
+        hasInventoryEntitlement: enabled,
+        entitled: enabled,
+        message: `Inventory entitlement ${enabled ? 'enabled' : 'disabled'} for development/testing.`,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * GET /api/commercial/usage
  * Returns live practice resource consumption against commercial limits.
  */

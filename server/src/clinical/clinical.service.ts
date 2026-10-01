@@ -5,6 +5,8 @@ import { AppError } from '../middleware/errorHandler.js';
 import { AuthorizationService } from '../auth/authorization.service.js';
 import { MemberService } from '../auth/member.service.js';
 import { PERMISSIONS } from '../auth/permissions.js';
+import { EntitlementService } from '../commercial/entitlement.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 // ==============================================================================
 // VetRx Clinical Service
@@ -1493,6 +1495,22 @@ export class ClinicalService {
       details: { invoiceNumber: invoice.invoiceNumber, totalAmount: invoice.totalAmount },
     });
 
+    // When Inventory is active, deduct stock via FEFO upon invoice finalization
+    try {
+      const hasInventory = await EntitlementService.hasInventoryEntitlement(practiceId);
+      if (hasInventory && invoice.status === 'Issued') {
+        void InventoryService.deductInvoiceStock(
+          practiceId,
+          invoice.id,
+          invoice.invoiceNumber,
+          data.items.map((i) => ({
+            description: i.description,
+            quantity: i.quantity ?? 1,
+          }))
+        );
+      }
+    } catch {}
+
     return invoice;
   }
 
@@ -1503,7 +1521,32 @@ export class ClinicalService {
     discountAmount: number;
     totalAmount: number;
   }>) {
-    await this.getInvoiceById(id, practiceId);
+    const current = await this.getInvoiceById(id, practiceId);
+
+    // If status changed to Cancelled, reverse stock
+    if (data.status === 'Cancelled' && current.status !== 'Cancelled') {
+      try {
+        const hasInventory = await EntitlementService.hasInventoryEntitlement(practiceId);
+        if (hasInventory) {
+          void InventoryService.reverseInvoiceStock(practiceId, current.id, current.invoiceNumber);
+        }
+      } catch {}
+    } else if (data.status === 'Issued' && current.status !== 'Issued') {
+      try {
+        const hasInventory = await EntitlementService.hasInventoryEntitlement(practiceId);
+        if (hasInventory) {
+          void InventoryService.deductInvoiceStock(
+            practiceId,
+            current.id,
+            current.invoiceNumber,
+            current.items.map((i) => ({
+              description: i.description,
+              quantity: i.quantity,
+            }))
+          );
+        }
+      } catch {}
+    }
 
     const updated = await prisma.invoice.update({
       where: { id },

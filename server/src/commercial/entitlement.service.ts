@@ -21,9 +21,18 @@ export class EntitlementService {
   // In-memory registry for mock subscriptions during fast isolated unit testing
   private static mockSubscriptions: Map<string, any> = new Map();
   private static mockUsages: Map<string, any> = new Map();
+  private static mockInventoryAddons: Map<string, boolean> = new Map();
 
   static setMockSubscription(practiceId: string, subscription: any): void {
     this.mockSubscriptions.set(practiceId, subscription);
+  }
+
+  static setMockInventoryAddon(practiceId: string, enabled: boolean): void {
+    this.mockInventoryAddons.set(practiceId, enabled);
+  }
+
+  static getMockInventoryAddon(practiceId: string): boolean | undefined {
+    return this.mockInventoryAddons.get(practiceId);
   }
 
   static getMockSubscription(practiceId: string): any {
@@ -42,6 +51,7 @@ export class EntitlementService {
   static clearMockSubscriptions(): void {
     this.mockSubscriptions.clear();
     this.mockUsages.clear();
+    this.mockInventoryAddons.clear();
   }
 
   /**
@@ -122,6 +132,9 @@ export class EntitlementService {
         activeSeats = sub.activeSeatsCount || 1;
       }
 
+      // Determine inventory entitlement: requires active base subscription + active addon
+      const hasInventory = (!isExpired) && (await this.isInventoryAddonActive(practiceId, sub));
+
       return {
         practiceId,
         status,
@@ -135,7 +148,11 @@ export class EntitlementService {
           canCreateInvoices: !isExpired,
           canGeneratePdf: true,
           canExportData: true,
+          canManageInventory: hasInventory,
           maxUserSeats: limits.maxVeterinarianSeats,
+        },
+        addons: {
+          inventoryManagement: hasInventory,
         },
         quotas: {
           activeSeatsCount: activeSeats,
@@ -153,6 +170,7 @@ export class EntitlementService {
     }
 
     // 2. Default neutral foundation state for existing practices without subscription
+    const foundationInventory = await this.isInventoryAddonActive(practiceId, null);
     return {
       practiceId,
       status: 'UNRESTRICTED',
@@ -166,7 +184,11 @@ export class EntitlementService {
         canCreateInvoices: true,
         canGeneratePdf: true,
         canExportData: true,
+        canManageInventory: foundationInventory,
         maxUserSeats: 10,
+      },
+      addons: {
+        inventoryManagement: foundationInventory,
       },
       quotas: {
         activeSeatsCount: 1,
@@ -449,6 +471,78 @@ export class EntitlementService {
    */
   static async assertCanAddSeat(practiceId: string, role: Role, isClinicalApprover?: boolean): Promise<void> {
     return this.assertCanAssignClinicalSeat(practiceId, undefined, { role, isClinicalApprover });
+  }
+
+  /**
+   * Evaluates if inventory_management addon is enabled for practice.
+   */
+  static async isInventoryAddonActive(practiceId: string, sub?: any): Promise<boolean> {
+    // 1. Check in-memory mock registry (for tests and quick dev toggle)
+    if (this.mockInventoryAddons.has(practiceId)) {
+      return Boolean(this.mockInventoryAddons.get(practiceId));
+    }
+
+    // 2. Check subscription metadata (if present)
+    if (sub && sub.metadata) {
+      const meta = sub.metadata as any;
+      if (meta.addons?.inventory_management !== undefined) {
+        return Boolean(meta.addons.inventory_management);
+      }
+      if (meta.inventoryAddon !== undefined) {
+        return Boolean(meta.inventoryAddon);
+      }
+    }
+
+    // 3. Check persistent practice settings if available
+    if (process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        const settings = await prisma.practiceSettings.findUnique({
+          where: { practiceId },
+        });
+        if (settings && (settings as any).inventoryAddonEnabled !== undefined) {
+          return Boolean((settings as any).inventoryAddonEnabled);
+        }
+      } catch {}
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns whether practice currently has active inventory entitlement.
+   * Access requires: (Base subscription active) AND (inventory_management add-on active)
+   */
+  static async hasInventoryEntitlement(practiceId: string): Promise<boolean> {
+    const entitlements = await this.resolvePracticeEntitlements(practiceId);
+    if (entitlements.isReadOnly || entitlements.status === 'EXPIRED' || entitlements.status === 'CANCELLED') {
+      return false;
+    }
+    return Boolean(entitlements.addons?.inventoryManagement);
+  }
+
+  /**
+   * Asserts whether the practice can access the Inventory & Stock Management module.
+   * Throws AppError 403 if base subscription is inactive or inventory addon is absent.
+   */
+  static async assertCanAccessInventory(practiceId: string): Promise<void> {
+    const entitlements = await this.resolvePracticeEntitlements(practiceId);
+
+    if (entitlements.isReadOnly || entitlements.status === 'EXPIRED' || entitlements.status === 'CANCELLED') {
+      throw new AppError(
+        403,
+        'SUBSCRIPTION_EXPIRED',
+        'An active VetRx base subscription is required to access the Inventory module. Please renew your subscription.'
+      );
+    }
+
+    const hasAddon = Boolean(entitlements.addons?.inventoryManagement);
+    if (!hasAddon) {
+      throw new AppError(
+        403,
+        'INVENTORY_ADDON_REQUIRED',
+        'Inventory & Stock Management requires an active inventory_management add-on entitlement.'
+      );
+    }
   }
 
   /**

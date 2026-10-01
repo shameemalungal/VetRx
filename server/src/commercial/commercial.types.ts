@@ -157,7 +157,11 @@ export interface PracticeEntitlementsDTO {
     canCreateInvoices: boolean;
     canGeneratePdf: boolean;
     canExportData: boolean;
+    canManageInventory?: boolean;
     maxUserSeats: number;
+  };
+  addons?: {
+    inventoryManagement: boolean;
   };
   quotas: {
     activeSeatsCount: number;

@@ -207,6 +207,14 @@ model Practice {
   issues          PlatformIssue[]
   supportSessions SupportAccessSession[]
 
+  // Inventory Add-On Relations
+  inventoryItems        InventoryItem[]
+  inventoryBatches      InventoryBatch[]
+  inventoryTransactions InventoryTransaction[]
+  suppliers             Supplier[]
+  purchaseInvoices      PurchaseInvoice[]
+  stockLocations        StockLocation[]
+
   @@index([ownerUserId])
 }
 
@@ -354,6 +362,7 @@ model Medicine {
   updatedAt                    DateTime  @updatedAt
 
   prescriptionItems            PrescriptionItem[]
+  inventoryItems               InventoryItem[]
 
   @@index([practiceId])
   @@index([practiceId, name])
@@ -721,5 +730,194 @@ model SupportAccessSession {
   @@index([platformAdminUserId])
   @@index([targetPracticeId])
   @@index([status])
+}
+
+// ------------------------------------------------------------------------------
+// Inventory & Stock Management Models (Add-On Module V1)
+// Strictly scoped to Practice boundary.
+// ------------------------------------------------------------------------------
+
+enum InventoryCategory {
+  MEDICINE
+  CONSUMABLE
+  LAB_MATERIAL
+  SURGICAL_MATERIAL
+  OTHER
+}
+
+enum InventoryTransactionType {
+  OPENING_STOCK
+  PURCHASE
+  SALE_OR_INVOICE
+  STOCK_ADJUSTMENT
+  RETURN_TO_SUPPLIER
+  EXPIRED
+  DAMAGED
+  WASTAGE
+  REVERSAL
+}
+
+model StockLocation {
+  id          String   @id @default(uuid())
+  practiceId  String
+  practice    Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches     InventoryBatch[]
+
+  @@unique([practiceId, name])
+  @@index([practiceId])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  practiceId  String
+  practice    Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name        String
+  gstin       String?
+  address     String?
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases   PurchaseInvoice[]
+
+  @@index([practiceId])
+  @@index([practiceId, name])
+}
+
+model InventoryItem {
+  id                 String            @id @default(uuid())
+  practiceId         String
+  practice           Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  category           InventoryCategory @default(MEDICINE)
+  name               String
+  genericName        String?
+  strength           String?
+  dosageForm         String?
+  presentation       String?
+  packSize           String?
+  stockUnit          String            @default("Unit")
+  manufacturer       String?
+  minimumStockLevel  Int               @default(5)
+  targetStockLevel   Int               @default(20)
+  barcode            String?
+  medicineId         String?
+  medicine           Medicine?         @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  batches            InventoryBatch[]
+  transactions       InventoryTransaction[]
+  purchaseItems      PurchaseInvoiceItem[]
+
+  @@index([practiceId])
+  @@index([practiceId, category])
+  @@index([practiceId, barcode])
+  @@index([medicineId])
+}
+
+model InventoryBatch {
+  id                 String        @id @default(uuid())
+  practiceId         String
+  practice           Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  batchNumber        String
+  manufacturingDate  DateTime?
+  expiryDate         DateTime
+  currentQuantity    Float         @default(0)
+  initialQuantity    Float         @default(0)
+  purchaseRate       Float         @default(0)
+  mrp                Float         @default(0)
+  locationId         String?
+  location           StockLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  transactions       InventoryTransaction[]
+
+  @@index([practiceId])
+  @@index([inventoryItemId])
+  @@index([expiryDate])
+  @@index([practiceId, batchNumber])
+}
+
+model InventoryTransaction {
+  id                 String                   @id @default(uuid())
+  practiceId         String
+  practice           Practice                 @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  itemId             String
+  item               InventoryItem            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  batchId            String?
+  batch              InventoryBatch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  transactionType    InventoryTransactionType
+  quantityChange     Float
+  quantityBefore     Float
+  quantityAfter      Float
+  unitCost           Float                    @default(0)
+  referenceType      String?
+  referenceId        String?
+  reason             String?
+  performedByUserId  String?
+  createdAt          DateTime                 @default(now())
+
+  @@index([practiceId])
+  @@index([itemId])
+  @@index([batchId])
+  @@index([transactionType])
+  @@index([createdAt])
+}
+
+model PurchaseInvoice {
+  id                 String                @id @default(uuid())
+  practiceId         String
+  practice           Practice              @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  supplierId         String?
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierName       String
+  supplierGstin      String?
+  invoiceNumber      String
+  invoiceDate        DateTime
+  totalAmount        Float                 @default(0)
+  notes              String?
+  documentFileName   String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  items              PurchaseInvoiceItem[]
+
+  @@unique([practiceId, supplierName, invoiceNumber])
+  @@index([practiceId])
+  @@index([invoiceDate])
+}
+
+model PurchaseInvoiceItem {
+  id                 String          @id @default(uuid())
+  purchaseInvoiceId  String
+  purchaseInvoice    PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  itemName           String
+  category           InventoryCategory
+  presentation       String?
+  batchNumber        String
+  manufacturingDate  DateTime?
+  expiryDate         DateTime
+  quantity           Float           @default(1)
+  purchaseRate       Float           @default(0)
+  mrp                Float           @default(0)
+  lineTotal          Float           @default(0)
+
+  @@index([purchaseInvoiceId])
+  @@index([inventoryItemId])
 }
 

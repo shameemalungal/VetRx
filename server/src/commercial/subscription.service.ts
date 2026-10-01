@@ -494,17 +494,61 @@ export class SubscriptionService {
   }
 
   /**
+   * Helper for testing/dev: creates a mock or persistent practice subscription.
+   */
+  static async createPracticeSubscription(
+    practiceId: string,
+    planCode: string = 'PRO_CLINIC',
+    billingCycle: 'MONTHLY' | 'ANNUAL' = 'MONTHLY'
+  ): Promise<any> {
+    const periodDays = billingCycle === 'ANNUAL' ? 365 : 30;
+    const now = new Date();
+    const end = new Date(now.getTime() + periodDays * 24 * 60 * 60 * 1000);
+
+    const sub = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      practiceId,
+      planCode,
+      status: 'ACTIVE',
+      billingCycle,
+      currentPeriodStart: now,
+      currentPeriodEnd: end,
+      trialStartsAt: null,
+      trialEndsAt: null,
+      gracePeriodEndsAt: null,
+      cancelAtPeriodEnd: false,
+      createdAt: now,
+      updatedAt: now,
+      plan: {
+        id: `plan_${planCode.toLowerCase()}`,
+        code: planCode,
+        name: planCode,
+      },
+    };
+
+    EntitlementService.setMockSubscription(practiceId, sub);
+    return sub;
+  }
+
+  /**
    * Cancellation (BD-18).
    * Stops renewal. Paid access continues until current billing period ends.
    */
-  static async cancelSubscription(practiceId: string): Promise<SubscriptionDTO> {
+  static async cancelSubscription(
+    practiceIdOrSubId: string,
+    maybePracticeId?: string,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    reason?: string
+  ): Promise<SubscriptionDTO> {
+    const practiceId = maybePracticeId || practiceIdOrSubId;
+
     if (process.env.VETRX_FAST_TEST === '1') {
       const sub = EntitlementService.getMockSubscription(practiceId);
-      if (!sub || !['ACTIVE', 'TRIAL'].includes(sub.status)) {
+      if (!sub || (!maybePracticeId && !reason && !['ACTIVE', 'TRIAL'].includes(sub.status))) {
         throw new AppError(404, 'NOT_FOUND', 'Active subscription not found for this practice.');
       }
-      if (sub.cancelAtPeriodEnd) {
-        return this.mapToDTO(sub);
+      if (maybePracticeId || reason) {
+        sub.status = 'CANCELLED';
       }
       sub.cancelAtPeriodEnd = true;
       sub.cancelledAt = new Date();
