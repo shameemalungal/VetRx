@@ -47,12 +47,19 @@ $COMPOSE ps
 # ─── Step 2: Database backup BEFORE any changes ──────────────────────────────
 echo ""
 echo "─── Step 2: Pre-deployment database backup ──────────────────────────"
+# Load environment variables if .env exists
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/pre-inventory-v1-$TIMESTAMP.sql"
 echo "▶ Backing up database to: $BACKUP_FILE"
 $COMPOSE exec -T postgres pg_dump \
-  -U "${POSTGRES_USER:-vetrx_app}" \
-  "${POSTGRES_DB:-vetrx_production}" \
+  -U "${POSTGRES_USER:-vetrx}" \
+  "${POSTGRES_DB:-vetrx}" \
   > "$BACKUP_FILE"
 echo "✅ Backup complete: $(du -sh $BACKUP_FILE | cut -f1)"
 
