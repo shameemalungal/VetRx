@@ -441,7 +441,15 @@ export class PlatformAdminService {
       throw new AppError(404, 'PRACTICE_NOT_FOUND', 'Practice not found.');
     }
 
-    return practice;
+    const sub = practice.subscriptions?.[0];
+    const isInventoryAddonActive = await EntitlementService.isInventoryAddonActive(practiceId, sub);
+    const entitlements = await EntitlementService.resolvePracticeEntitlements(practiceId);
+
+    return {
+      ...practice,
+      isInventoryAddonActive,
+      entitlements,
+    };
   }
 
   static async createPractice(

@@ -482,13 +482,28 @@ export class EntitlementService {
       return Boolean(this.mockInventoryAddons.get(practiceId));
     }
 
+    let activeSub = sub;
+    if (!activeSub && process.env.VETRX_FAST_TEST !== '1') {
+      try {
+        activeSub = await prisma.subscription.findFirst({
+          where: { practiceId },
+          orderBy: { createdAt: 'desc' },
+        });
+      } catch {
+        activeSub = null;
+      }
+    }
+
     // 2. Check subscription metadata (if present)
-    if (sub && sub.metadata) {
-      const meta = sub.metadata as any;
+    if (activeSub && activeSub.metadata) {
+      const meta = activeSub.metadata as any;
       if (meta.addons?.inventory_management !== undefined) {
         return Boolean(meta.addons.inventory_management);
       }
       if (meta.inventoryAddon !== undefined) {
+        if (typeof meta.inventoryAddon === 'object' && meta.inventoryAddon !== null) {
+          return Boolean(meta.inventoryAddon.enabled);
+        }
         return Boolean(meta.inventoryAddon);
       }
     }

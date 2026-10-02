@@ -49,6 +49,19 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
   const [overrideEffect, setOverrideEffect] = useState<'ALLOW' | 'DENY'>('ALLOW');
   const [overrideReason, setOverrideReason] = useState('');
 
+  // Inventory Add-on Modals
+  const [isGrantInventoryModalOpen, setIsGrantInventoryModalOpen] = useState(false);
+  const [isRevokeInventoryModalOpen, setIsRevokeInventoryModalOpen] = useState(false);
+  const [inventoryReason, setInventoryReason] = useState('');
+
+  // Complimentary Access Modal for this Practice
+  const [isComplimentaryModalOpen, setIsComplimentaryModalOpen] = useState(false);
+  const [compAccessType, setCompAccessType] = useState<'INDIVIDUAL' | 'CLINIC'>('CLINIC');
+  const [compDuration, setCompDuration] = useState(12);
+  const [compReason, setCompReason] = useState('');
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   const loadDetails = async () => {
     if (!id) return;
     try {
@@ -188,6 +201,69 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
     }
   };
 
+  const handleGrantInventoryAddon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      setIsSubmitting(true);
+      const res = await platformAdminApi.grantInventoryAddon(id, {
+        reason: inventoryReason.trim() || undefined,
+      });
+      setIsGrantInventoryModalOpen(false);
+      setInventoryReason('');
+      setSuccessMsg(res.message || 'Inventory Add-on granted successfully.');
+      await loadDetails();
+    } catch (err: any) {
+      alert(`Failed to grant Inventory Add-on: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRevokeInventoryAddon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      setIsSubmitting(true);
+      const res = await platformAdminApi.revokeInventoryAddon(id, {
+        reason: inventoryReason.trim() || undefined,
+      });
+      setIsRevokeInventoryModalOpen(false);
+      setInventoryReason('');
+      setSuccessMsg(res.message || 'Inventory Add-on revoked successfully. Existing records remain preserved.');
+      await loadDetails();
+    } catch (err: any) {
+      alert(`Failed to revoke Inventory Add-on: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGrantComplimentary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!practice?.owner?.email) {
+      alert('Practice owner email not found.');
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const res = await platformAdminApi.grantComplimentarySubscription({
+        email: practice.owner.email,
+        accessType: compAccessType,
+        durationMonths: Number(compDuration),
+        reason: compReason.trim() || undefined,
+      });
+      setIsComplimentaryModalOpen(false);
+      setCompReason('');
+      setSuccessMsg(res.message || 'Complimentary access granted successfully.');
+      await loadDetails();
+    } catch (err: any) {
+      alert(`Failed to grant complimentary subscription: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div style={{ padding: '60px 0', textAlign: 'center' }}>
@@ -212,6 +288,17 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
 
   const sub = practice.subscriptions?.[0];
   const members = practice.members || [];
+  const meta = (sub?.metadata as Record<string, any>) || {};
+  const isInventoryActive = Boolean(
+    practice.isInventoryAddonActive ||
+    meta.addons?.inventory_management ||
+    (typeof meta.inventoryAddon === 'object' && meta.inventoryAddon !== null
+      ? meta.inventoryAddon.enabled
+      : meta.inventoryAddon)
+  );
+  const inventoryMeta = (typeof meta.inventoryAddon === 'object' && meta.inventoryAddon !== null)
+    ? meta.inventoryAddon
+    : null;
 
   return (
     <div>
@@ -284,6 +371,16 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
         </div>
       </div>
 
+      {successMsg && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '0.875rem' }}>
+            <Icon name="check" size={18} color="#059669" />
+            <span>{successMsg}</span>
+          </div>
+          <button type="button" onClick={() => setSuccessMsg(null)} style={{ background: 'none', border: 'none', color: '#065f46', cursor: 'pointer', fontSize: '1.25rem', lineHeight: 1 }}>&times;</button>
+        </div>
+      )}
+
       {/* Practice Header Card */}
       <div className="platform-card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
@@ -350,7 +447,7 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
           }}
           onClick={() => setActiveTab('BILLING')}
         >
-          Subscription &amp; Quotas
+          Practice Access &amp; Quotas
         </button>
 
         <button
@@ -536,32 +633,253 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: BILLING & SEATS */}
+      {/* TAB 2: PRACTICE ACCESS, BILLING & ADD-ONS */}
       {activeTab === 'BILLING' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Practice Access Overview Card */}
           <div className="platform-card">
-            <h2 className="platform-card-title" style={{ marginBottom: 16 }}>Current Plan Details</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
               <div>
-                <div style={{ color: '#64748b' }}>Plan</div>
-                <div style={{ fontWeight: 600, fontSize: '1.125rem', color: '#0f172a' }}>
-                  {sub?.plan?.name || 'Clinic Starter (Monthly)'}
+                <h2 className="platform-card-title" style={{ margin: 0 }}>Practice Access (Base Tier)</h2>
+                <div style={{ fontSize: '0.8125rem', color: '#64748b', marginTop: 4 }}>
+                  Authoritative base subscription, clinical license terms, and tenant origin.
                 </div>
               </div>
-              <div>
-                <div style={{ color: '#64748b' }}>Status</div>
-                <div style={{ fontWeight: 600, color: '#15803d' }}>{sub?.status || 'ACTIVE'}</div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8125rem', padding: '6px 12px' }}
+                onClick={() => setIsComplimentaryModalOpen(true)}
+              >
+                <Icon name="award" size={14} color="#00685f" />
+                <span>Grant Complimentary Access</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, fontSize: '0.875rem' }}>
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Current Plan
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                  {sub?.plan?.name || (practice.subscriptions?.length ? 'Commercial Plan' : 'Foundation Mode (No subscription)')}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+                  {sub?.plan?.code || 'NO_SUBSCRIPTION_RECORD'}
+                </div>
               </div>
-              <div>
-                <div style={{ color: '#64748b' }}>Current Period</div>
-                <div>
-                  {sub?.currentPeriodStart ? new Date(sub.currentPeriodStart).toLocaleDateString('en-IN') : 'N/A'} –{' '}
-                  {sub?.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toLocaleDateString('en-IN') : 'N/A'}
+
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Subscription Status
+                </div>
+                <div style={{ marginTop: 2 }}>
+                  <span className={sub?.status === 'ACTIVE' ? 'badge-active' : 'badge-suspended'} style={{ fontWeight: 700 }}>
+                    {sub?.status || 'NO_SUBSCRIPTION'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
+                  {sub?.trialEndsAt ? `Trial ends: ${new Date(sub.trialEndsAt).toLocaleDateString('en-IN')}` : sub?.status === 'TRIAL' ? 'Active 14-Day Trial' : sub ? 'Subscription Active' : 'No commercial record'}
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Access Origin
+                </div>
+                <div style={{ marginTop: 2 }}>
+                  {meta.source === 'COMPLIMENTARY' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
+                      <Icon name="award" size={12} />
+                      Complimentary Access
+                    </span>
+                  ) : sub?.status === 'TRIAL' ? (
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0284c7' }}>Standard Free Trial</span>
+                  ) : sub ? (
+                    <span style={{ fontSize: '0.8125rem', color: '#475569' }}>Commercial / Gateway</span>
+                  ) : (
+                    <span style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>Foundation Tier</span>
+                  )}
+                </div>
+                {meta.reason && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
+                    Note: {meta.reason}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4 }}>
+                  Current Period
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: '#0f172a', fontWeight: 600, marginTop: 2 }}>
+                  {meta.isUnlimited
+                    ? 'Unlimited Access'
+                    : sub?.currentPeriodStart && sub?.currentPeriodEnd
+                    ? `${new Date(sub.currentPeriodStart).toLocaleDateString('en-IN')} – ${new Date(sub.currentPeriodEnd).toLocaleDateString('en-IN')}`
+                    : 'N/A'}
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Practice Add-ons Section */}
+          <div className="platform-card" style={{ border: '1px solid #cbd5e1' }}>
+            <div style={{ marginBottom: 16 }}>
+              <h2 className="platform-card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="box" size={20} color="#00685f" />
+                <span>Practice Add-ons &amp; Modular Capabilities</span>
+              </h2>
+              <div style={{ fontSize: '0.8125rem', color: '#64748b', marginTop: 4 }}>
+                Modular capability entitlements granted independently of the base subscription plan tier.
+              </div>
+            </div>
+
+            {/* Inventory Add-on Row */}
+            <div style={{ background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 10,
+                        background: isInventoryActive ? '#ecfdf5' : '#f1f5f9',
+                        color: isInventoryActive ? '#059669' : '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Icon name="box" size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#0f172a' }}>
+                        Inventory &amp; Stock Management
+                      </div>
+                      <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                        Pharmaceutical inventory, suppliers, invoice OCR ingestion, batch expiration tracking, automated reorder alerts, and movements ledger.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>Current Status:</span>
+                    {isInventoryActive ? (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          background: '#ecfdf5',
+                          color: '#065f46',
+                          border: '1px solid #a7f3d0',
+                          padding: '3px 12px',
+                          borderRadius: 14,
+                          fontSize: '0.8125rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <Icon name="check" size={14} color="#059669" />
+                        Enabled
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: '#f1f5f9',
+                          color: '#64748b',
+                          border: '1px solid #cbd5e1',
+                          padding: '3px 12px',
+                          borderRadius: 14,
+                          fontSize: '0.8125rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Not enabled
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Metadata when Enabled */}
+                  {isInventoryActive && inventoryMeta && (
+                    <div style={{ marginTop: 12, padding: '10px 14px', background: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '0.75rem', color: '#475569', display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
+                      {inventoryMeta.grantedBy && (
+                        <div>
+                          <strong style={{ color: '#0f172a' }}>Granted By:</strong> {inventoryMeta.grantedBy}
+                        </div>
+                      )}
+                      {inventoryMeta.grantedAt && (
+                        <div>
+                          <strong style={{ color: '#0f172a' }}>Granted Date:</strong> {new Date(inventoryMeta.grantedAt).toLocaleString('en-IN')}
+                        </div>
+                      )}
+                      <div>
+                        <strong style={{ color: '#0f172a' }}>Source:</strong> {inventoryMeta.source || 'Platform Super Admin'}
+                      </div>
+                      {inventoryMeta.reason && (
+                        <div>
+                          <strong style={{ color: '#0f172a' }}>Reason:</strong> {inventoryMeta.reason}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!sub && (
+                    <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: '0.8125rem', color: '#991b1b' }}>
+                      ⚠️ <strong>Base subscription required:</strong> This practice has no subscription record. To enable Inventory, first grant Complimentary Access or activate a plan.
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                  {isInventoryActive ? (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        border: '1px solid #fca5a5',
+                        fontWeight: 600,
+                        padding: '8px 16px',
+                        fontSize: '0.875rem',
+                      }}
+                      onClick={() => {
+                        setInventoryReason('');
+                        setIsRevokeInventoryModalOpen(true);
+                      }}
+                    >
+                      Revoke Inventory Add-on
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={!sub}
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '0.875rem',
+                        opacity: !sub ? 0.6 : 1,
+                      }}
+                      onClick={() => {
+                        setInventoryReason('');
+                        setIsGrantInventoryModalOpen(true);
+                      }}
+                    >
+                      Grant Inventory Add-on
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Seat Quota Calculation */}
           <div className="platform-card">
             <h2 className="platform-card-title" style={{ marginBottom: 16 }}>Seat Quota Calculation</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
@@ -989,6 +1307,229 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
                   {isSubmitting ? 'Starting...' : 'Start Session'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Grant Inventory Add-on Modal */}
+      {isGrantInventoryModalOpen && (
+        <div className="platform-modal-overlay">
+          <div className="platform-modal" style={{ maxWidth: 520 }}>
+            <div className="platform-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="box" size={20} color="#00685f" />
+                <div style={{ fontWeight: 700, fontSize: '1.125rem', color: '#0f172a' }}>
+                  Grant Inventory Add-on
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                onClick={() => !isSubmitting && setIsGrantInventoryModalOpen(false)}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleGrantInventoryAddon}>
+              <div className="platform-modal-body">
+                <div style={{ padding: '14px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#166534', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    Grant Inventory &amp; Stock Management access to this practice?
+                  </div>
+                  <div>
+                    This will enable Inventory, Stock, Purchases, Batches, Alerts, Movements and Inventory Reports for <strong>{practice.name}</strong>.
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem' }}>
+                    Internal Reason / Note
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="e.g. Beta evaluation, Commercial add-on contract, Clinical request"
+                    value={inventoryReason}
+                    onChange={(e) => setInventoryReason(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
+                    Audited with administrator attribution.
+                  </div>
+                </div>
+              </div>
+
+              <div className="platform-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={isSubmitting}
+                  onClick={() => setIsGrantInventoryModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Granting...' : 'Grant Inventory Add-on'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Inventory Add-on Modal */}
+      {isRevokeInventoryModalOpen && (
+        <div className="platform-modal-overlay">
+          <div className="platform-modal" style={{ maxWidth: 520 }}>
+            <div className="platform-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="warning" size={20} color="#dc2626" />
+                <div style={{ fontWeight: 700, fontSize: '1.125rem', color: '#0f172a' }}>
+                  Revoke Inventory Add-on
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                onClick={() => !isSubmitting && setIsRevokeInventoryModalOpen(false)}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleRevokeInventoryAddon}>
+              <div className="platform-modal-body">
+                <div style={{ padding: '14px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    Revoke Inventory &amp; Stock Management access from this practice?
+                  </div>
+                  <div>
+                    Existing inventory records will <strong>NOT</strong> be deleted. The module will become inaccessible until the add-on is enabled again.
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 16 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8125rem' }}>
+                    Revocation Reason
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="e.g. Add-on trial ended, Customer requested removal"
+                    value={inventoryReason}
+                    onChange={(e) => setInventoryReason(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  />
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4 }}>
+                    Audited with administrator attribution.
+                  </div>
+                </div>
+              </div>
+
+              <div className="platform-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={isSubmitting}
+                  onClick={() => setIsRevokeInventoryModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn"
+                  style={{ background: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', fontWeight: 600 }}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Revoking...' : 'Revoke Inventory Add-on'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Grant Complimentary Access Modal */}
+      {isComplimentaryModalOpen && (
+        <div className="platform-modal-overlay">
+          <div className="platform-modal" style={{ maxWidth: 520 }}>
+            <div className="platform-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="award" size={20} color="#00685f" />
+                <div style={{ fontWeight: 700, fontSize: '1.125rem', color: '#0f172a' }}>
+                  Grant Complimentary Base Access
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                onClick={() => !isSubmitting && setIsComplimentaryModalOpen(false)}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleGrantComplimentary}>
+              <div className="platform-modal-body">
+                <p style={{ fontSize: '0.875rem', color: '#475569', margin: '0 0 16px 0' }}>
+                  Grant complimentary subscription access to <strong>{practice.name}</strong> ({practice.owner?.email}).
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="form-label">Access Tier</label>
+                    <select
+                      className="form-control"
+                      value={compAccessType}
+                      onChange={(e) => setCompAccessType(e.target.value as 'INDIVIDUAL' | 'CLINIC')}
+                    >
+                      <option value="INDIVIDUAL">Individual (1 Vet)</option>
+                      <option value="CLINIC">Clinic (5 Vets + Staff)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Duration</label>
+                    <select
+                      className="form-control"
+                      value={compDuration}
+                      onChange={(e) => setCompDuration(Number(e.target.value))}
+                    >
+                      <option value={1}>1 Month</option>
+                      <option value={3}>3 Months</option>
+                      <option value={6}>6 Months</option>
+                      <option value={12}>12 Months (1 Year)</option>
+                      <option value={24}>24 Months (2 Years)</option>
+                      <option value={36}>36 Months (3 Years)</option>
+                      <option value={0}>Unlimited Access</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label">Internal Reason / Note</label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="e.g. Clinical advisor, Academic partner, Super Admin grant"
+                    value={compReason}
+                    onChange={(e) => setCompReason(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  />
+                </div>
+              </div>
+
+              <div className="platform-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={isSubmitting}
+                  onClick={() => setIsComplimentaryModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Granting...' : 'Confirm Complimentary Grant'}
                 </button>
               </div>
             </form>

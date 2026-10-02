@@ -149,6 +149,9 @@ export interface PlatformSubscriptionItem {
   notes?: string;
   isUnlimited?: boolean;
   metadata?: Record<string, any> | null;
+  addons?: Record<string, any> | null;
+  inventoryAddon?: any;
+  isInventoryAddonActive?: boolean;
 }
 
 export interface PlatformPaymentItem {
@@ -449,6 +452,55 @@ export const platformAdminApi = {
       '/api/platform/admin/subscriptions/complimentary',
       { method: 'POST', body: JSON.stringify(data) }
     ),
+
+  getPracticeInventoryAddon: (practiceId: string) =>
+    request<{
+      practiceId: string;
+      practiceName?: string;
+      hasSubscription: boolean;
+      subscriptionId?: string;
+      planCode?: string;
+      planName?: string;
+      subscriptionStatus?: string;
+      isInventoryAddonActive: boolean;
+      inventoryAddon: any;
+      metadata: Record<string, any>;
+    }>(`/api/platform/admin/practices/${practiceId}/addons/inventory`),
+
+  grantInventoryAddon: (practiceId: string, data?: { reason?: string }) =>
+    request<{
+      practiceId: string;
+      subscriptionId: string;
+      inventoryAddon: {
+        enabled: boolean;
+        grantedBy: string;
+        grantedAt: string;
+        reason?: string;
+        source: string;
+      };
+      metadata: Record<string, any>;
+      message: string;
+    }>(`/api/platform/admin/practices/${practiceId}/addons/inventory/grant`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+
+  revokeInventoryAddon: (practiceId: string, data?: { reason?: string }) =>
+    request<{
+      practiceId: string;
+      subscriptionId: string;
+      inventoryAddon: {
+        enabled: boolean;
+        revokedBy: string;
+        revokedAt: string;
+        reason?: string;
+      };
+      metadata: Record<string, any>;
+      message: string;
+    }>(`/api/platform/admin/practices/${practiceId}/addons/inventory/revoke`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
 
   listPayments: async (params?: { search?: string; status?: string; page?: number; pageSize?: number }) => {
     const q = new URLSearchParams();

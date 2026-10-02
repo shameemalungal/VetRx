@@ -23,6 +23,7 @@ import { PlatformAdminService } from '../src/platform/platform-admin.service.js'
 import { MemberService } from '../src/auth/member.service.js';
 import { InvitationService } from '../src/auth/invitation.service.js';
 import { EntitlementService } from '../src/commercial/entitlement.service.js';
+import { SubscriptionService } from '../src/commercial/subscription.service.js';
 import { AuditService } from '../src/lib/audit.service.js';
 import { PERMISSIONS } from '../src/auth/permissions.js';
 
@@ -815,4 +816,96 @@ describe('Central Platform Super Admin Console (38+ Scenarios)', () => {
       assert.strictEqual(updated.phone, '+919876543210');
     });
   });
+
+  // ============================================================================
+  // 8. Inventory Add-on Commercial Governance & Audit Scenarios
+  // ============================================================================
+
+  describe('8. Inventory Add-on Commercial Governance & Audit', () => {
+    const testPracticeId = 'practice-addon-test';
+
+    it('45. Querying add-on status on practice without subscription reflects inactive', async () => {
+      const status = await SubscriptionService.getPracticeAddonStatus(testPracticeId);
+      assert.strictEqual(status.isInventoryAddonActive, false);
+      assert.strictEqual(status.hasSubscription, false);
+    });
+
+    it('46. Cannot grant Inventory Add-on without active base subscription', async () => {
+      await assert.rejects(
+        async () => {
+          await SubscriptionService.grantInventoryAddon({
+            practiceId: testPracticeId,
+            actorUserId: superAdminUserId,
+            reason: 'Premature grant test',
+          });
+        },
+        (err: any) => err instanceof AppError && err.code === 'SUBSCRIPTION_REQUIRED'
+      );
+    });
+
+    it('47. Super Admin grants Inventory Add-on to practice with base subscription and audits', async () => {
+      // Setup mock subscription
+      EntitlementService.setMockSubscription(testPracticeId, {
+        id: 'sub-test-addon-1',
+        practiceId: testPracticeId,
+        status: 'ACTIVE',
+        plan: { code: 'INDIVIDUAL_MONTHLY', name: 'Individual' },
+        metadata: {},
+      } as any);
+
+      const grantRes = await SubscriptionService.grantInventoryAddon({
+        practiceId: testPracticeId,
+        actorUserId: superAdminUserId,
+        reason: 'Commercial pilot agreement',
+      });
+
+      assert.strictEqual(grantRes.inventoryAddon.enabled, true);
+      assert.strictEqual(grantRes.inventoryAddon.grantedBy, superAdminUserId);
+      assert.strictEqual(grantRes.inventoryAddon.reason, 'Commercial pilot agreement');
+
+      // Verify status query reflects active
+      const status = await SubscriptionService.getPracticeAddonStatus(testPracticeId);
+      assert.strictEqual(status.isInventoryAddonActive, true);
+      assert.strictEqual(status.hasSubscription, true);
+
+      // Verify audit trail
+      const logs = AuditService.getMockLogs();
+      const grantLog = logs.find((l) => l.action === 'INVENTORY_ADDON_GRANTED' && l.practiceId === testPracticeId);
+      assert.ok(grantLog);
+      assert.strictEqual(grantLog.userId, superAdminUserId);
+    });
+
+    it('48. Super Admin revokes Inventory Add-on and audits without deleting records', async () => {
+      EntitlementService.setMockSubscription(testPracticeId, {
+        id: 'sub-test-addon-1',
+        practiceId: testPracticeId,
+        status: 'ACTIVE',
+        plan: { code: 'INDIVIDUAL_MONTHLY', name: 'Individual' },
+        metadata: {
+          addons: { inventory_management: true },
+          inventoryAddon: { enabled: true, grantedBy: superAdminUserId, grantedAt: new Date().toISOString() },
+        },
+      } as any);
+
+      const revokeRes = await SubscriptionService.revokeInventoryAddon({
+        practiceId: testPracticeId,
+        actorUserId: superAdminUserId,
+        reason: 'Pilot expired',
+      });
+
+      assert.strictEqual(revokeRes.inventoryAddon.enabled, false);
+      assert.strictEqual(revokeRes.inventoryAddon.revokedBy, superAdminUserId);
+      assert.strictEqual(revokeRes.inventoryAddon.reason, 'Pilot expired');
+
+      // Status query reflects inactive
+      const status = await SubscriptionService.getPracticeAddonStatus(testPracticeId);
+      assert.strictEqual(status.isInventoryAddonActive, false);
+
+      // Verify audit trail
+      const logs = AuditService.getMockLogs();
+      const revokeLog = logs.find((l) => l.action === 'INVENTORY_ADDON_REVOKED' && l.practiceId === testPracticeId);
+      assert.ok(revokeLog);
+    });
+  });
 });
+

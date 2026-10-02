@@ -918,3 +918,112 @@ platformAdminRouter.post('/subscriptions/:id/revoke', async (req: AuthenticatedR
     next(err);
   }
 });
+
+// ==============================================================================
+// 10. Inventory Add-on Management (Platform Super Admin Only)
+// ==============================================================================
+
+const addonActionSchema = z.object({
+  reason: z.string().optional(),
+});
+
+// Helper to resolve practice ID whether passed practiceId or subscriptionId
+async function resolvePracticeIdFromParam(paramId: string): Promise<string> {
+  if (process.env.VETRX_FAST_TEST === '1') {
+    return paramId;
+  }
+  // Check if paramId matches a subscription
+  const sub = await prisma.subscription.findUnique({
+    where: { id: paramId },
+    select: { practiceId: true },
+  });
+  if (sub) {
+    return sub.practiceId;
+  }
+  return paramId;
+}
+
+// GET /practices/:id/addons/inventory - Query Inventory Add-on state
+platformAdminRouter.get('/practices/:id/addons/inventory', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = await resolvePracticeIdFromParam(String(req.params.id));
+    const status = await SubscriptionService.getPracticeAddonStatus(practiceId);
+    res.status(200).json(status);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /practices/:id/addons/inventory/grant - Grant Inventory Add-on
+platformAdminRouter.post('/practices/:id/addons/inventory/grant', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = await resolvePracticeIdFromParam(String(req.params.id));
+    const { reason } = addonActionSchema.parse(req.body || {});
+    const result = await SubscriptionService.grantInventoryAddon({
+      practiceId,
+      actorUserId,
+      reason,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /practices/:id/addons/inventory/revoke - Revoke Inventory Add-on
+platformAdminRouter.post('/practices/:id/addons/inventory/revoke', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = await resolvePracticeIdFromParam(String(req.params.id));
+    const { reason } = addonActionSchema.parse(req.body || {});
+    const result = await SubscriptionService.revokeInventoryAddon({
+      practiceId,
+      actorUserId,
+      reason,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Subscription aliases for convenience
+platformAdminRouter.post('/subscriptions/:id/addons/inventory/grant', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = await resolvePracticeIdFromParam(String(req.params.id));
+    const { reason } = addonActionSchema.parse(req.body || {});
+    const result = await SubscriptionService.grantInventoryAddon({
+      practiceId,
+      actorUserId,
+      reason,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+platformAdminRouter.post('/subscriptions/:id/addons/inventory/revoke', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const practiceId = await resolvePracticeIdFromParam(String(req.params.id));
+    const { reason } = addonActionSchema.parse(req.body || {});
+    const result = await SubscriptionService.revokeInventoryAddon({
+      practiceId,
+      actorUserId,
+      reason,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+

@@ -1458,6 +1458,380 @@ export class SubscriptionService {
   }
 
   /**
+   * Super Admin only: Retrieves comprehensive add-on and entitlement status for a practice.
+   */
+  static async getPracticeAddonStatus(practiceId: string): Promise<{
+    practiceId: string;
+    practiceName?: string;
+    hasSubscription: boolean;
+    subscriptionId?: string;
+    planCode?: string;
+    planName?: string;
+    subscriptionStatus?: string;
+    isInventoryAddonActive: boolean;
+    inventoryAddon: any;
+    metadata: Record<string, any>;
+  }> {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const sub = EntitlementService.getMockSubscription(practiceId);
+      const isAddonActive = EntitlementService.getMockInventoryAddon(practiceId) ?? Boolean(sub?.metadata?.addons?.inventory_management);
+      return {
+        practiceId,
+        practiceName: sub?.practiceName || practiceId,
+        hasSubscription: !!sub,
+        subscriptionId: sub?.id,
+        planCode: sub?.planCode,
+        planName: sub?.plan?.name,
+        subscriptionStatus: sub?.status || 'NO_SUBSCRIPTION',
+        isInventoryAddonActive: isAddonActive,
+        inventoryAddon: sub?.metadata?.inventoryAddon || null,
+        metadata: sub?.metadata || {},
+      };
+    }
+
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      include: {
+        subscriptions: {
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!practice) {
+      throw new AppError(404, 'PRACTICE_NOT_FOUND', `Practice not found for ID: ${practiceId}`);
+    }
+
+    const sub = practice.subscriptions[0];
+    const isAddonActive = await EntitlementService.isInventoryAddonActive(practiceId, sub);
+    const meta = (sub?.metadata as Record<string, any>) || {};
+
+    return {
+      practiceId,
+      practiceName: practice.name,
+      hasSubscription: !!sub,
+      subscriptionId: sub?.id,
+      planCode: sub?.plan?.code,
+      planName: sub?.plan?.name,
+      subscriptionStatus: sub?.status,
+      isInventoryAddonActive: isAddonActive,
+      inventoryAddon: meta.inventoryAddon || null,
+      metadata: meta,
+    };
+  }
+
+  /**
+   * Super Admin only: Grants Inventory & Stock Management add-on to a practice.
+   */
+  static async grantInventoryAddon(params: {
+    practiceId: string;
+    actorUserId: string;
+    reason?: string;
+  }): Promise<{
+    practiceId: string;
+    subscriptionId: string;
+    inventoryAddon: {
+      enabled: boolean;
+      grantedBy: string;
+      grantedAt: string;
+      reason?: string;
+      source: string;
+    };
+    metadata: Record<string, any>;
+    message: string;
+  }> {
+    const { practiceId, actorUserId, reason } = params;
+    const now = new Date();
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      let sub = EntitlementService.getMockSubscription(practiceId);
+      if (!sub) {
+        throw new AppError(
+          400,
+          'SUBSCRIPTION_REQUIRED',
+          'This practice does not have a subscription record. An active base subscription (Commercial, Trial, or Complimentary) is required before granting the Inventory add-on. Please grant Complimentary Access first.'
+        );
+      }
+      const existingMeta = sub.metadata || {};
+      sub.metadata = {
+        ...existingMeta,
+        addons: {
+          ...(existingMeta.addons || {}),
+          inventory_management: true,
+        },
+        inventoryAddon: {
+          enabled: true,
+          grantedBy: actorUserId,
+          grantedAt: now.toISOString(),
+          reason: reason || 'Granted by Platform Super Admin',
+          source: 'PLATFORM_SUPER_ADMIN',
+        },
+      };
+      EntitlementService.setMockSubscription(practiceId, sub);
+      EntitlementService.setMockInventoryAddon(practiceId, true);
+
+      void AuditService.record({
+        practiceId,
+        userId: actorUserId,
+        action: 'INVENTORY_ADDON_GRANTED',
+        resource: 'Subscription',
+        resourceId: sub.id,
+        details: {
+          practiceId,
+          grantedBy: actorUserId,
+          reason: reason || 'Granted by Platform Super Admin',
+          previousState: false,
+          newState: true,
+        },
+      });
+
+      return {
+        practiceId,
+        subscriptionId: sub.id,
+        inventoryAddon: sub.metadata.inventoryAddon,
+        metadata: sub.metadata,
+        message: 'Inventory & Stock Management add-on granted successfully.',
+      };
+    }
+
+    // 1. Locate practice
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      include: {
+        subscriptions: {
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!practice) {
+      throw new AppError(404, 'PRACTICE_NOT_FOUND', `Practice not found for ID: ${practiceId}`);
+    }
+
+    // 2. Validate practice has a subscription record
+    const existingSub = practice.subscriptions[0];
+    if (!existingSub) {
+      throw new AppError(
+        400,
+        'SUBSCRIPTION_REQUIRED',
+        'This practice does not have a subscription record. An active base subscription (Commercial, Trial, or Complimentary) is required before granting the Inventory add-on. Please grant Complimentary Access first.'
+      );
+    }
+
+    const wasActive = await EntitlementService.isInventoryAddonActive(practiceId, existingSub);
+    const existingMeta = (existingSub.metadata as Record<string, any>) || {};
+
+    const updatedMeta = {
+      ...existingMeta,
+      addons: {
+        ...((existingMeta.addons as Record<string, any>) || {}),
+        inventory_management: true,
+      },
+      inventoryAddon: {
+        enabled: true,
+        grantedBy: actorUserId,
+        grantedAt: now.toISOString(),
+        reason: reason || 'Granted by Platform Super Admin',
+        source: 'PLATFORM_SUPER_ADMIN',
+      },
+    };
+
+    const updatedSub = await prisma.subscription.update({
+      where: { id: existingSub.id },
+      data: {
+        metadata: updatedMeta as any,
+      },
+      include: { plan: true },
+    });
+
+    void AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'INVENTORY_ADDON_GRANTED',
+      resource: 'Subscription',
+      resourceId: updatedSub.id,
+      details: {
+        practiceId,
+        practiceName: practice.name,
+        grantedBy: actorUserId,
+        reason: reason || 'Granted by Platform Super Admin',
+        previousState: wasActive,
+        newState: true,
+        planCode: updatedSub.plan.code,
+        subscriptionStatus: updatedSub.status,
+      },
+    });
+
+    return {
+      practiceId,
+      subscriptionId: updatedSub.id,
+      inventoryAddon: updatedMeta.inventoryAddon,
+      metadata: updatedMeta,
+      message: 'Inventory & Stock Management add-on granted successfully.',
+    };
+  }
+
+  /**
+   * Super Admin only: Revokes Inventory & Stock Management add-on from a practice.
+   * Does NOT delete any inventory records (items, batches, purchases, movements, etc.).
+   */
+  static async revokeInventoryAddon(params: {
+    practiceId: string;
+    actorUserId: string;
+    reason?: string;
+  }): Promise<{
+    practiceId: string;
+    subscriptionId: string;
+    inventoryAddon: {
+      enabled: boolean;
+      revokedBy: string;
+      revokedAt: string;
+      reason?: string;
+      previousGrantedAt?: string;
+      previousGrantedBy?: string;
+    };
+    metadata: Record<string, any>;
+    message: string;
+  }> {
+    const { practiceId, actorUserId, reason } = params;
+    const now = new Date();
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      let sub = EntitlementService.getMockSubscription(practiceId);
+      if (!sub) {
+        throw new AppError(
+          400,
+          'SUBSCRIPTION_REQUIRED',
+          'This practice does not have a subscription record.'
+        );
+      }
+      const existingMeta = sub.metadata || {};
+      sub.metadata = {
+        ...existingMeta,
+        addons: {
+          ...(existingMeta.addons || {}),
+          inventory_management: false,
+        },
+        inventoryAddon: {
+          ...(existingMeta.inventoryAddon || {}),
+          enabled: false,
+          revokedBy: actorUserId,
+          revokedAt: now.toISOString(),
+          reason: reason || 'Revoked by Platform Super Admin',
+        },
+      };
+      EntitlementService.setMockSubscription(practiceId, sub);
+      EntitlementService.setMockInventoryAddon(practiceId, false);
+
+      void AuditService.record({
+        practiceId,
+        userId: actorUserId,
+        action: 'INVENTORY_ADDON_REVOKED',
+        resource: 'Subscription',
+        resourceId: sub.id,
+        details: {
+          practiceId,
+          revokedBy: actorUserId,
+          reason: reason || 'Revoked by Platform Super Admin',
+          previousState: true,
+          newState: false,
+        },
+      });
+
+      return {
+        practiceId,
+        subscriptionId: sub.id,
+        inventoryAddon: sub.metadata.inventoryAddon,
+        metadata: sub.metadata,
+        message: 'Inventory & Stock Management add-on revoked successfully. Existing records remain preserved.',
+      };
+    }
+
+    // 1. Locate practice
+    const practice = await prisma.practice.findUnique({
+      where: { id: practiceId },
+      include: {
+        subscriptions: {
+          include: { plan: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!practice) {
+      throw new AppError(404, 'PRACTICE_NOT_FOUND', `Practice not found for ID: ${practiceId}`);
+    }
+
+    const existingSub = practice.subscriptions[0];
+    if (!existingSub) {
+      throw new AppError(
+        400,
+        'SUBSCRIPTION_REQUIRED',
+        'This practice does not have a subscription record.'
+      );
+    }
+
+    const wasActive = await EntitlementService.isInventoryAddonActive(practiceId, existingSub);
+    const existingMeta = (existingSub.metadata as Record<string, any>) || {};
+
+    const updatedMeta = {
+      ...existingMeta,
+      addons: {
+        ...((existingMeta.addons as Record<string, any>) || {}),
+        inventory_management: false,
+      },
+      inventoryAddon: {
+        ...((existingMeta.inventoryAddon as Record<string, any>) || {}),
+        enabled: false,
+        revokedBy: actorUserId,
+        revokedAt: now.toISOString(),
+        reason: reason || 'Revoked by Platform Super Admin',
+        previousGrantedAt: existingMeta.inventoryAddon?.grantedAt,
+        previousGrantedBy: existingMeta.inventoryAddon?.grantedBy,
+      },
+    };
+
+    const updatedSub = await prisma.subscription.update({
+      where: { id: existingSub.id },
+      data: {
+        metadata: updatedMeta as any,
+      },
+      include: { plan: true },
+    });
+
+    void AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'INVENTORY_ADDON_REVOKED',
+      resource: 'Subscription',
+      resourceId: updatedSub.id,
+      details: {
+        practiceId,
+        practiceName: practice.name,
+        revokedBy: actorUserId,
+        reason: reason || 'Revoked by Platform Super Admin',
+        previousState: wasActive,
+        newState: false,
+        planCode: updatedSub.plan.code,
+        subscriptionStatus: updatedSub.status,
+      },
+    });
+
+    return {
+      practiceId,
+      subscriptionId: updatedSub.id,
+      inventoryAddon: updatedMeta.inventoryAddon,
+      metadata: updatedMeta,
+      message: 'Inventory & Stock Management add-on revoked successfully. Existing records remain preserved.',
+    };
+  }
+
+  /**
    * Day 12 Reminder and Day 14 Automatic Conversion Scheduler.
    */
   static async checkTrialRemindersAndConversions(): Promise<{
@@ -1595,6 +1969,13 @@ export class SubscriptionService {
 
     return subscriptions.map((s) => {
       const meta = (s.metadata as any) || {};
+      const isInventoryActive = Boolean(
+        meta.addons?.inventory_management !== undefined
+          ? meta.addons.inventory_management
+          : (typeof meta.inventoryAddon === 'object' && meta.inventoryAddon !== null
+              ? meta.inventoryAddon.enabled
+              : meta.inventoryAddon)
+      );
       return {
         id: s.id,
         practiceId: s.practiceId,
@@ -1605,6 +1986,12 @@ export class SubscriptionService {
         source: meta.source || 'PAID',
         isUnlimited: !!meta.isUnlimited,
         metadata: meta,
+        addons: {
+          inventoryManagement: isInventoryActive,
+          ...(meta.addons || {}),
+        },
+        inventoryAddon: meta.inventoryAddon || null,
+        isInventoryAddonActive: isInventoryActive,
         currentPeriodStart: s.currentPeriodStart.toISOString(),
         currentPeriodEnd: s.currentPeriodEnd.toISOString(),
         seatsAllowed: s.plan.maxUserSeats,
