@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="/var/www/vetrx"
+DEPLOY_DIR="/home/ncms/VetRx"
 COMPOSE="docker compose -f docker-compose.prod.yml"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR="/var/backups/vetrx"
@@ -19,7 +19,23 @@ echo "║   $(date)                              ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# ─── Step 0: Navigate to deploy directory ───────────────────────────────────
+# ─── Step 0: Safety checks & navigate to deploy directory ───────────────────
+if [ ! -d "$DEPLOY_DIR" ]; then
+  echo "❌ ERROR: Deployment directory does not exist: $DEPLOY_DIR. Aborting." >&2
+  exit 1
+fi
+
+if [ ! -d "$DEPLOY_DIR/.git" ]; then
+  echo "❌ ERROR: Git repository directory not found at $DEPLOY_DIR/.git. Aborting." >&2
+  exit 1
+fi
+
+if [ ! -f "$DEPLOY_DIR/docker-compose.prod.yml" ]; then
+  echo "❌ ERROR: Production compose file not found at $DEPLOY_DIR/docker-compose.prod.yml. Aborting." >&2
+  exit 1
+fi
+
+echo "✅ Pre-flight safety checks passed"
 cd "$DEPLOY_DIR"
 echo "▶ Working directory: $(pwd)"
 
