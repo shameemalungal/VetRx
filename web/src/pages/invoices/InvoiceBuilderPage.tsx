@@ -18,7 +18,11 @@ import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
 import { formatINR, getNextInvoiceNumber, formatLocalDateInput } from './invoiceUtils';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
+import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
+import { formatInvoiceItemDescription } from '../../utils/documentFormat';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi } from '../../services/inventoryApi';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -55,6 +59,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
 
   const queryRxId = searchParams.get('prescriptionId') || searchParams.get('fromRx');
   const queryPatientId = searchParams.get('patientId');
@@ -192,9 +197,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
             const draftedItems: ItemDraft[] = rxItems.map((rxi, i) => ({
               tempId: `rx_${i}_${Date.now()}`,
               category: 'Prescription Medicine',
-              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
+              description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
               quantity: rxi.quantity || 1,
-              unit: rxi.unit || 'tablets',
+              unit: rxi.dispenseUnit || rxi.unit || 'tablets',
               unitPricePaisa: 0, // Safe default rate of 0 (UAT Requirement 8)
               discountAmtPaisa: 0,
               rateControlled: false,
@@ -280,6 +285,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       'Per visit',
       'Per dose',
       'Per vial',
+      ...DISPENSE_UNITS,
       'tablets',
       'capsules',
       'ml',
@@ -387,9 +393,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     const newItems: ItemDraft[] = rxItems.map((rxi, i) => ({
       tempId: `imported_rx_${rxi.id || i}_${Date.now()}`,
       category: 'Prescription Medicine',
-      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}${rxi.directions ? ' (' + rxi.directions + ')' : ''}`,
+      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
       quantity: rxi.quantity || 1,
-      unit: rxi.unit || 'tablets',
+      unit: rxi.dispenseUnit || rxi.unit || 'tablets',
       unitPricePaisa: 0, // Safe default rate 0
       discountAmtPaisa: 0,
       rateControlled: false,
@@ -417,12 +423,12 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     if (!importedList.length) return;
 
     const newDrafts: ItemDraft[] = importedList.map((imp, idx) => {
-      const dirStr = imp.directions ? ` (${imp.directions})` : '';
       const strVolStr = imp.strengthVolume ? ` ${imp.strengthVolume}` : '';
+      const cleanDesc = formatInvoiceItemDescription(imp.description) || `${imp.brandName}${strVolStr}`.trim();
       return {
         tempId: `imported_rx_${imp.prescriptionItemId || idx}_${Date.now()}_${idx}`,
         category: 'Prescription Medicine',
-        description: imp.description || `${imp.brandName}${strVolStr}${dirStr}`.trim(),
+        description: cleanDesc,
         quantity: Math.max(1, imp.quantity || 1),
         unit: imp.unit || 'tablets',
         unitPricePaisa: 0, // Safe default rate of 0
@@ -736,6 +742,20 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       });
 
       await db.invoiceItems.bulkAdd(itemsToInsert);
+
+      // Inventory FEFO stock deduction when invoice is finalized
+      if (saveStatus === 'Issued' && isInventoryEntitled) {
+        try {
+          const invItemsPayload = itemsToInsert.map((it) => ({
+            medicineId: it.medicineId,
+            medicineName: it.description,
+            quantity: it.quantity,
+          }));
+          await inventoryApi.deductInvoiceStock(savedInvoiceId.toString(), invItemsPayload);
+        } catch (stockErr) {
+          console.warn('Inventory deduction notice:', stockErr);
+        }
+      }
 
       navigate(`/invoices/${savedInvoiceId}`);
     } catch (err: any) {

@@ -1,0 +1,421 @@
+/* =============================================================
+   VetRx — Inventory & Stock Management Module Styles
+   Material You design language, Teal/Navy palette, responsive
+   ============================================================= */
+
+.inventory-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl, 24px);
+  width: 100%;
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 0 4px;
+}
+
+/* Header & Breadcrumb */
+.inventory-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md, 16px);
+}
+
+@media (min-width: 768px) {
+  .inventory-header-row {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+.inventory-module-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-full, 9999px);
+  background: rgba(0, 104, 95, 0.08);
+  color: var(--color-primary, #00685f);
+  font-family: var(--font-data, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.inventory-title {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--color-on-surface, #0f172a);
+  margin: 4px 0 2px 0;
+  letter-spacing: -0.02em;
+}
+
+.inventory-subtitle {
+  font-size: 14px;
+  color: var(--color-on-surface-variant, #64748b);
+  margin: 0;
+}
+
+.inventory-actions-deck {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Sub-nav Tab Bar */
+.inventory-subnav-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.inventory-subnav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant, #64748b);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+}
+
+.inventory-subnav-btn:hover {
+  background: rgba(0, 104, 95, 0.05);
+  color: var(--color-primary, #00685f);
+}
+
+.inventory-subnav-btn.active {
+  background: var(--color-primary, #00685f);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 104, 95, 0.25);
+}
+
+.inventory-subnav-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.25);
+  color: inherit;
+}
+
+.inventory-subnav-btn:not(.active) .inventory-subnav-badge {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Metric Cards Grid */
+.inventory-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.inventory-metric-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+
+.inventory-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+}
+
+.inventory-metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.inventory-metric-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-on-surface-variant, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.inventory-metric-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inventory-metric-val {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--color-on-surface, #0f172a);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.inventory-metric-sub {
+  font-size: 12px;
+  color: var(--color-on-surface-variant, #64748b);
+  margin-top: 4px;
+}
+
+/* Category Filter Pills */
+.inventory-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.inventory-cat-pill {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.inventory-cat-pill:hover {
+  border-color: var(--color-primary, #00685f);
+  color: var(--color-primary, #00685f);
+}
+
+.inventory-cat-pill.active {
+  background: rgba(0, 104, 95, 0.1);
+  border-color: var(--color-primary, #00685f);
+  color: var(--color-primary, #00685f);
+  font-weight: 700;
+}
+
+/* Table Container */
+.inventory-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.inventory-table-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+.inventory-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.inventory-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.inventory-table tr:hover td {
+  background: #f8fafc;
+}
+
+/* Status Badges */
+.inv-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.inv-status-in_stock {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.inv-status-low_stock {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.inv-status-out_of_stock {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.inv-status-expired {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Empty State */
+.inventory-empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  margin: 16px 0;
+}
+
+.inventory-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: rgba(0, 104, 95, 0.08);
+  color: var(--color-primary, #00685f);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.inventory-empty-title {
+  font-size: 18px;
+  font-weight: 750;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.inventory-empty-sub {
+  font-size: 14px;
+  color: #64748b;
+  max-width: 440px;
+  margin: 0 auto 24px auto;
+  line-height: 1.5;
+}
+
+/* Modals */
+.inv-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 16px;
+}
+
+.inv-modal-card {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.inv-modal-card.modal-large {
+  max-width: 980px;
+}
+
+.inv-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inv-modal-title {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.inv-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.inv-close-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+/* Importer dropzone */
+.inv-dropzone {
+  border: 2px dashed #94a3b8;
+  border-radius: 12px;
+  padding: 36px 20px;
+  text-align: center;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.inv-dropzone:hover,
+.inv-dropzone.dragging {
+  border-color: var(--color-primary, #00685f);
+  background: rgba(0, 104, 95, 0.04);
+}
+
+/* Warnings */
+.inv-warning-banner {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #92400e;
+  font-size: 13.5px;
+}

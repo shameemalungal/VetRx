@@ -24,6 +24,7 @@ export class SessionService {
    */
   static async createSession(params: {
     userId: string;
+    practiceId?: string | null;
     ipAddress?: string;
     userAgent?: string;
   }): Promise<string> {
@@ -36,6 +37,7 @@ export class SessionService {
     await prisma.session.create({
       data: {
         userId: params.userId,
+        practiceId: params.practiceId || null,
         sessionTokenHash,
         expiresAt,
         ipAddress: params.ipAddress || null,
@@ -43,8 +45,19 @@ export class SessionService {
       },
     });
 
-    logger.debug('Session created for user', { userId: params.userId });
+    logger.debug('Session created for user', { userId: params.userId, practiceId: params.practiceId });
     return rawToken;
+  }
+
+  /**
+   * Updates the active practice context for a session.
+   */
+  static async updateSessionPractice(sessionId: string, practiceId: string): Promise<void> {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { practiceId },
+    });
+    logger.debug('Session practice context updated', { sessionId, practiceId });
   }
 
   /**

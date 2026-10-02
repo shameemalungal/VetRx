@@ -55,21 +55,33 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   const [identificationRef, setIdentificationRef] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Active master data species + current patient's species if it happens to be inactive
+  // Active master data species + current patient's species if it happens to be inactive (strictly deduplicated)
   const availableSpeciesOptions = useMemo(() => {
-    if (!masterSpecies || masterSpecies.length === 0) {
-      return SPECIES_OPTIONS.map((sp) => ({ value: sp, label: sp }));
+    const raw = (!masterSpecies || masterSpecies.length === 0)
+      ? SPECIES_OPTIONS.map((sp) => ({ value: sp, label: sp }))
+      : masterSpecies
+          .filter((item) => item.isActive || item.name === species)
+          .map((item) => ({
+            value: item.name,
+            label: item.name,
+          }));
+
+    const map = new Map<string, { value: string; label: string }>();
+    for (const opt of raw) {
+      const key = opt.value.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, opt);
+      }
     }
-    const options = masterSpecies
-      .filter((item) => item.isActive || item.name === species)
-      .map((item) => ({
-        value: item.name,
-        label: item.name,
-      }));
-    if (species && !options.some((o) => o.value === species)) {
-      options.push({ value: species, label: species });
+
+    if (species) {
+      const key = species.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, { value: species, label: species });
+      }
     }
-    return options;
+
+    return Array.from(map.values());
   }, [masterSpecies, species]);
 
   // Active master data sex + current patient's sex if it happens to be inactive (strictly deduplicated)

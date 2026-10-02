@@ -1,7 +1,7 @@
 import puppeteer from 'puppeteer-core';
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const TARGET_URL = 'https://vetrx.adcpmalappuram.in';
+const TARGET_URL = 'https://vetrx.brightbase.in';
 
 async function test() {
   const browser = await puppeteer.launch({

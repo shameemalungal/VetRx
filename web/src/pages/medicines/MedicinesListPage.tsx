@@ -3,12 +3,14 @@
 // Clinical Formulary management with Master Data integration
 // =============================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Medicine } from '../../types';
 import { MedicineFormModal } from './MedicineFormModal';
 import { Icon } from '../../components/ui/Icon';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi } from '../../services/inventoryApi';
 import './Medicines.css';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -75,6 +77,42 @@ export function MedicinesListPage() {
     usageCount: number;
     action: 'deactivate' | 'delete';
   } | null>(null);
+
+  // Inventory Entitlement & Stock Mapping
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+  const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!isInventoryEntitled) return;
+    void (async () => {
+      try {
+        const res = await inventoryApi.getItems({ category: 'MEDICINE' });
+        const map = new Map<string, number>();
+        (res.items || []).forEach((item) => {
+          const qty = item.totalStock ?? 0;
+          if (item.medicineId) {
+            map.set(`id:${item.medicineId}`, qty);
+          }
+          map.set(`name:${item.name.toLowerCase().trim()}`, qty);
+        });
+        setStockMap(map);
+      } catch {
+        // Silently ignore
+      }
+    })();
+  }, [isInventoryEntitled]);
+
+  const getMedicineStock = (med: Medicine): number => {
+    if (!isInventoryEntitled) return 0;
+    if (med.id && stockMap.has(`id:${med.id}`)) {
+      return stockMap.get(`id:${med.id}`)!;
+    }
+    const nameKey = `name:${med.brandName.toLowerCase().trim()}`;
+    if (stockMap.has(nameKey)) {
+      return stockMap.get(nameKey)!;
+    }
+    return 0;
+  };
 
   // Computed Metrics
   const totalCount = allMedicines.length;
@@ -432,12 +470,34 @@ export function MedicinesListPage() {
                       </div>
                     </div>
 
-                    <span
-                      className={`medicine-status-pill ${isActive ? 'active' : 'inactive'}`}
-                    >
-                      <span className="medicine-status-dot" />
-                      <span>{isActive ? 'Active' : 'Inactive'}</span>
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {isInventoryEntitled && (
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: getMedicineStock(medicine) > 0 ? '#dcfce7' : '#fee2e2',
+                            color: getMedicineStock(medicine) > 0 ? '#15803d' : '#b91c1c',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Icon name="box" size={11} />
+                          <span>
+                            Stock: {getMedicineStock(medicine)} ({getMedicineStock(medicine) > 0 ? 'In Stock' : 'External'})
+                          </span>
+                        </span>
+                      )}
+                      <span
+                        className={`medicine-status-pill ${isActive ? 'active' : 'inactive'}`}
+                      >
+                        <span className="medicine-status-dot" />
+                        <span>{isActive ? 'Active' : 'Inactive'}</span>
+                      </span>
+                    </div>
                   </div>
 
                   {/* Specs Box: Presentation, Strength, Unit, Category */}
@@ -446,9 +506,14 @@ export function MedicinesListPage() {
                       <span className="medicine-spec-badge">
                         <span className="spec-label">Form:</span> {medicine.presentation}
                       </span>
-                      {medicine.strengthVolume && (
+                      {(medicine.strength || medicine.strengthVolume) && (
                         <span className="medicine-spec-badge">
-                          <span className="spec-label">Strength:</span> {medicine.strengthVolume}
+                          <span className="spec-label">Strength:</span> {medicine.strength || medicine.strengthVolume}
+                        </span>
+                      )}
+                      {medicine.packSize && (
+                        <span className="medicine-spec-badge">
+                          <span className="spec-label">Pack Size:</span> {medicine.packSize}
                         </span>
                       )}
                       {medicine.defaultUnit && (
@@ -556,9 +621,14 @@ export function MedicinesListPage() {
                         <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
                           <span className="spec-label">Form:</span> {medicine.presentation}
                         </span>
-                        {medicine.strengthVolume && (
-                          <span className="medicine-spec-badge">
-                            <span className="spec-label">Strength:</span> {medicine.strengthVolume}
+                        {(medicine.strength || medicine.strengthVolume) && (
+                          <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
+                            <span className="spec-label">Strength:</span> {medicine.strength || medicine.strengthVolume}
+                          </span>
+                        )}
+                        {medicine.packSize && (
+                          <span className="medicine-spec-badge" style={{ marginRight: 4 }}>
+                            <span className="spec-label">Pack Size:</span> {medicine.packSize}
                           </span>
                         )}
                       </td>
@@ -580,12 +650,32 @@ export function MedicinesListPage() {
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={`medicine-status-pill ${isActive ? 'active' : 'inactive'}`}
-                        >
-                          <span className="medicine-status-dot" />
-                          <span>{isActive ? 'Active' : 'Inactive'}</span>
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span
+                            className={`medicine-status-pill ${isActive ? 'active' : 'inactive'}`}
+                          >
+                            <span className="medicine-status-dot" />
+                            <span>{isActive ? 'Active' : 'Inactive'}</span>
+                          </span>
+                          {isInventoryEntitled && (
+                            <span
+                              style={{
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                background: getMedicineStock(medicine) > 0 ? '#dcfce7' : '#fee2e2',
+                                color: getMedicineStock(medicine) > 0 ? '#15803d' : '#b91c1c',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                              }}
+                            >
+                              <Icon name="box" size={10} />
+                              <span>Stock: {getMedicineStock(medicine)}</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 4 }}>

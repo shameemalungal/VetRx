@@ -6,7 +6,18 @@
 .app-shell {
   display: flex;
   min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--color-canvas);
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
 }
 
 /* ── Sidebar (desktop) ───────────────────────────────────────── */
@@ -158,9 +169,20 @@
 .app-main {
   flex: 1;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   background: var(--color-canvas);
+}
+
+@media (min-width: 1024px) {
+  .app-main {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
+    overflow-x: auto;
+  }
 }
 
 /* ── Desktop Top Header ──────────────────────────────────────── */
@@ -314,6 +336,10 @@
   flex: 1;
   padding: var(--space-lg) var(--space-xl);
   overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* ── Bottom Navigation (mobile floating capsule) ─────────────── */
@@ -895,7 +921,7 @@
 
 @media (max-width: 767px) {
   .page-content {
-    padding: var(--space-sm) var(--space-sm);
+    padding: 12px 10px;
     padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-xl));
   }
 }
@@ -920,3 +946,43 @@
     width: 14px;
   }
 }
+
+/* ── Print Media Rules ───────────────────────────────────────── */
+@media print {
+  .sidebar,
+  .desktop-header,
+  .bottom-nav,
+  .mobile-header,
+  .mobile-nav-backdrop,
+  .more-menu-sheet {
+    display: none !important;
+  }
+
+  .app-shell {
+    display: block !important;
+    background: #ffffff !important;
+    min-height: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .app-main {
+    display: block !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .page-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+}
+

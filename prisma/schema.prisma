@@ -19,13 +19,73 @@ datasource db {
 enum Role {
   PRACTICE_OWNER
   PRACTICE_ADMIN
-  PRACTICE_STAFF
+  VETERINARIAN
+  STAFF
+  PRACTICE_STAFF // legacy alias for STAFF
+  READ_ONLY
+}
+
+enum PlatformRole {
+  PLATFORM_SUPER_ADMIN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
 }
 
 enum IdentityProviderType {
   GOOGLE
   PASSWORD
   FUTURE_MYKGVOA
+}
+
+enum OverrideEffect {
+  ALLOW
+  DENY
+}
+
+enum PracticeType {
+  INDEPENDENT
+  CLINIC
+  ENTERPRISE
+}
+
+enum PracticeStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum IssueCategory {
+  LOGIN_AUTH
+  INVITATION
+  PRACTICE_SETUP
+  USER_PERMISSIONS
+  PRESCRIPTION
+  PATIENT
+  INVOICE_BILLING
+  SUBSCRIPTION
+  PAYMENT
+  PDF_PRINT
+  TECHNICAL
+  OTHER
+}
+
+enum IssuePriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
 }
 
 // ------------------------------------------------------------------------------
@@ -41,6 +101,7 @@ model User {
   emailVerified   Boolean          @default(false)
   passwordHash    String?          // Nullable for OAuth-only users
   isActive        Boolean          @default(true)
+  platformRole    PlatformRole?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   lastLoginAt     DateTime?
@@ -51,6 +112,22 @@ model User {
   ownedPractices  Practice[]       @relation("PracticeOwner")
   sessions        Session[]
   auditLogs       AuditLog[]
+  invitationsSent PracticeInvitation[] @relation("UserInvitationsSent")
+
+  // Overrides and Prescription Clinical Workflow Relations
+  permissionOverridesCreated        MemberPermissionOverride[]   @relation("PermissionOverrideCreatedBy")
+  prescriptionsForwarded             Prescription[]               @relation("PrescriptionForwardedBy")
+  prescriptionsAssigned              Prescription[]               @relation("PrescriptionForwardedTo")
+  prescriptionsApproved              Prescription[]               @relation("PrescriptionApprovedBy")
+  prescriptionsRequestedChanges      Prescription[]               @relation("PrescriptionRequestedBy")
+  prescriptionWorkflowActions        PrescriptionWorkflowHistory[]
+  prescriptionWorkflowTargetActions  PrescriptionWorkflowHistory[] @relation("WorkflowHistoryTargetUser")
+
+  // Support and Platform Relations
+  assignedIssues                     PlatformIssue[]              @relation("AssignedIssues")
+  reportedIssues                     PlatformIssue[]              @relation("ReportedIssues")
+  supportSessionsAdmin               SupportAccessSession[]       @relation("SupportAdminSessions")
+  supportSessionsTarget              SupportAccessSession[]       @relation("TargetSupportSessions")
 
   @@index([normalizedEmail])
 }
@@ -73,6 +150,8 @@ model Session {
   id               String    @id @default(uuid())
   userId           String
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceId       String?
+  practice         Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
   sessionTokenHash String    @unique // SHA-256 hash of raw session token
   expiresAt        DateTime
   createdAt        DateTime  @default(now())
@@ -82,6 +161,7 @@ model Session {
   revokedAt        DateTime?
 
   @@index([userId])
+  @@index([practiceId])
   @@index([sessionTokenHash])
   @@index([expiresAt])
 }
@@ -91,18 +171,22 @@ model Session {
 // ------------------------------------------------------------------------------
 
 model Practice {
-  id          String           @id @default(uuid())
-  name        String
-  slug        String?          @unique
-  ownerUserId String
-  owner       User             @relation("PracticeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
-  isActive    Boolean          @default(true)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id           String         @id @default(uuid())
+  name         String
+  slug         String?        @unique
+  ownerUserId  String
+  owner        User           @relation("PracticeOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  practiceType PracticeType   @default(CLINIC)
+  status       PracticeStatus @default(ACTIVE)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   // Relations
   members     PracticeMember[]
   settings    PracticeSettings?
+  invitations PracticeInvitation[]
+  sessions    Session[]
 
   // Clinical Data Tenant Scoping (Future Stages)
   owners            Owner[]
@@ -115,6 +199,22 @@ model Practice {
   documentSequences DocumentSequence[]
   auditLogs         AuditLog[]
 
+  // Commercial Relations (Phase 10 Foundation)
+  subscriptions     Subscription[]
+  payments          Payment[]
+
+  // Platform Relations
+  issues          PlatformIssue[]
+  supportSessions SupportAccessSession[]
+
+  // Inventory Add-On Relations
+  inventoryItems        InventoryItem[]
+  inventoryBatches      InventoryBatch[]
+  inventoryTransactions InventoryTransaction[]
+  suppliers             Supplier[]
+  purchaseInvoices      PurchaseInvoice[]
+  stockLocations        StockLocation[]
+
   @@index([ownerUserId])
 }
 
@@ -125,13 +225,53 @@ model PracticeMember {
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   role       Role      @default(PRACTICE_OWNER)
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  isActive           Boolean   @default(true)
+  isClinicalApprover Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  permissionOverrides MemberPermissionOverride[]
 
   @@unique([practiceId, userId])
   @@index([practiceId])
   @@index([userId])
+}
+
+model MemberPermissionOverride {
+  id               String         @id @default(uuid())
+  practiceMemberId String
+  practiceMember   PracticeMember @relation(fields: [practiceMemberId], references: [id], onDelete: Cascade)
+  permission       String
+  effect           OverrideEffect @default(ALLOW)
+  createdByUserId  String
+  createdBy        User           @relation("PermissionOverrideCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([practiceMemberId, permission])
+  @@index([practiceMemberId])
+}
+
+model PracticeInvitation {
+  id          String           @id @default(uuid())
+  practiceId  String
+  practice    Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role             @default(STAFF)
+  tokenHash   String           @unique
+  invitedById String
+  invitedBy   User             @relation("UserInvitationsSent", fields: [invitedById], references: [id], onDelete: Restrict)
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([practiceId])
+  @@index([email])
+  @@index([tokenHash])
+  @@index([status])
 }
 
 model PracticeSettings {
@@ -222,6 +362,7 @@ model Medicine {
   updatedAt                    DateTime  @updatedAt
 
   prescriptionItems            PrescriptionItem[]
+  inventoryItems               InventoryItem[]
 
   @@index([practiceId])
   @@index([practiceId, name])
@@ -250,18 +391,58 @@ model Prescription {
   patient         Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   rxNumber        String
   diagnosis       String?
-  notes           String?
-  status          String             @default("Final") // "Draft", "Final", "Cancelled"
-  prescribedAt    DateTime           @default(now())
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  notes                 String?
+  status                String             @default("DRAFT") // "DRAFT", "PENDING_APPROVAL", "CHANGES_REQUESTED", "APPROVED", "CANCELLED", legacy: "Draft", "Final"
+  version               Int                @default(1)
+  prescribedAt          DateTime           @default(now())
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
-  items           PrescriptionItem[]
-  invoiceItems    InvoiceItem[]
+  // Workflow & Approval Fields
+  forwardingRemarks     String?
+  forwardedByUserId     String?
+  forwardedByUser       User?              @relation("PrescriptionForwardedBy", fields: [forwardedByUserId], references: [id], onDelete: SetNull)
+  forwardedToUserId     String?
+  forwardedToUser       User?              @relation("PrescriptionForwardedTo", fields: [forwardedToUserId], references: [id], onDelete: SetNull)
+  forwardedAt           DateTime?
+
+  approvedByUserId      String?
+  approvedByUser        User?              @relation("PrescriptionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  approvedAt            DateTime?
+  approvalRemarks       String?
+  approvedVersion       Int?
+
+  requestedByUserId     String?
+  requestedByUser       User?              @relation("PrescriptionRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  requestedAt           DateTime?
+  changeRequestRemarks  String?
+
+  items                 PrescriptionItem[]
+  invoiceItems          InvoiceItem[]
+  workflowHistory       PrescriptionWorkflowHistory[]
 
   @@unique([practiceId, rxNumber])
   @@index([practiceId])
   @@index([patientId])
+  @@index([status])
+}
+
+model PrescriptionWorkflowHistory {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  version        Int          @default(1)
+  status         String
+  action         String       // "CREATED", "FORWARDED", "CHANGES_REQUESTED", "APPROVED", "RESUBMITTED", "CANCELLED"
+  actorUserId    String
+  actorUser      User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  targetUserId   String?
+  targetUser     User?        @relation("WorkflowHistoryTargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  remarks        String?
+  createdAt      DateTime     @default(now())
+
+  @@index([prescriptionId])
+  @@index([createdAt])
 }
 
 model PrescriptionItem {
@@ -375,3 +556,368 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// ------------------------------------------------------------------------------
+// Commercial SaaS Domain Models (Phase 10 Foundation)
+// Practice is the commercial tenant. Subscriptions and Payments belong to Practice.
+// ------------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  THREE_MONTHS
+  ANNUAL
+  ONE_TIME
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+model SubscriptionPlan {
+  id              String          @id @default(uuid())
+  code            String          @unique // e.g. "TRIAL", "MONTHLY", "THREE_MONTHS", "ANNUAL"
+  name            String          // Human-readable plan name
+  description     String?
+  interval        BillingInterval @default(MONTHLY)
+  intervalCount   Int             @default(1)
+  pricePaisa      Int             // Stored in integer paise (INR), e.g. 59900 = ₹599.00
+  currency        String          @default("INR")
+  trialPeriodDays Int             @default(0)
+  maxUserSeats    Int             @default(1)
+  featuresJson    Json            @default("{}")
+  isActive        Boolean         @default(true)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  subscriptions   Subscription[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  practiceId            String
+  practice              Practice           @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  planId                String
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                SubscriptionStatus @default(TRIAL)
+  trialStartsAt         DateTime?
+  trialEndsAt           DateTime?
+  currentPeriodStart    DateTime           @default(now())
+  currentPeriodEnd      DateTime
+  cancelledAt           DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  gracePeriodEndsAt     DateTime?
+  gatewayCustomerId     String?            // Future PayU or provider customer reference
+  gatewaySubscriptionId String?            // Future recurring subscription reference
+  metadata              Json?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  payments              Payment[]
+
+  @@index([practiceId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+model Payment {
+  id                   String        @id @default(uuid())
+  practiceId           String
+  practice             Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  subscriptionId       String?
+  subscription         Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  amountPaisa          Int           // Strict integer paise: ₹100.00 = 10000
+  currency             String        @default("INR")
+  status               PaymentStatus @default(PENDING)
+  paymentProvider      String        @default("PAYU")
+  internalReference    String        @unique // Unique internal payment tracking ID
+  gatewayTransactionId String?       // External PayU txnid or reference
+  paymentMethod        String?       // UPI, CARD, NETBANKING
+  gatewayResponseRaw   Json?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  events               PaymentEvent[]
+
+  @@index([practiceId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([gatewayTransactionId])
+}
+
+model PaymentEvent {
+  id               String    @id @default(uuid())
+  paymentId        String?
+  payment          Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  provider         String    // e.g. "PAYU"
+  eventId          String    // External event ID or gateway transaction ID
+  eventType        String    // e.g. "PAYMENT_SUCCESS", "PAYMENT_FAILED"
+  payloadHash      String?   // SHA-256 hash of raw payload
+  rawPayload       Json?
+  processingStatus String    @default("PROCESSED") // "RECEIVED", "PROCESSED", "FAILED", "IGNORED"
+  errorMessage     String?
+  receivedAt       DateTime  @default(now())
+  processedAt      DateTime?
+
+  @@unique([provider, eventId]) // STRICT IDEMPOTENCY: Duplicate delivery rejected safely
+  @@index([paymentId])
+  @@index([receivedAt])
+}
+
+// ------------------------------------------------------------------------------
+// Platform SaaS Administration Models (Phase 14 Extension)
+// ------------------------------------------------------------------------------
+
+model PlatformIssue {
+  id               String        @id @default(uuid())
+  practiceId       String?
+  practice         Practice?     @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+  userId           String?
+  user             User?         @relation("ReportedIssues", fields: [userId], references: [id], onDelete: SetNull)
+  category         IssueCategory @default(OTHER)
+  priority         IssuePriority @default(NORMAL)
+  status           IssueStatus   @default(OPEN)
+  title            String
+  description      String
+  assignedToUserId String?
+  assignedTo       User?         @relation("AssignedIssues", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  internalNotes    Json?         @default("[]")
+  resolvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([practiceId])
+  @@index([userId])
+  @@index([status])
+  @@index([priority])
+}
+
+model SupportAccessSession {
+  id                  String    @id @default(uuid())
+  platformAdminUserId String
+  platformAdmin       User      @relation("SupportAdminSessions", fields: [platformAdminUserId], references: [id], onDelete: Restrict)
+  targetPracticeId    String
+  targetPractice      Practice  @relation(fields: [targetPracticeId], references: [id], onDelete: Cascade)
+  targetUserId        String?
+  targetUser          User?     @relation("TargetSupportSessions", fields: [targetUserId], references: [id], onDelete: SetNull)
+  reason              String
+  isReadOnly          Boolean   @default(true)
+  status              String    @default("ACTIVE") // "ACTIVE", "ENDED", "EXPIRED"
+  startedAt           DateTime  @default(now())
+  expiresAt           DateTime
+  endedAt             DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([platformAdminUserId])
+  @@index([targetPracticeId])
+  @@index([status])
+}
+
+// ------------------------------------------------------------------------------
+// Inventory & Stock Management Models (Add-On Module V1)
+// Strictly scoped to Practice boundary.
+// ------------------------------------------------------------------------------
+
+enum InventoryCategory {
+  MEDICINE
+  CONSUMABLE
+  LAB_MATERIAL
+  SURGICAL_MATERIAL
+  OTHER
+}
+
+enum InventoryTransactionType {
+  OPENING_STOCK
+  PURCHASE
+  SALE_OR_INVOICE
+  STOCK_ADJUSTMENT
+  RETURN_TO_SUPPLIER
+  EXPIRED
+  DAMAGED
+  WASTAGE
+  REVERSAL
+}
+
+model StockLocation {
+  id          String   @id @default(uuid())
+  practiceId  String
+  practice    Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  batches     InventoryBatch[]
+
+  @@unique([practiceId, name])
+  @@index([practiceId])
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  practiceId  String
+  practice    Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  name        String
+  gstin       String?
+  address     String?
+  phone       String?
+  email       String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases   PurchaseInvoice[]
+
+  @@index([practiceId])
+  @@index([practiceId, name])
+}
+
+model InventoryItem {
+  id                 String            @id @default(uuid())
+  practiceId         String
+  practice           Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  category           InventoryCategory @default(MEDICINE)
+  name               String
+  genericName        String?
+  strength           String?
+  dosageForm         String?
+  presentation       String?
+  packSize           String?
+  stockUnit          String            @default("Unit")
+  manufacturer       String?
+  minimumStockLevel  Int               @default(5)
+  targetStockLevel   Int               @default(20)
+  barcode            String?
+  medicineId         String?
+  medicine           Medicine?         @relation(fields: [medicineId], references: [id], onDelete: SetNull)
+  isActive           Boolean           @default(true)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  batches            InventoryBatch[]
+  transactions       InventoryTransaction[]
+  purchaseItems      PurchaseInvoiceItem[]
+
+  @@index([practiceId])
+  @@index([practiceId, category])
+  @@index([practiceId, barcode])
+  @@index([medicineId])
+}
+
+model InventoryBatch {
+  id                 String        @id @default(uuid())
+  practiceId         String
+  practice           Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  batchNumber        String
+  manufacturingDate  DateTime?
+  expiryDate         DateTime
+  currentQuantity    Float         @default(0)
+  initialQuantity    Float         @default(0)
+  purchaseRate       Float         @default(0)
+  mrp                Float         @default(0)
+  locationId         String?
+  location           StockLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  transactions       InventoryTransaction[]
+
+  @@index([practiceId])
+  @@index([inventoryItemId])
+  @@index([expiryDate])
+  @@index([practiceId, batchNumber])
+}
+
+model InventoryTransaction {
+  id                 String                   @id @default(uuid())
+  practiceId         String
+  practice           Practice                 @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  itemId             String
+  item               InventoryItem            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  batchId            String?
+  batch              InventoryBatch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  transactionType    InventoryTransactionType
+  quantityChange     Float
+  quantityBefore     Float
+  quantityAfter      Float
+  unitCost           Float                    @default(0)
+  referenceType      String?
+  referenceId        String?
+  reason             String?
+  performedByUserId  String?
+  createdAt          DateTime                 @default(now())
+
+  @@index([practiceId])
+  @@index([itemId])
+  @@index([batchId])
+  @@index([transactionType])
+  @@index([createdAt])
+}
+
+model PurchaseInvoice {
+  id                 String                @id @default(uuid())
+  practiceId         String
+  practice           Practice              @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  supplierId         String?
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierName       String
+  supplierGstin      String?
+  invoiceNumber      String
+  invoiceDate        DateTime
+  totalAmount        Float                 @default(0)
+  notes              String?
+  documentFileName   String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  items              PurchaseInvoiceItem[]
+
+  @@unique([practiceId, supplierName, invoiceNumber])
+  @@index([practiceId])
+  @@index([invoiceDate])
+}
+
+model PurchaseInvoiceItem {
+  id                 String          @id @default(uuid())
+  purchaseInvoiceId  String
+  purchaseInvoice    PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String
+  inventoryItem      InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  itemName           String
+  category           InventoryCategory
+  presentation       String?
+  batchNumber        String
+  manufacturingDate  DateTime?
+  expiryDate         DateTime
+  quantity           Float           @default(1)
+  purchaseRate       Float           @default(0)
+  mrp                Float           @default(0)
+  lineTotal          Float           @default(0)
+
+  @@index([purchaseInvoiceId])
+  @@index([inventoryItemId])
+}
+

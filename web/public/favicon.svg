@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="6" fill="#00685f"/>
-  <text x="16" y="22" text-anchor="middle" font-family="serif" font-size="18" fill="white" font-weight="bold">Rx</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Rounded cross stroke -->
+  <path d="M22 6C22 3.79 23.79 2 26 2H38C40.21 2 42 3.79 42 6V22H58C60.21 22 62 23.79 62 26V38C62 40.21 60.21 42 58 42H42V58C42 60.21 40.21 62 38 62H26C23.79 62 22 60.21 22 58V42H6C3.79 42 2 40.21 2 38V26C2 23.79 3.79 22 6 22H22V6Z" stroke="#00685f" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+  <!-- Paw main pad -->
+  <path d="M32 32C28.5 32 26.5 34.5 27 38C27.5 40.8 29.8 42.5 32 42.5C34.2 42.5 36.5 40.8 37 38C37.5 34.5 35.5 32 32 32Z" fill="#00685f"/>
+  <!-- 4 toe pads -->
+  <ellipse cx="25.5" cy="28.5" rx="2.2" ry="3" transform="rotate(-25 25.5 28.5)" fill="#00685f"/>
+  <ellipse cx="29.8" cy="26" rx="2.2" ry="3.2" transform="rotate(-8 29.8 26)" fill="#00685f"/>
+  <ellipse cx="34.2" cy="26" rx="2.2" ry="3.2" transform="rotate(8 34.2 26)" fill="#00685f"/>
+  <ellipse cx="38.5" cy="28.5" rx="2.2" ry="3" transform="rotate(25 38.5 28.5)" fill="#00685f"/>
 </svg>

@@ -1,0 +1,358 @@
+{
+  "timestamp": "2026-09-17T05:10:07.544Z",
+  "totalScenarios": 29,
+  "passedCount": 29,
+  "results": [
+    {
+      "scenarioId": "Rx-1",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-1-medicine",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-1-medicine.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-1-medicine.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-2",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-2-medicines",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-2-medicines.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-2-medicines.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-3",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-5-medicines",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-5-medicines.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-5-medicines.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-4",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-6-medicines",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-6-medicines.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-6-medicines.png"
+      ],
+      "expectedMaxPages": 2,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-5",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-medicine-name",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-medicine-name.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-long-medicine-name.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-6",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-route-text",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-route-text.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-long-route-text.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-7",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-frequency-text",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-frequency-text.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-long-frequency-text.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-8",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-sig-text",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-sig-text.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-long-sig-text.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-9",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-special-instructions",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-special-instructions.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-special-instructions.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-10",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-follow-up-care-plan",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-follow-up-care-plan.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-follow-up-care-plan.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-11",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-practitioner-qualification",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-practitioner-qualification.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-long-practitioner-qualification.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-12",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-signature-block",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-signature-block.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "prescription-signature-block.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rx-13",
+      "docType": "Prescription",
+      "fileBaseName": "prescription-long-content-multipage",
+      "pdfPath": "artifacts/phase5b-pdf-validation/prescription-long-content-multipage.pdf",
+      "numPages": 2,
+      "pageFiles": [
+        "prescription-long-content-multipage-page-1.png",
+        "prescription-long-content-multipage-page-2.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-1",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-1-line-item",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-1-line-item.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-1-line-item.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-2",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-2-line-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-2-line-items.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-2-line-items.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-3",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-5-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-5-items.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-5-items.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-4",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-6-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-6-items.pdf",
+      "numPages": 2,
+      "pageFiles": [
+        "invoice-6-items-page-1.png",
+        "invoice-6-items-page-2.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-5",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-all-six-categories",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-all-six-categories.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-all-six-categories.png"
+      ],
+      "expectedMaxPages": 2,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-6",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-long-item-description",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-long-item-description.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-long-item-description.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-7",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-statutory-notice",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-statutory-notice.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-statutory-notice.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Inv-8",
+      "docType": "Tax Invoice",
+      "fileBaseName": "invoice-signature-block",
+      "pdfPath": "artifacts/phase5b-pdf-validation/invoice-signature-block.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "invoice-signature-block.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-1",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-1-line-item",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-1-line-item.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-1-line-item.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-2",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-2-line-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-2-line-items.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-2-line-items.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-3",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-5-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-5-items.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-5-items.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-4",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-6-items",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-6-items.pdf",
+      "numPages": 2,
+      "pageFiles": [
+        "receipt-6-items-page-1.png",
+        "receipt-6-items-page-2.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-5",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-long-item-description",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-long-item-description.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-long-item-description.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-6",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-payment-summary",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-payment-summary.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-payment-summary.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-7",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-statutory-notice",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-statutory-notice.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-statutory-notice.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    },
+    {
+      "scenarioId": "Rcp-8",
+      "docType": "Payment Receipt",
+      "fileBaseName": "receipt-signature-block",
+      "pdfPath": "artifacts/phase5b-pdf-validation/receipt-signature-block.pdf",
+      "numPages": 1,
+      "pageFiles": [
+        "receipt-signature-block.png"
+      ],
+      "expectedMaxPages": 1,
+      "passed": true
+    }
+  ]
+}

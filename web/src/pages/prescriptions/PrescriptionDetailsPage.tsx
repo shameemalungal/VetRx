@@ -10,27 +10,45 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
-import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
+import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import { CreatePackageFromPrescriptionModal } from './CreatePackageFromPrescriptionModal';
-import { generatePdfBlob, savePdfWithFilePicker, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
+import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
+import { useAuth } from '../../context/AuthContext';
+import type { PrescriptionWorkflowHistoryItem } from '../../types';
 import './Prescriptions.css';
+
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 export const PrescriptionDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const rxId = id ? parseInt(id, 10) : undefined;
 
+  const { user, can, hasRole } = useAuth();
   const { practitioner: storePractitioner, organisation: storeOrganisation } = useSettingsStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showConfirmIssueModal, setShowConfirmIssueModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showCreatePackageModal, setShowCreatePackageModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [cachedPdfBlob, setCachedPdfBlob] = useState<Blob | null>(null);
+
+  // Clinical Approval Workflow States
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRequestChangesModal, setShowRequestChangesModal] = useState(false);
+  const [showReviseModal, setShowReviseModal] = useState(false);
+  const [forwardToUserId, setForwardToUserId] = useState('');
+  const [forwardRemarks, setForwardRemarks] = useState('');
+  const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [changeRequestRemarks, setChangeRequestRemarks] = useState('');
+  const [eligibleClinicians, setEligibleClinicians] = useState<Array<{ id: string; name: string; email: string; role?: string; isClinicalApprover?: boolean }>>([]);
+  const [loadingClinicians, setLoadingClinicians] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -70,30 +88,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const allPractitioners = useLiveQuery(() => db.practitioners.toArray(), []);
 
   // ── Actions ───────────────────────────────────────────────────
-  const handleExecuteIssue = async () => {
-    if (!prescription?.id) return;
-    setIsUpdating(true);
-    setShowConfirmIssueModal(false);
-    try {
-      const now = new Date();
-      await db.prescriptions.update(prescription.id, {
-        status: 'Issued',
-        issuedAt: now,
-        updatedAt: now,
-      });
-      showToast(`Prescription ${prescription.rxNumber} issued and saved to patient record.`);
-    } catch (err) {
-      console.error('Failed to issue prescription:', err);
-      showToast('Error issuing prescription.');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  const handleCompleteAndIssue = () => {
-    setShowConfirmIssueModal(true);
-  };
-
   const handleExecuteCancel = async () => {
     if (!prescription?.id || prescription.status === 'Cancelled') return;
     setIsUpdating(true);
@@ -115,29 +109,319 @@ export const PrescriptionDetailsPage: React.FC = () => {
     }
   };
 
+  // ── Approval Workflow Actions ─────────────────────────────────
+  const loadEligibleClinicians = async () => {
+    setLoadingClinicians(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/prescriptions/eligible-clinicians`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setEligibleClinicians(data);
+          if (data.length === 1 && data[0]?.id) {
+            setForwardToUserId(data[0].id);
+          } else {
+            setForwardToUserId('');
+          }
+          return;
+        }
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoadingClinicians(false);
+    }
+
+    if (allPractitioners && allPractitioners.length > 0) {
+      const fallbackList = allPractitioners.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        email: p.email || '',
+        role: 'VETERINARIAN',
+        isClinicalApprover: true,
+      }));
+      setEligibleClinicians(fallbackList);
+      if (fallbackList.length === 1 && fallbackList[0]?.id) {
+        setForwardToUserId(fallbackList[0].id);
+      } else {
+        setForwardToUserId('');
+      }
+    } else {
+      setEligibleClinicians([]);
+      setForwardToUserId('');
+    }
+  };
+
+  const handleOpenForwardModal = () => {
+    setForwardToUserId('');
+    setForwardRemarks('');
+    void loadEligibleClinicians();
+    setShowForwardModal(true);
+  };
+
+  const handleExecuteForward = async () => {
+    if (!prescription?.id || !forwardToUserId) return;
+    setIsUpdating(true);
+    try {
+      const selectedClinician = eligibleClinicians.find((c) => c.id === forwardToUserId);
+      const targetUser = selectedClinician || { id: forwardToUserId, name: 'Veterinarian', email: '' };
+
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/forward`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            forwardedToUserId: forwardToUserId,
+            forwardingRemarks: forwardRemarks.trim() || undefined,
+          }),
+        });
+      } catch (err) {
+        console.warn('Server forward sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const isResubmission = prescription.status === 'Changes Requested';
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Pending Approval',
+        action: isResubmission ? 'RESUBMITTED' : 'FORWARDED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        targetUserId: targetUser.id,
+        targetUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email || '' },
+        remarks: forwardRemarks.trim() || (isResubmission ? 'Resubmitted for clinical approval after addressing changes' : 'Forwarded for clinical approval'),
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Pending Approval',
+        forwardedToUserId: targetUser.id,
+        forwardedToUser: { id: targetUser.id, name: targetUser.name, email: targetUser.email || '' },
+        forwardedByUserId: user?.id || null,
+        forwardedByUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        forwardingRemarks: forwardRemarks.trim() || null,
+        forwardedAt: now,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowForwardModal(false);
+      setForwardRemarks('');
+      showToast(`Prescription ${prescription.rxNumber} submitted for clinical approval by Dr. ${targetUser.name}.`);
+    } catch (err) {
+      console.error('Failed to forward prescription:', err);
+      showToast('Error forwarding prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteApprove = async () => {
+    if (!prescription?.id) return;
+    setIsUpdating(true);
+    try {
+      try {
+        const res = await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            approvalRemarks: approvalRemarks.trim() || undefined,
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || 'Server rejected approval.');
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Server approve failed.');
+        setIsUpdating(false);
+        return;
+      }
+
+      const now = new Date();
+      const approverName = user?.name || activePractitioner?.name || 'Veterinarian';
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Approved',
+        action: 'APPROVED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+        remarks: approvalRemarks.trim() || null,
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Approved',
+        approvedByUserId: user?.id || null,
+        approvedByUser: { id: user?.id || 'current-user', name: approverName, email: user?.email || '' },
+        approvedAt: now,
+        approvedVersion: prescription.version || 1,
+        approvalRemarks: approvalRemarks.trim() || null,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowApproveModal(false);
+      setApprovalRemarks('');
+      showToast(`Prescription ${prescription.rxNumber} approved and digitally sealed.`);
+    } catch (err) {
+      console.error('Failed to approve prescription:', err);
+      showToast('Error approving prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteRequestChanges = async () => {
+    if (!prescription?.id || !changeRequestRemarks.trim()) return;
+    setIsUpdating(true);
+    try {
+      try {
+        const res = await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/request-changes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            changeRequestRemarks: changeRequestRemarks.trim(),
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error?.message || 'Server rejected request for changes.');
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Server request-changes failed.');
+        setIsUpdating(false);
+        return;
+      }
+
+      const now = new Date();
+      const clinicianName = user?.name || activePractitioner?.name || 'Veterinarian';
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: prescription.version || 1,
+        status: 'Changes Requested',
+        action: 'CHANGES_REQUESTED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: clinicianName, email: user?.email || '' },
+        remarks: changeRequestRemarks.trim(),
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        status: 'Changes Requested',
+        requestedByUserId: user?.id || null,
+        requestedByUser: { id: user?.id || 'current-user', name: clinicianName, email: user?.email || '' },
+        requestedAt: now,
+        changeRequestRemarks: changeRequestRemarks.trim(),
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowRequestChangesModal(false);
+      setChangeRequestRemarks('');
+      showToast(`Changes requested for prescription ${prescription.rxNumber}.`);
+    } catch (err) {
+      console.error('Failed to request changes:', err);
+      showToast('Error requesting changes.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleExecuteRevise = async () => {
+    if (!prescription?.id) return;
+    setIsUpdating(true);
+    try {
+      try {
+        await fetch(`${API_BASE}/api/prescriptions/${prescription.id}/revise`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+      } catch (err) {
+        console.warn('Server revise sync failed, updating local DB:', err);
+      }
+
+      const now = new Date();
+      const newVersion = (prescription.version || 1) + 1;
+      const historyItem: PrescriptionWorkflowHistoryItem = {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        version: newVersion,
+        status: 'Draft',
+        action: 'REVISED',
+        actorUserId: user?.id || 'current-user',
+        actorUser: { id: user?.id || 'current-user', name: user?.name || 'Staff', email: user?.email || '' },
+        remarks: `Revised from v${prescription.version || 1} to create new editable draft v${newVersion}`,
+        createdAt: now,
+      };
+
+      await db.prescriptions.update(prescription.id, {
+        version: newVersion,
+        status: 'Draft',
+        forwardedToUserId: null,
+        forwardedToUser: null,
+        forwardedByUserId: null,
+        forwardedByUser: null,
+        forwardingRemarks: null,
+        forwardedAt: null,
+        approvedByUserId: null,
+        approvedByUser: null,
+        approvedAt: null,
+        approvedVersion: null,
+        approvalRemarks: null,
+        requestedByUserId: null,
+        requestedByUser: null,
+        requestedAt: null,
+        changeRequestRemarks: null,
+        workflowHistory: [...(prescription.workflowHistory || []), historyItem],
+        updatedAt: now,
+      });
+
+      setShowReviseModal(false);
+      showToast(`Prescription revised to Version ${newVersion}. You can now edit medications.`);
+      navigate(`/prescriptions/${prescription.id}/edit`);
+    } catch (err) {
+      console.error('Failed to revise prescription:', err);
+      showToast('Error revising prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
   const handleSavePdf = async () => {
+    // Desktop: use browser's native print engine for pixel-perfect PDF output
+    // (identical to "Microsoft Print to PDF" / Ctrl+P)
+    if (!isMobileDevice()) {
+      savePdfNative();
+      return;
+    }
+
+    // Mobile: fallback to html2canvas + jsPDF for direct download/share
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');
       if (!sheet) {
-        showToast('Prescription sheet element not found in DOM.');
+        showToast('Prescription document could not be rendered for export.');
         return;
       }
       const blob = await generatePdfBlob(sheet);
       setCachedPdfBlob(blob);
-      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
-      const result = await savePdfWithFilePicker(blob, filename);
-      if (result.success) {
-        showToast(`Prescription PDF saved: ${filename}`);
-      } else if (result.error) {
-        showToast(`Failed to save PDF: ${result.error}`);
-      }
-    } catch (err: unknown) {
-      console.error('Save PDF failed:', err);
+      if (!prescription) return;
+      const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
+      await savePdfWithFilePicker(blob, filename);
+      showToast('Prescription PDF saved successfully.');
+    } catch (err) {
+      console.error('Failed to save PDF on mobile:', err);
       showToast('Failed to generate PDF. Please try again.');
     } finally {
       setIsGeneratingPdf(false);
@@ -148,63 +432,51 @@ export const PrescriptionDetailsPage: React.FC = () => {
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');
-      if (!sheet) return;
+      if (!sheet || !prescription) return;
       const blob = cachedPdfBlob || (await generatePdfBlob(sheet));
       setCachedPdfBlob(blob);
-      const filename = buildPrescriptionFilename(patient?.name, prescription?.rxNumber);
+
+      const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
       const file = new File([blob], filename, { type: 'application/pdf' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: `Prescription ${prescription?.rxNumber}`,
-            text: `Veterinary Prescription ${prescription?.rxNumber} for ${patient?.name || 'Patient'}`,
-            files: [file],
-          });
-          return;
-        } catch (err: unknown) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            return;
-          }
-        }
+        await navigator.share({
+          title: `Prescription ${prescription.rxNumber}`,
+          text: `Prescription for ${patient?.name || 'patient'}`,
+          files: [file],
+        });
+      } else {
+        setShareModalOpen(true);
       }
-      setShareModalOpen(true);
-    } catch (err: unknown) {
-      console.error('Share failed:', err);
-      setShareModalOpen(true);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Share failed:', err);
+        setShareModalOpen(true);
+      }
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
-  if (!rxId || prescription === undefined) {
-    return (
-      <div className="rx-page-container">
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <div className="spinner" style={{ margin: '0 auto 16px' }} />
-          <p style={{ color: 'var(--color-on-surface-variant)' }}>Loading prescription preview…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (prescription === null) {
+  if (!prescription) {
     return (
       <div className="rx-page-container">
         <div className="rx-empty-state">
-          <div className="rx-empty-icon-box">
-            <Icon name="prescription" size={28} />
+          <div className="rx-empty-icon">
+            <Icon name="prescription" size={48} />
           </div>
-          <h3 className="rx-empty-title">Prescription Not Found</h3>
+          <h2 className="rx-empty-title">Prescription Not Found</h2>
           <p className="rx-empty-desc">
-            The requested prescription record does not exist or has been removed.
+            The requested prescription record (ID #{rxId}) could not be located in local storage.
           </p>
-          <div style={{ marginTop: '16px' }}>
-            <Link to="/prescriptions" className="btn btn-primary">
-              <Icon name="chevron-left" size={16} />
-              Return to Prescriptions
-            </Link>
-          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate('/prescriptions')}
+          >
+            <Icon name="arrow-left" size={16} />
+            <span>Return to Prescriptions</span>
+          </button>
         </div>
       </div>
     );
@@ -218,28 +490,6 @@ export const PrescriptionDetailsPage: React.FC = () => {
     year: 'numeric',
   });
 
-  const followUpDays = prescription.followUpDays || 7;
-  const followUpDate = new Date(createdDate.getTime() + followUpDays * 24 * 60 * 60 * 1000);
-  const formattedFollowUpDate = followUpDate.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-
-  // Instruction points
-  const instructionList = prescription.instructions
-    ? prescription.instructions
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [
-        'Give oral medicines strictly following a meal.',
-        'Keep treated area clean and dry during recovery.',
-        'Fit protective Elizabethan collar if persistent licking or scratching resumes.',
-        'Complete entire antimicrobial regimen even if clinical signs resolve earlier.',
-      ];
-
-  const effectiveWeight = patient?.weightKg ? `${patient.weightKg.toFixed(1)} kg` : 'Weight N/A';
 
   // ── Resolve Active Practitioner & Organisation ───────────────
   // Preference order:
@@ -247,9 +497,11 @@ export const PrescriptionDetailsPage: React.FC = () => {
   // 2. storePractitioner (active in settings store)
   // 3. first practitioner in DB
   const activePractitioner =
-    rxPractitioner ||
-    storePractitioner ||
-    (allPractitioners && allPractitioners.length > 0 ? allPractitioners[0] : null);
+    rxPractitioner && rxPractitioner.isActive !== false
+      ? rxPractitioner
+      : storePractitioner && storePractitioner.isActive !== false
+      ? storePractitioner
+      : null;
 
   // CRITICAL IDENTITY RULE:
   // The active session organisation from useSettingsStore is the single source of truth.
@@ -258,54 +510,25 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const activeOrganisation =
     storeOrganisation && storeOrganisation.isActive !== false ? storeOrganisation : null;
 
-  // Doctor credentials
   const doctorName = activePractitioner?.name?.trim() || 'Veterinarian';
   const doctorQual = activePractitioner?.qualifications?.trim() || '';
-  const doctorReg = activePractitioner?.registrationNumber?.trim()
-    ? (activePractitioner.registrationNumber.trim().startsWith('Reg')
-        ? activePractitioner.registrationNumber.trim()
-        : `Reg: ${activePractitioner.registrationNumber.trim()}`)
-    : '';
-
-  const doctorAddress = activePractitioner?.address?.trim() || '';
-  const doctorPhone = activePractitioner?.phone?.trim() || '';
-  const doctorEmail = activePractitioner?.email?.trim() || '';
-
-  // ── Practice / Clinic Identity State ───────────────────────────
-  // CRITICAL REQUIREMENT:
-  // - RULE 1: CLINIC ACTIVE -> Show Clinic/Practice info + Veterinarian info
-  // - RULE 2: CLINIC OFF / INDEPENDENT PRACTITIONER -> DO NOT display clinic name.
-  //   Never display "Dr. Shameem Alungal's Vet Clinic" or "— Veterinary Practice" or any fake clinic.
-  //   Show ONLY veterinarian identity and contact.
-  const rawOrgName = activeOrganisation?.name?.trim();
-  const hasClinic = Boolean(
-    activeOrganisation &&
-    activeOrganisation.isActive !== false &&
-    rawOrgName &&
-    rawOrgName.length > 0 &&
-    rawOrgName.toLowerCase() !== 'independent practitioner'
-  );
-
-  const clinicName = hasClinic ? rawOrgName! : '';
-  const formattedClinicAddress = hasClinic
-    ? [
-        activeOrganisation?.address?.trim(),
-        activeOrganisation?.city?.trim(),
-        activeOrganisation?.state?.trim() && activeOrganisation?.pincode?.trim()
-          ? `${activeOrganisation.state.trim()} - ${activeOrganisation.pincode.trim()}`
-          : (activeOrganisation?.state?.trim() || activeOrganisation?.pincode?.trim()),
-      ].filter(Boolean).join(', ')
-    : '';
-  const clinicAddress = formattedClinicAddress || doctorAddress;
-  const clinicPhone = (hasClinic && activeOrganisation?.phone?.trim())
-    ? activeOrganisation.phone.trim()
-    : doctorPhone;
-  const clinicEmail = (hasClinic && activeOrganisation?.email?.trim())
-    ? activeOrganisation.email.trim()
-    : doctorEmail;
 
   const isIssued = prescription.status === 'Issued';
   const isCancelled = prescription.status === 'Cancelled';
+  const isPendingApproval = prescription.status === 'Pending Approval';
+  const isChangesRequested = prescription.status === 'Changes Requested';
+  const isApproved = prescription.status === 'Approved';
+  const isDraft = prescription.status === 'Draft' || (!prescription.status as any);
+
+  // Authoritative clinical authority check:
+  // Must possess PRESCRIPTION_APPROVE, or have the VETERINARIAN or PRACTICE_OWNER role.
+  const canApprove =
+    can('PRESCRIPTION_APPROVE') ||
+    hasRole('VETERINARIAN');
+
+  const canRequestChanges =
+    can('PRESCRIPTION_REQUEST_CHANGES') ||
+    canApprove;
 
   return (
     <div className="rx-page-container">
@@ -369,7 +592,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
           <span className="rx-preview-step-connector active" />
           <div className="rx-preview-step-badge active">
             <Icon name="sparkles" size={16} color="#ffffff" />
-            <span className="rx-preview-step-text">4 Generate</span>
+            <span className="rx-preview-step-text">{isApproved ? '4 Review & Sign' : '4 Review & Approval'}</span>
           </div>
         </div>
       </div>
@@ -377,9 +600,25 @@ export const PrescriptionDetailsPage: React.FC = () => {
       {/* ── Page Header Module ─────────────────────────────────── */}
       <div className="no-print rx-preview-header-card">
         <div className="rx-preview-header-left">
-          <div className="rx-preview-title-row">
+          <div className="rx-preview-title-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 className="rx-title">Prescription Preview</h1>
-            {isIssued ? (
+            <span className="rx-version-badge">v{prescription.version || 1}</span>
+            {isApproved ? (
+              <span className="rx-status-chip approved">
+                <span className="status-dot"></span>
+                Approved &amp; Sealed
+              </span>
+            ) : isPendingApproval ? (
+              <span className="rx-status-chip pending">
+                <span className="status-dot pulse"></span>
+                Pending Approval
+              </span>
+            ) : isChangesRequested ? (
+              <span className="rx-status-chip changes-requested">
+                <span className="status-dot"></span>
+                Changes Requested
+              </span>
+            ) : isIssued ? (
               <span className="rx-status-chip issued">
                 <span className="status-dot"></span>
                 Issued Record
@@ -392,16 +631,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
             ) : (
               <span className="rx-status-chip ready">
                 <span className="status-dot pulse"></span>
-                Ready to Generate
+                Draft
               </span>
             )}
           </div>
           <p className="rx-subtitle">
             {isCancelled
               ? 'This prescription is cancelled and preserved as a read-only historical record.'
+              : isApproved
+              ? `Approved clinical veterinary prescription (v${prescription.version || 1}). Printable and recorded in patient history.`
+              : isPendingApproval
+              ? `Prescription forwarded for clinical sign-off to Dr. ${prescription.forwardedToUser?.name || 'Veterinarian'}.`
+              : isChangesRequested
+              ? 'Clinical modifications requested. Update medication items and re-forward for sign-off.'
               : isIssued
               ? 'Official issued veterinary prescription. Printable and recorded in patient history.'
-              : 'Review the prescription before printing or saving.'}
+              : 'Draft prescription. Forward for clinical approval or approve before printing.'}
           </p>
         </div>
 
@@ -485,438 +730,188 @@ export const PrescriptionDetailsPage: React.FC = () => {
       <div className="rx-preview-workspace">
         {/* Left Column: Dominant A4 Realistic Medical Stationery */}
         <div className="prescription-sheet-wrapper" id="printable-prescription-wrapper">
-          <div id="prescription-sheet">
-            <div>
-              {/* Prominent Cancellation Banner if Cancelled */}
-              {isCancelled && (
-                <div
-                  style={{
-                    background: '#fef2f2',
-                    border: '1px solid #fecaca',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    color: '#991b1b',
-                  }}
-                >
-                  <Icon name="warning" size={20} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
-                    <strong>CANCELLED PRESCRIPTION:</strong> This prescription was cancelled
-                    {prescription.cancelledAt ? ` on ${new Date(prescription.cancelledAt).toLocaleDateString('en-GB')}` : ''}.
-                    {prescription.cancellationReason && (
-                      <span> Reason: <em>{prescription.cancellationReason}</em></span>
-                    )}
-                    <span style={{ display: 'block', fontSize: '11px', color: '#b91c1c', marginTop: '2px' }}>
-                      Preserved for clinical history. Use "Clone Prescription" to create a new editable version.
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Shared Document Top Bar */}
-              <div
-                className="prescription-doc-top-bar"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingBottom: '10px',
-                  borderBottom: '1px solid #e2e8f0',
-                  marginBottom: '14px',
-                  gap: '12px',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div className="prescription-doc-top-left" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
-                  <span
-                    className="prescription-doc-top-badge"
-                    style={{
-                      fontFamily: 'var(--font-data)',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      letterSpacing: '0.05em',
-                      textTransform: 'uppercase',
-                      color: 'var(--color-outline)',
-                    }}
-                  >
-                    OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
-                  </span>
-                </div>
-                <div
-                  className="prescription-doc-top-right"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '11px',
-                    fontFamily: 'var(--font-data)',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span style={{ color: 'var(--color-outline)' }}>
-                    Doc Ref: <strong>{prescription.rxNumber}</strong>
-                  </span>
-                  <span
-                    style={{
-                      background: 'var(--color-surface-container-high)',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontWeight: 600,
-                      color: 'var(--color-primary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Original Prescription
-                  </span>
-                </div>
+          {/* Prominent Cancellation Banner if Cancelled */}
+          {isCancelled && (
+            <div
+              className="no-print"
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                color: '#991b1b',
+              }}
+            >
+              <Icon name="warning" size={20} color="#dc2626" style={{ flexShrink: 0 }} />
+              <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
+                <strong>CANCELLED PRESCRIPTION:</strong> This prescription was cancelled
+                {prescription.cancelledAt ? ` on ${new Date(prescription.cancelledAt).toLocaleDateString('en-GB')}` : ''}.
+                {prescription.cancellationReason && (
+                  <span> Reason: <em>{prescription.cancellationReason}</em></span>
+                )}
+                <span style={{ display: 'block', fontSize: '11px', color: '#b91c1c', marginTop: '2px' }}>
+                  Preserved for clinical history. Use "Clone Prescription" to create a new editable version.
+                </span>
               </div>
+            </div>
+          )}
 
-              {/* ── Polished Letterhead Header Band ──────────────────── */}
-              {hasClinic ? (
-                /* State A: CLINIC ACTIVE */
-                <div className="prescription-letterhead-band">
-                  {/* Clinic / Practice Block */}
-                  <div className="letterhead-block">
-                    <span className="letterhead-block-tag">
-                      <Icon name="hospital" size={13} color="var(--color-outline)" />
-                      Clinic / Practice
-                    </span>
-                    <div className="letterhead-clinic-brand-row">
-                      <div className="letterhead-clinic-logo-box" style={{ overflow: 'hidden' }}>
-                        {activeOrganisation?.logoDataUrl ? (
-                          <img
-                            src={activeOrganisation.logoDataUrl}
-                            alt="Clinic Logo"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <Icon name="stethoscope" size={24} color="#ffffff" />
-                        )}
-                      </div>
-                      <div>
-                        <h2 className="letterhead-clinic-name">{clinicName}</h2>
-                        {clinicAddress && <p className="letterhead-location">{clinicAddress}</p>}
-                        {(clinicPhone || clinicEmail) && (
-                          <div className="letterhead-contact-line">
-                            {clinicPhone && <span>Ph: {clinicPhone}</span>}
-                            {clinicPhone && clinicEmail && <span>•</span>}
-                            {clinicEmail && <span>Email: {clinicEmail}</span>}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Elegant vertical separator */}
-                  <div className="letterhead-vertical-divider" />
-
-                  {/* Veterinarian Block */}
-                  <div className="letterhead-block letterhead-veterinarian-block">
-                    <span className="letterhead-block-tag">Veterinarian</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                      {activePractitioner?.photoDataUrl && (
-                        <div
-                          style={{
-                            width: '34px',
-                            height: '34px',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            border: '1.5px solid var(--color-primary)',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <img
-                            src={activePractitioner.photoDataUrl}
-                            alt={doctorName}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="letterhead-doctor-name">{doctorName}</h3>
-                        <p className="letterhead-doctor-qual">{doctorQual}</p>
-                      </div>
-                    </div>
-                    {doctorReg && <span className="letterhead-reg-chip">{doctorReg}</span>}
-                  </div>
+          {/* Workflow Banner: Pending Clinical Approval */}
+          {isPendingApproval && (
+            <div className="no-print rx-workflow-banner pending">
+              <Icon name="clock" size={20} color="#b45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title" style={{ fontSize: '15px', fontWeight: 700, color: '#92400e' }}>
+                  Pending approval
                 </div>
-              ) : (
-                /* State B: CLINIC OFF / INDEPENDENT PRACTITIONER */
-                <div className="prescription-letterhead-band">
-                  {/* Veterinarian Identity Hero Block */}
-                  <div className="letterhead-block">
-                    <span className="letterhead-block-tag">
-                      <Icon name="stethoscope" size={13} color="var(--color-primary)" />
-                      Veterinary Practitioner
-                    </span>
-                    <div className="letterhead-practitioner-hero-row">
-                      <div className="letterhead-practitioner-avatar" style={{ overflow: 'hidden' }}>
-                        {activePractitioner?.photoDataUrl ? (
-                          <img
-                            src={activePractitioner.photoDataUrl}
-                            alt={doctorName}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <Icon name="stethoscope" size={26} color="#ffffff" />
-                        )}
-                      </div>
-                      <div>
-                        <h2 className="letterhead-doctor-name-hero">{doctorName}</h2>
-                        <p className="letterhead-doctor-qual-hero">{doctorQual}</p>
-                        {doctorReg && <span className="letterhead-reg-chip">{doctorReg}</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Elegant vertical separator */}
-                  <div className="letterhead-vertical-divider" />
-
-                  {/* Practice Location & Direct Contact Block */}
-                  <div className="letterhead-block letterhead-practitioner-contact-block">
-                    <span className="letterhead-block-tag">Practice Location &amp; Contact</span>
-                    {doctorAddress && (
-                      <p className="letterhead-location" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
-                        {doctorAddress}
-                      </p>
-                    )}
-                    <div className="letterhead-contact-line" style={{ justifyContent: 'flex-end', marginTop: '2px' }}>
-                      {doctorPhone && <span>Ph: {doctorPhone}</span>}
-                      {doctorPhone && doctorEmail && <span>•</span>}
-                      {doctorEmail && <span>Email: {doctorEmail}</span>}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Document Title & Meta Ribbon */}
-              <div className="stationery-title-ribbon">
-                <div className="stationery-doc-title">
-                  <Icon name="prescription" size={18} color="var(--color-primary)" />
-                  <span>VETERINARY PRESCRIPTION</span>
-                </div>
-                <div className="stationery-meta-right">
-                  <span>
-                    Date: <strong>{formattedDate}</strong>
-                  </span>
-                  <span>
-                    Rx No: <strong style={{ color: 'var(--color-primary)' }}>{prescription.rxNumber}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* Owner & Patient Signalment Grid */}
-              <div className="stationery-signalment-grid">
-                {/* Owner Block */}
-                <div className="stationery-signalment-box">
-                  <div className="stationery-box-label">
-                    <Icon name="owner" size={14} />
-                    <span>Owner Details</span>
-                  </div>
-                  <div className="stationery-primary-name">{formatOwnerPrimary(owner, 'Client')}</div>
-                  {owner?.phone && <p className="stationery-sub-text">Ph: {owner.phone}</p>}
-                  {owner?.address && <p className="stationery-sub-text">{owner.address}</p>}
-                </div>
-
-                {/* Patient Animal Block */}
-                <div className="stationery-signalment-box">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div className="stationery-box-label" style={{ marginBottom: 0 }}>
-                      <Icon name="paw" size={14} />
-                      <span>Animal Details</span>
-                    </div>
-                    <span className="stationery-id-code">
-                      ID: {patient?.identificationRef || (patient?.id ? `PT-2026-${patient.id.toString().padStart(4, '0')}` : 'PT-RECORD')}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                    <div className="stationery-primary-name">
-                      {!isArtificialOrBlankName(patient?.name) ? patient?.name : (patient ? formatAnimalSubtitle(patient) : '')}
-                    </div>
-                    <span className="stationery-weight-badge">{effectiveWeight}</span>
-                  </div>
-                  <p className="stationery-sub-text">
-                    {patient?.species} {patient?.breed ? `• ${patient.breed}` : ''}
-                  </p>
-                  <p className="stationery-sub-text">
-                    {patient?.sex && patient.sex !== 'Unknown' ? `${patient.sex}` : ''}
-                    {patient?.ageNote ? ` • ${patient.ageNote}` : ''}
-                    {patient?.identificationRef ? ` • Ear Tag: ${patient.identificationRef}` : ''}
-                  </p>
-                </div>
-              </div>
-
-              {/* Clinical Symptoms & Diagnosis Findings */}
-              <div className="stationery-findings-box">
-                <div>
-                  <span className="stationery-box-label">Clinical Presentation</span>
-                  <p style={{ fontSize: '13px', color: 'var(--color-on-surface)', lineHeight: 1.4 }}>
-                    {prescription.symptoms || 'None recorded'}
-                  </p>
-                </div>
-                <div>
-                  <span className="stationery-box-label">Confirmed Diagnosis</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                {prescription.forwardedToUser ? (
+                  <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-on-surface)' }}>
+                    <span style={{ color: 'var(--color-outline)', fontWeight: 500 }}>Assigned to:</span>{' '}
+                    <strong style={{ color: 'var(--color-on-surface)' }}>
+                      Dr. {prescription.forwardedToUser.name.replace(/^Dr\.?\s*/i, '')}
+                    </strong>
                     <span
                       style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: 'var(--color-error)',
+                        marginLeft: '8px',
                         display: 'inline-block',
-                        flexShrink: 0,
+                        padding: '2px 8px',
+                        background: 'rgba(0, 104, 95, 0.08)',
+                        color: 'var(--color-primary, #00685f)',
+                        border: '1px solid rgba(0, 104, 95, 0.2)',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 600,
                       }}
-                    />
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                      {prescription.diagnosis || 'Clinical Examination / Prescribed Treatment'}
-                    </p>
+                    >
+                      {prescription.forwardedToUser.role === 'VETERINARIAN'
+                        ? 'Veterinarian'
+                        : prescription.forwardedToUser.role === 'PRACTICE_OWNER'
+                        ? 'Practice Owner'
+                        : prescription.forwardedToUser.role
+                        ? 'Practice Admin'
+                        : 'Veterinarian'}{' '}
+                      · Clinical Approver
+                    </span>
                   </div>
-                </div>
-              </div>
-
-              {/* Structured Medications Table */}
-              <div className="rx-meds-table-container">
-                <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', marginBottom: '6px' }}>
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Icon name="pill" size={18} color="var(--color-primary)" />
-                    Prescribed Medication Schedule
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
-                    {items?.length || 0} Line Items
-                  </span>
-                </div>
-
-                <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-surface-container)' }}>
-                  <table className="stationery-meds-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '36px', textAlign: 'center' }}>#</th>
-                        <th>Medicine &amp; Formulation</th>
-                        <th>Dose</th>
-                        <th>Route</th>
-                        <th>Frequency</th>
-                        <th>Duration</th>
-                        <th style={{ textAlign: 'right' }}>Quantity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items && items.length > 0 ? (
-                        items.map((item, idx) => (
-                          <tr key={item.id || idx}>
-                            <td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', color: 'var(--color-outline)' }}>
-                              {idx + 1}
-                            </td>
-                            <td>
-                              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '14px', color: 'var(--color-on-surface)' }}>
-                                {item.brandName} {item.strengthVolume ? `• ${item.strengthVolume}` : ''}
-                              </div>
-                              {item.genericName && (
-                                <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                                  {item.presentation} ({item.genericName})
-                                </div>
-                              )}
-                              {item.directions && (
-                                <div className="stationery-sig-box">
-                                  <strong>Sig:</strong> {item.directions}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-primary)' }}>
-                              {item.dose || item.strengthVolume || '1 tab'}
-                            </td>
-                            <td>
-                              <span
-                                style={{
-                                  padding: '2px 8px',
-                                  background: 'var(--color-surface-container)',
-                                  borderRadius: 'var(--radius-sm)',
-                                  fontFamily: 'var(--font-mono)',
-                                  fontSize: '11px',
-                                }}
-                              >
-                                {item.route || 'PO (Oral)'}
-                              </span>
-                            </td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                              {item.frequency || 'BID (q12h)'}
-                            </td>
-                            <td style={{ fontFamily: 'var(--font-mono)' }}>
-                              {item.durationDays ? `${item.durationDays} days` : '5 days'}
-                            </td>
-                            <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                              {item.quantity} {item.unit || 'Tabs'}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: 'var(--color-on-surface-variant)' }}>
-                            No medicines attached to this prescription.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Instructions & Clinical Advice for Owner */}
-              <div className="stationery-advice-grid">
-                <div className="stationery-signalment-box">
-                  <span className="stationery-box-label">Special Instructions for Owner</span>
-                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: '13px', color: 'var(--color-on-surface)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {instructionList.map((inst, i) => (
-                      <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                        <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>•</span>
-                        <span>{inst}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="stationery-signalment-box" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                  <div>
-                    <span className="stationery-box-label">Follow-Up Care Plan</span>
-                    <p style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)', marginTop: '4px' }}>
-                      Recommended Re-evaluation: {followUpDays} Days
-                    </p>
-                    <p style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '4px', lineHeight: 1.4 }}>
-                      Please schedule clinical recheck on or before <strong>{formattedFollowUpDate}</strong>.
-                    </p>
+                ) : (
+                  <div style={{ marginTop: '4px', fontSize: '13px', color: 'var(--color-outline)' }}>
+                    Assigned to: Practice Review Queue
                   </div>
-                </div>
+                )}
+                <p className="rx-workflow-banner-desc" style={{ marginTop: '6px' }}>
+                  This prescription is awaiting clinical sign-off by a registered veterinarian before it can be sealed and issued to the client.
+                  {prescription.forwardingRemarks && (
+                    <span style={{ display: 'block', marginTop: '4px', fontStyle: 'italic', color: 'var(--color-on-surface-variant)' }}>
+                      Forwarding Remarks: "{prescription.forwardingRemarks}"
+                    </span>
+                  )}
+                </p>
               </div>
+              {canApprove && (
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ height: '36px', fontSize: '12px', background: '#fff' }}
+                    onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                    title="Edit medications, dosage, or instructions before approval"
+                  >
+                    <Icon name="edit" size={14} />
+                    <span>Edit Prescription</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ height: '36px', fontSize: '12px', background: '#fff' }}
+                    onClick={() => setShowRequestChangesModal(true)}
+                  >
+                    Request Changes
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ height: '36px', fontSize: '12px', background: '#059669', borderColor: '#047857' }}
+                    onClick={() => setShowApproveModal(true)}
+                  >
+                    Approve Prescription
+                  </button>
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Document Footer / Professional Sign-Off Block */}
-            <div className="stationery-signoff-row">
-              <div className="stationery-signoff-box">
-                <div style={{ width: '160px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '8px' }}>
-                  {activePractitioner?.signatureDataUrl ? (
-                    <img
-                      src={activePractitioner.signatureDataUrl}
-                      alt="Doctor Signature"
-                      style={{ maxHeight: '44px', maxWidth: '150px', objectFit: 'contain' }}
-                    />
-                  ) : null}
+          {/* Workflow Banner: Changes Requested */}
+          {isChangesRequested && (
+            <div className="no-print rx-workflow-banner changes-requested">
+              <Icon name="alert-triangle" size={20} color="#e11d48" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title">
+                  Clinical Changes Requested by Dr. {prescription.requestedByUser?.name || 'Veterinarian'}
                 </div>
-                <div className="stationery-sig-line"></div>
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '14px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                  {doctorName}, {doctorQual}
-                </span>
-                <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                  Veterinarian in Charge
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-outline)', marginTop: '2px' }}>
-                  {doctorReg}
-                </span>
+                <p className="rx-workflow-banner-desc">
+                  The prescribing clinician requested modifications before approval:
+                  <span style={{ display: 'block', marginTop: '4px', fontWeight: 600, color: '#9f1239' }}>
+                    "{prescription.changeRequestRemarks}"
+                  </span>
+                </p>
               </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '36px', fontSize: '12px', flexShrink: 0 }}
+                onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+              >
+                <Icon name="edit" size={14} />
+                <span>Edit Prescription</span>
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* Workflow Banner: Approved & Sealed Record */}
+          {isApproved && (
+            <div className="no-print rx-workflow-banner approved">
+              <Icon name="check-circle" size={20} color="#059669" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ flex: 1 }}>
+                <div className="rx-workflow-banner-title">
+                  Clinically Approved &amp; Sealed Record (Version {prescription.version || 1})
+                </div>
+                <p className="rx-workflow-banner-desc">
+                  Digitally signed and sealed by Dr. {prescription.approvedByUser?.name || doctorName}
+                  {prescription.approvedAt ? ` on ${new Date(prescription.approvedAt).toLocaleDateString('en-GB')}` : ''}.
+                  Approved records are immutable under clinical governance standards.
+                  {prescription.approvalRemarks && (
+                    <span style={{ display: 'block', marginTop: '4px', fontStyle: 'italic' }}>
+                      Approval Remarks: "{prescription.approvalRemarks}"
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '36px', fontSize: '12px', flexShrink: 0, background: '#fff' }}
+                onClick={() => setShowReviseModal(true)}
+                title="Create a new revision starting as Draft"
+              >
+                <Icon name="copy" size={14} />
+                <span>Create New Revision</span>
+              </button>
+            </div>
+          )}
+
+          <PrescriptionDocument
+            prescription={prescription}
+            items={items || []}
+            patient={patient}
+            owner={owner}
+            activePractitioner={activePractitioner}
+            activeOrganisation={activeOrganisation}
+            id="prescription-sheet"
+          />
         </div>
 
         {/* Right Sticky Action Column (~340px) */}
@@ -990,26 +985,152 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <Icon name="copy" size={20} />
                 <span>Clone Prescription</span>
               </button>
-            ) : !isIssued ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}
-                onClick={handleCompleteAndIssue}
-                disabled={isUpdating}
-              >
-                <Icon name="check-circle" size={20} />
-                <span>{isUpdating ? 'Issuing…' : 'Complete Prescription'}</span>
-              </button>
+            ) : isPendingApproval ? (
+              canApprove || canRequestChanges ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  {canApprove && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, background: '#059669', borderColor: '#047857' }}
+                      onClick={() => setShowApproveModal(true)}
+                      disabled={isUpdating}
+                    >
+                      <Icon name="check-circle" size={20} />
+                      <span>Approve &amp; Sign Prescription</span>
+                    </button>
+                  )}
+                  {canApprove && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                      onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                      disabled={isUpdating}
+                      title="Edit prescription medications or clinical details before approval"
+                    >
+                      <Icon name="edit" size={16} />
+                      <span>Edit Prescription</span>
+                    </button>
+                  )}
+                  {canRequestChanges && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600, color: '#e11d48', borderColor: '#fecdd3' }}
+                      onClick={() => setShowRequestChangesModal(true)}
+                      disabled={isUpdating}
+                    >
+                      <Icon name="alert-triangle" size={16} />
+                      <span>Request Changes</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: 'var(--radius)',
+                    padding: '12px',
+                    marginBottom: '12px',
+                    fontSize: '13px',
+                    color: '#92400e',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Icon name="clock" size={18} color="#b45309" />
+                  <span>Awaiting approval by Dr. {prescription.forwardedToUser?.name || 'Clinician'}</span>
+                </div>
+              )
+            ) : isChangesRequested ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                >
+                  <Icon name="edit" size={20} />
+                  <span>Edit &amp; Fix Medications</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={handleOpenForwardModal}
+                  disabled={isUpdating}
+                >
+                  <Icon name="share" size={16} />
+                  <span>Resubmit for Approval</span>
+                </button>
+              </div>
+            ) : isDraft ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={handleOpenForwardModal}
+                  disabled={isUpdating}
+                >
+                  <Icon name="share" size={20} />
+                  <span>Forward for Clinical Approval</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+                >
+                  <Icon name="edit" size={16} />
+                  <span>Edit Draft</span>
+                </button>
+                {canApprove && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600, color: '#059669', borderColor: '#a7f3d0' }}
+                    onClick={() => setShowApproveModal(true)}
+                    disabled={isUpdating}
+                  >
+                    <Icon name="check-circle" size={16} />
+                    <span>Direct Clinician Approval</span>
+                  </button>
+                )}
+              </div>
+            ) : isApproved ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
+                  onClick={handlePrint}
+                >
+                  <Icon name="printer" size={20} />
+                  <span>Print Approved Prescription</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={() => setShowReviseModal(true)}
+                >
+                  <Icon name="copy" size={16} />
+                  <span>Create New Revision (v{(prescription.version || 1) + 1})</span>
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
                 className="btn btn-primary"
                 style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700, marginBottom: '12px' }}
-                onClick={handlePrint}
+                onClick={handleOpenForwardModal}
               >
-                <Icon name="printer" size={20} />
-                <span>Print Prescription</span>
+                <Icon name="share" size={20} />
+                <span>Forward for Clinical Approval</span>
               </button>
             )}
 
@@ -1056,8 +1177,8 @@ export const PrescriptionDetailsPage: React.FC = () => {
               <span>Share Prescription</span>
             </button>
 
-            {/* Cancel Action Button (clearly visible when issued) */}
-            {isIssued && (
+            {/* Cancel Action Button (clearly visible when approved/issued or draft) */}
+            {(isIssued || isApproved || isDraft || isPendingApproval || isChangesRequested) && !isCancelled && (
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -1083,7 +1204,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
             )}
 
             {/* Return / Edit / Clone Action Button */}
-            {!isIssued && !isCancelled ? (
+            {(isDraft || isChangesRequested || (isPendingApproval && canApprove)) ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -1091,19 +1212,19 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
               >
                 <Icon name="arrow-left" size={16} />
-                <span>Back to Medication Editor</span>
+                <span>{isPendingApproval ? 'Edit Prescription Medications' : 'Back to Medication Editor'}</span>
               </button>
-            ) : !isCancelled ? (
+            ) : isApproved ? (
               <button
                 type="button"
                 className="btn btn-secondary"
                 style={{ width: '100%', height: '38px', fontSize: '13px' }}
-                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+                onClick={() => setShowReviseModal(true)}
               >
                 <Icon name="copy" size={16} />
-                <span>Clone Prescription</span>
+                <span>Create New Revision</span>
               </button>
-            ) : (
+            ) : isCancelled ? (
               <div
                 style={{
                   padding: '10px 12px',
@@ -1118,6 +1239,16 @@ export const PrescriptionDetailsPage: React.FC = () => {
               >
                 <strong>Prescription Cancelled:</strong> This medical record is read-only. Use "Clone Prescription" above to issue a new prescription.
               </div>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', height: '38px', fontSize: '13px' }}
+                onClick={() => navigate(`/prescriptions/new?cloneFrom=${prescription.id}`)}
+              >
+                <Icon name="copy" size={16} />
+                <span>Clone Prescription</span>
+              </button>
             )}
 
             {/* Start New Prescription */}
@@ -1267,59 +1398,55 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Workflow Audit Trail & Revision History */}
+          {prescription.workflowHistory && prescription.workflowHistory.length > 0 && (
+            <div className="rx-timeline-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '13.5px', fontWeight: 700, color: 'var(--color-on-surface)', margin: 0 }}>
+                  Workflow History
+                </h3>
+                <span className="rx-version-badge">v{prescription.version || 1}</span>
+              </div>
+              <div className="rx-timeline-list">
+                {prescription.workflowHistory.slice().reverse().map((step) => {
+                  const isApprovedStep = step.action === 'APPROVED';
+                  const isPendingStep = step.action === 'FORWARDED';
+                  const isChangesStep = step.action === 'CHANGES_REQUESTED';
+                  const isRevisedStep = step.action === 'REVISED';
+                  const dotClass = isApprovedStep ? 'approved' : isPendingStep ? 'pending' : isChangesStep ? 'changes' : isRevisedStep ? 'revised' : '';
+                  const timeStr = step.createdAt ? new Date(step.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                  return (
+                    <div key={step.id} className="rx-timeline-item">
+                      <div className={`rx-timeline-dot ${dotClass}`} />
+                      <div className="rx-timeline-header">
+                        <span className="rx-timeline-action">
+                          {step.action.replace(/_/g, ' ')}
+                          <span style={{ fontSize: '11px', color: 'var(--color-outline)', marginLeft: '4px' }}>
+                            (v{step.version})
+                          </span>
+                        </span>
+                        <span className="rx-timeline-time">{timeStr}</span>
+                      </div>
+                      <div className="rx-timeline-actor">
+                        By: <strong>{step.actorUser?.name || 'Staff'}</strong>
+                        {step.targetUser && (
+                          <span> → To: <strong>Dr. {step.targetUser.name}</strong></span>
+                        )}
+                      </div>
+                      {step.remarks && (
+                        <div className="rx-timeline-remarks">
+                          "{step.remarks}"
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Confirmation Modal before Generating/Issuing */}
-      {showConfirmIssueModal && (
-        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
-          <div className="rx-modal-box" style={{ maxWidth: '460px', padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: '#fef3c7',
-                  color: '#d97706',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Icon name="alert-triangle" size={22} />
-              </div>
-              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
-                Generate Prescription?
-              </h3>
-            </div>
-            <p style={{ fontSize: '14px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '24px' }}>
-              No editing will be allowed after generating. If you want to edit, use Save Draft.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ height: '42px', minWidth: '110px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setShowConfirmIssueModal(false)}
-                disabled={isUpdating}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ height: '42px', minWidth: '150px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={handleExecuteIssue}
-                disabled={isUpdating}
-              >
-                {isUpdating ? 'Generating…' : 'Generate & Issue'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Cancellation Confirmation Modal */}
       {showCancelModal && (
@@ -1417,6 +1544,374 @@ export const PrescriptionDetailsPage: React.FC = () => {
           patientSpecies={patient?.species}
           onSuccessToast={showToast}
         />
+      )}
+
+      {/* Forward for Clinical Approval Modal */}
+      {showForwardModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '520px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(0, 104, 95, 0.1)',
+                  color: 'var(--color-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="share" size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Forward Prescription for Approval
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Select the clinical approver who should review this prescription.
+                </span>
+              </div>
+            </div>
+
+            {loadingClinicians ? (
+              <div style={{ fontSize: '13px', color: 'var(--color-outline)', padding: '16px 0', textAlign: 'center' }}>
+                Loading eligible clinical approvers…
+              </div>
+            ) : eligibleClinicians.length === 0 ? (
+              <div style={{ padding: '14px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '13px', lineHeight: 1.4, marginBottom: '16px' }}>
+                <div style={{ fontWeight: 700, marginBottom: '4px' }}>No Clinical Approver Available</div>
+                <div>
+                  No clinical approver is currently available for this practice. Please ask a veterinarian or authorized clinical approver to join the practice or be designated as a clinical approver.
+                </div>
+              </div>
+            ) : eligibleClinicians.length === 1 ? (
+              <div style={{ padding: '12px 14px', background: 'rgba(0, 104, 95, 0.05)', border: '1px solid var(--color-primary, #00685f)', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)', marginBottom: '4px', fontWeight: 500 }}>
+                  Approval will be routed to:
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-on-surface)' }}>
+                  Dr. {eligibleClinicians[0].name.replace(/^Dr\.?\s*/i, '')}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-primary, #00685f)', marginTop: '2px', fontWeight: 600 }}>
+                  {eligibleClinicians[0].role === 'VETERINARIAN'
+                    ? 'Veterinarian'
+                    : (eligibleClinicians[0].role === 'PRACTICE_OWNER' ? 'Practice Owner' : (eligibleClinicians[0].role ? 'Practice Admin' : 'Veterinarian'))}{' '}
+                  · Clinical Approver
+                  {eligibleClinicians[0].email && (
+                    <span style={{ fontWeight: 400, color: 'var(--color-outline)', marginLeft: '6px' }}>
+                      ({eligibleClinicians[0].email})
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label" style={{ marginBottom: '6px' }}>
+                  Forward to <span style={{ color: 'var(--color-error, #ba1a1a)' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {eligibleClinicians.map((c) => {
+                    const isSelected = forwardToUserId === c.id;
+                    const roleLabel = c.role === 'VETERINARIAN'
+                      ? 'Veterinarian'
+                      : (c.role === 'PRACTICE_OWNER' ? 'Practice Owner' : (c.role === 'PRACTICE_ADMIN' ? 'Practice Admin' : 'Clinical Approver'));
+                    return (
+                      <label
+                        key={c.id}
+                        onClick={() => setForwardToUserId(c.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '12px',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: isSelected ? '1.5px solid var(--color-primary, #00685f)' : '1px solid var(--color-outline-variant, #cbd5e1)',
+                          background: isSelected ? 'rgba(0, 104, 95, 0.05)' : 'var(--color-surface-container-lowest, #ffffff)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="forwardToClinician"
+                          value={c.id}
+                          checked={isSelected}
+                          onChange={() => setForwardToUserId(c.id)}
+                          style={{
+                            marginTop: '3px',
+                            accentColor: 'var(--color-primary, #00685f)',
+                            cursor: 'pointer',
+                            width: '16px',
+                            height: '16px',
+                          }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--color-on-surface, #131b2e)' }}>
+                            Dr. {c.name.replace(/^Dr\.?\s*/i, '')}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant, #64748b)', fontWeight: 500 }}>
+                              {roleLabel} · Clinical Approver
+                            </span>
+                            {c.email && (
+                              <span style={{ fontSize: '11px', color: 'var(--color-outline, #94a3b8)' }}>
+                                ({c.email})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="forward-remarks">
+                Clinical Remarks / Handover Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="forward-remarks"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Prepared under Dr.'s telephone advice; special dosing for renal condition..."
+                value={forwardRemarks}
+                onChange={(e) => setForwardRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowForwardModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '160px' }}
+                onClick={handleExecuteForward}
+                disabled={isUpdating || !forwardToUserId || eligibleClinicians.length === 0}
+              >
+                {isUpdating ? 'Forwarding…' : 'Forward for Approval'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Prescription Modal */}
+      {showApproveModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="check-circle" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Approve &amp; Digitally Seal
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Prescription {prescription.rxNumber} (Version {prescription.version || 1})
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '16px' }}>
+              You are approving this prescription under your veterinary license. Once approved, this clinical record will be sealed as immutable. Any future changes will require creating a new numbered revision.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="approval-remarks">
+                Approval Remarks / Seal Notes <span style={{ color: 'var(--color-outline)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="approval-remarks"
+                className="form-textarea"
+                rows={2}
+                placeholder="e.g. Dose reviewed and confirmed against patient weight and biochemistry."
+                value={approvalRemarks}
+                onChange={(e) => setApprovalRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowApproveModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '150px', background: '#059669', borderColor: '#047857' }}
+                onClick={handleExecuteApprove}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Approving…' : 'Approve & Sign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Request Changes Modal */}
+      {showRequestChangesModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: '#ffe4e6',
+                  color: '#e11d48',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="alert-triangle" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Request Clinical Changes
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Return prescription to draft with instructions for staff
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', lineHeight: 1.45, color: 'var(--color-on-surface-variant)', marginBottom: '14px' }}>
+              Please specify the clinical adjustments or dosage corrections required before this prescription can be approved.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label className="form-label" htmlFor="change-request-remarks">
+                Required Changes / Instructions *
+              </label>
+              <textarea
+                id="change-request-remarks"
+                className="form-textarea"
+                rows={3}
+                placeholder="e.g. Reduce Amoxicillin dose to 10mg/kg BID; check if patient has had NSAIDs recently..."
+                value={changeRequestRemarks}
+                onChange={(e) => setChangeRequestRemarks(e.target.value)}
+                style={{ fontSize: '13px', width: '100%' }}
+                required
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowRequestChangesModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '160px', background: '#dc2626', color: '#fff', borderColor: '#b91c1c' }}
+                onClick={handleExecuteRequestChanges}
+                disabled={isUpdating || !changeRequestRemarks.trim()}
+              >
+                {isUpdating ? 'Submitting…' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Revision Modal */}
+      {showReviseModal && (
+        <div className="rx-modal-backdrop" style={{ zIndex: 9999 }}>
+          <div className="rx-modal-box" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  color: '#6366f1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name="copy" size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                  Create New Revision (v{(prescription.version || 1) + 1})?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--color-outline)' }}>
+                  Amend approved prescription {prescription.rxNumber}
+                </span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', lineHeight: 1.5, color: 'var(--color-on-surface-variant)', marginBottom: '20px' }}>
+              Approved prescriptions are legally sealed and immutable. Creating a revision will generate Version {(prescription.version || 1) + 1} starting in Draft status, preserving the approved record in audit history.
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ height: '40px', minWidth: '100px' }}
+                onClick={() => setShowReviseModal(false)}
+                disabled={isUpdating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ height: '40px', minWidth: '160px' }}
+                onClick={handleExecuteRevise}
+                disabled={isUpdating}
+              >
+                {isUpdating ? 'Creating…' : `Create Revision v${(prescription.version || 1) + 1}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Share Document Modal */}

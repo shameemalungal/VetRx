@@ -209,7 +209,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           </div>
 
           {/* Action List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {/* Direct PDF Download */}
             {pdfBlob && (
               <button
@@ -222,16 +222,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   alignItems: 'center',
                   justifyContent: 'flex-start',
                   gap: '12px',
-                  padding: '10px 14px',
+                  padding: '12px 14px',
                   textAlign: 'left',
+                  width: '100%',
+                  height: 'auto',
+                  minHeight: '52px',
+                  whiteSpace: 'normal',
+                  boxSizing: 'border-box',
                 }}
               >
-                <Icon name="download" size={18} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: 600, fontSize: '13px' }}>
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                  <Icon name="download" size={18} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '2px' }}>
+                  <span style={{ fontWeight: 600, fontSize: '13px', lineHeight: 1.3, color: 'var(--color-on-surface, #1e293b)' }}>
                     {isDownloading ? 'Saving PDF...' : 'Download PDF File'}
                   </span>
-                  <span style={{ fontSize: '11px', color: 'var(--color-outline, #64748b)' }}>
+                  <span style={{ fontSize: '11px', lineHeight: 1.35, color: 'var(--color-outline, #64748b)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                     Save directly to your device with Save As prompt
                   </span>
                 </div>
@@ -248,16 +255,23 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: '12px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 textAlign: 'left',
+                width: '100%',
+                height: 'auto',
+                minHeight: '52px',
+                whiteSpace: 'normal',
+                boxSizing: 'border-box',
                 borderColor: '#25D366',
                 color: '#128C7E',
               }}
             >
-              <Icon name="message-square" size={18} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 600, fontSize: '13px' }}>Share via WhatsApp</span>
-                <span style={{ fontSize: '11px', color: 'var(--color-outline, #64748b)' }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <Icon name="message-square" size={18} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '2px' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', lineHeight: 1.3 }}>Share via WhatsApp</span>
+                <span style={{ fontSize: '11px', lineHeight: 1.35, color: 'var(--color-outline, #64748b)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                   Send document message to client's WhatsApp
                 </span>
               </div>
@@ -273,14 +287,21 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: '12px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 textAlign: 'left',
+                width: '100%',
+                height: 'auto',
+                minHeight: '52px',
+                whiteSpace: 'normal',
+                boxSizing: 'border-box',
               }}
             >
-              <Icon name="mail" size={18} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 600, fontSize: '13px' }}>Share via Email</span>
-                <span style={{ fontSize: '11px', color: 'var(--color-outline, #64748b)' }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <Icon name="mail" size={18} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '2px' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', lineHeight: 1.3, color: 'var(--color-on-surface, #1e293b)' }}>Share via Email</span>
+                <span style={{ fontSize: '11px', lineHeight: 1.35, color: 'var(--color-outline, #64748b)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                   Compose email with formatted document reference
                 </span>
               </div>
@@ -296,16 +317,31 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                 alignItems: 'center',
                 justifyContent: 'flex-start',
                 gap: '12px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 textAlign: 'left',
+                width: '100%',
+                height: 'auto',
+                minHeight: '52px',
+                whiteSpace: 'normal',
+                boxSizing: 'border-box',
               }}
             >
-              <Icon name={copied ? 'check' : 'copy'} size={18} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: 600, fontSize: '13px' }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <Icon name={copied ? 'check' : 'copy'} size={18} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '2px' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', lineHeight: 1.3, color: 'var(--color-on-surface, #1e293b)' }}>
                   {copied ? 'Link Copied to Clipboard!' : 'Copy Document Link'}
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--color-outline, #64748b)' }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    lineHeight: 1.35,
+                    color: 'var(--color-outline, #64748b)',
+                    wordBreak: 'break-all',
+                    whiteSpace: 'normal',
+                  }}
+                >
                   {documentUrl}
                 </span>
               </div>

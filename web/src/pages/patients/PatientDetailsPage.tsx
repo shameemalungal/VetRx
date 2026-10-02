@@ -363,7 +363,7 @@ export const PatientDetailsPage: React.FC = () => {
               ) : (
                 prescriptions.map((rx) => (
                   <div key={rx.id} className="history-item-row">
-                    <div className="flex items-center gap-space-md min-w-0">
+                    <div className="history-item-left flex items-center gap-space-md min-w-0">
                       <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary shrink-0">
                         <Icon name="prescription" size={20} />
                       </div>
@@ -381,7 +381,7 @@ export const PatientDetailsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-space-md shrink-0">
+                    <div className="history-item-right flex items-center gap-space-md shrink-0">
                       <span className="text-xs text-on-surface-variant font-mono">
                         {formatDate(rx.issuedAt || rx.createdAt)}
                       </span>
@@ -424,7 +424,7 @@ export const PatientDetailsPage: React.FC = () => {
               ) : (
                 invoices.map((inv) => (
                   <div key={inv.id} className="history-item-row">
-                    <div className="flex items-center gap-space-md min-w-0">
+                    <div className="history-item-left flex items-center gap-space-md min-w-0">
                       <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-secondary shrink-0 font-bold font-mono text-xs">
                         INV
                       </div>
@@ -442,7 +442,7 @@ export const PatientDetailsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-space-md shrink-0">
+                    <div className="history-item-right flex items-center gap-space-md shrink-0">
                       <span className="data-mono font-bold text-on-surface">
                         {fmtRupees(inv.grandTotal)}
                       </span>

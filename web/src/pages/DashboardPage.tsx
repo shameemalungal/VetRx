@@ -39,16 +39,104 @@ function timeAgo(d?: Date): string {
   return `${Math.round(diffDays / 30)}mo ago`;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
+
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, practice } = useAuth();
+  const { user, practice, membership } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
 
-  // ── Instant Formulary & MRN Search State ─────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const formularySearchRef = useRef<HTMLDivElement>(null);
   const [shareInvoice, setShareInvoice] = useState<(Invoice & { patient?: Patient; owner?: Owner }) | null>(null);
+
+  // ── Commercial Subscription Status ───────────────────────────
+  const [commercialInfo, setCommercialInfo] = useState<{
+    status: string;
+    trialDaysRemaining?: number;
+    planName?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let unmounted = false;
+    fetch(`${API_BASE}/api/commercial/status`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data) {
+          setCommercialInfo({
+            status: data.commercialStatus || 'UNKNOWN',
+            trialDaysRemaining: data.trialDaysRemaining,
+            planName: data.plan?.name,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, []);
+
+  // ── Pending Prescription Approvals Count ──────────────────────
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+
+  useEffect(() => {
+    let unmounted = false;
+    fetch(`${API_BASE}/api/prescriptions/pending-approvals-count`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data && typeof data.count === 'number') {
+          setPendingApprovalsCount(data.count);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, []);
+
+  // ── Onboarding Checklist (Section 30) ────────────────────────
+  const [checklistDismissed, setChecklistDismissed] = useState<boolean>(() => {
+    return localStorage.getItem(`vetrx_dismissed_onboarding_${practice?.id}`) === 'true';
+  });
+  const [teamMembersCount, setTeamMembersCount] = useState<number>(1);
+  const [hasClinicalApprover, setHasClinicalApprover] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!practice?.id) return;
+    let unmounted = false;
+    fetch(`${API_BASE}/api/practice/members`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!unmounted && data) {
+          const members = data.members || [];
+          const invites = data.invitations || [];
+          setTeamMembersCount(members.length + invites.length);
+          const hasApprover = members.some((m: any) => m.isClinicalApprover || m.role === 'VETERINARIAN');
+          setHasClinicalApprover(hasApprover);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      unmounted = true;
+    };
+  }, [practice?.id]);
+
+  const isPracticeSetup = Boolean(practice?.name && practice.name.trim());
+  const isTeamAdded = teamMembersCount > 1;
+  const isProfileComplete = Boolean(practitioner?.registrationNumber?.trim() || organisation?.licenseNumber?.trim());
+  const isClinicalSetup = Boolean(membership?.isClinicalApprover || membership?.role === 'VETERINARIAN' || hasClinicalApprover);
+  const completedChecklistCount = [isPracticeSetup, isTeamAdded, isProfileComplete, isClinicalSetup].filter(Boolean).length;
+  const isChecklistAllComplete = completedChecklistCount === 4;
+  const canManagePractice = membership?.role === 'PRACTICE_OWNER' || membership?.role === 'PRACTICE_ADMIN' || user?.platformRole === 'SUPER_ADMIN';
+  const showChecklist = canManagePractice && !checklistDismissed && !isChecklistAllComplete;
+
+  const handleDismissChecklist = () => {
+    setChecklistDismissed(true);
+    if (practice?.id) {
+      localStorage.setItem(`vetrx_dismissed_onboarding_${practice.id}`, 'true');
+    }
+  };
 
   // ── Metric Counts ───────────────────────────────────────────
   const rxCount      = useLiveQuery(() => db.prescriptions.count(), []);
@@ -210,17 +298,72 @@ export const DashboardPage: React.FC = () => {
       <div className="dashboard-header-bar">
         <div className="dashboard-header-left">
           <div className="dashboard-status-strip">
-            {/* Real Offline-First status, NOT fake cloud sync */}
+            {/* Cloud status per Section 33 */}
             <span className="status-badge-local">
               <span className="status-dot-solid" />
-              Local Database (Offline-First)
+              Secure Cloud • Online
             </span>
             <span className="status-badge-doctor">
               <Icon name="verified" size={13} className="text-secondary" />
               {doctorName}
             </span>
+            {commercialInfo && (
+              <Link
+                to="/settings?tab=subscription"
+                className="status-badge-subscription"
+                title="Manage Subscription & Billing"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  backgroundColor:
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? 'rgba(59, 130, 246, 0.1)'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? 'rgba(245, 158, 11, 0.1)'
+                      : 'rgba(239, 68, 68, 0.1)',
+                  color:
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? '#2563eb'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? '#059669'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? '#d97706'
+                      : '#dc2626',
+                  border: `1px solid ${
+                    commercialInfo.status === 'TRIAL_ACTIVE'
+                      ? 'rgba(59, 130, 246, 0.25)'
+                      : commercialInfo.status === 'ACTIVE'
+                      ? 'rgba(16, 185, 129, 0.25)'
+                      : commercialInfo.status === 'GRACE_PERIOD'
+                      ? 'rgba(245, 158, 11, 0.25)'
+                      : 'rgba(239, 68, 68, 0.25)'
+                  }`,
+                }}
+              >
+                <Icon name="credit-card" size={13} />
+                <span>
+                  {commercialInfo.status === 'TRIAL_ACTIVE'
+                    ? `14-Day Trial • ${commercialInfo.trialDaysRemaining ?? 0}d left`
+                    : commercialInfo.status === 'ACTIVE'
+                    ? `${commercialInfo.planName || 'Active'} Plan`
+                    : commercialInfo.status === 'GRACE_PERIOD'
+                    ? 'Grace Period'
+                    : commercialInfo.status === 'TRIAL_EXPIRED'
+                    ? 'Trial Expired'
+                    : 'Subscription'}
+                </span>
+              </Link>
+            )}
           </div>
-          <h1 className="dashboard-headline">Clinical Command Desk</h1>
+          <h1 className="dashboard-headline">Clinical Practice Command Center</h1>
           <p className="dashboard-subheadline">
             {clinicName}
           </p>
@@ -238,6 +381,182 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── PENDING APPROVALS ACTION BANNER ────────────────────── */}
+      {pendingApprovalsCount > 0 && (
+        <div
+          style={{
+            margin: '0 0 20px 0',
+            padding: '16px 20px',
+            background: 'linear-gradient(135deg, rgba(234, 134, 0, 0.12) 0%, rgba(234, 134, 0, 0.04) 100%)',
+            border: '1px solid rgba(234, 134, 0, 0.35)',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            boxShadow: '0 2px 8px rgba(234, 134, 0, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                background: '#ea8600',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="clock" size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
+                {pendingApprovalsCount} Prescription{pendingApprovalsCount > 1 ? 's' : ''} Awaiting Veterinarian Approval
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
+                Staff members have forwarded clinical drafts for your review, digital confirmation, and signature.
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/prescriptions?status=Pending+Approval"
+            className="btn btn-primary"
+            style={{
+              height: '40px',
+              padding: '0 18px',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap',
+              background: '#b25e00',
+              borderColor: '#995000',
+            }}
+          >
+            <Icon name="check-circle" size={16} />
+            <span>Review & Approve ({pendingApprovalsCount})</span>
+          </Link>
+        </div>
+      )}
+
+      {/* ── ONBOARDING CHECKLIST BANNER (Section 30) ─────────────── */}
+      {showChecklist && (
+        <div className="onboarding-checklist-card">
+          <div className="onboarding-checklist-header">
+            <div className="onboarding-checklist-title-group">
+              <span className="onboarding-badge">Setup Guide</span>
+              <h2 className="onboarding-checklist-title">Practice Setup Checklist</h2>
+              <span className="onboarding-checklist-progress">
+                {completedChecklistCount} of 4 tasks complete
+              </span>
+            </div>
+            <button
+              type="button"
+              className="onboarding-dismiss-btn"
+              onClick={handleDismissChecklist}
+              title="Dismiss checklist"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          <div className="onboarding-checklist-grid">
+            {/* Task 1 */}
+            <div className={`onboarding-task-item ${isPracticeSetup ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isPracticeSetup ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Set up your practice</span>
+                <span className="onboarding-task-desc">Practice name, address, and phone</span>
+              </div>
+              {isPracticeSetup ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=practice')}
+                >
+                  Configure
+                </button>
+              )}
+            </div>
+
+            {/* Task 2 */}
+            <div className={`onboarding-task-item ${isTeamAdded ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isTeamAdded ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Add your team</span>
+                <span className="onboarding-task-desc">Invite colleagues or clinic staff</span>
+              </div>
+              {isTeamAdded ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=team')}
+                >
+                  Add Team
+                </button>
+              )}
+            </div>
+
+            {/* Task 3 */}
+            <div className={`onboarding-task-item ${isProfileComplete ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isProfileComplete ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Complete your profile</span>
+                <span className="onboarding-task-desc">Veterinary registration or license</span>
+              </div>
+              {isProfileComplete ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=profile')}
+                >
+                  Complete Profile
+                </button>
+              )}
+            </div>
+
+            {/* Task 4 */}
+            <div className={`onboarding-task-item ${isClinicalSetup ? 'is-complete' : ''}`}>
+              <div className="onboarding-task-status">
+                <Icon name={isClinicalSetup ? 'check-circle' : 'circle'} size={18} />
+              </div>
+              <div className="onboarding-task-content">
+                <span className="onboarding-task-name">Set up clinical practitioner</span>
+                <span className="onboarding-task-desc">Designate a practicing veterinarian</span>
+              </div>
+              {isClinicalSetup ? (
+                <span className="onboarding-done-tag">Complete</span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => navigate('/settings?tab=team')}
+                >
+                  Set Up Clinician
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── TOP HERO & CLINICAL ACTION SECTION (Gradient Ribbon) ─ */}
       <div className="hero-action-hub">

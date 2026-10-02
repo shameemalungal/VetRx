@@ -9,10 +9,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
-import { formatINR, numberToWordsINR } from './invoiceUtils';
-import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
-import { generatePdfBlob, savePdfWithFilePicker, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
+import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildInvoiceFilename, buildReceiptFilename } from '../../utils/pdfGenerator';
+import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
+import { InvoiceDocument } from '../../components/documents/InvoiceDocument';
+import { ReceiptDocument } from '../../components/documents/ReceiptDocument';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { inventoryApi } from '../../services/inventoryApi';
 import './Invoices.css';
 
 export const InvoiceDetailsPage: React.FC = () => {
@@ -21,7 +24,21 @@ export const InvoiceDetailsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const shouldAutoPrint = searchParams.get('print') === 'true';
 
-  const [documentType, setDocumentType] = useState<'Tax Invoice' | 'Payment Receipt'>('Tax Invoice');
+  const typeParam = searchParams.get('type')?.toLowerCase();
+  const initialType = (typeParam === 'receipt' || typeParam === 'payment receipt' || searchParams.get('documentType')?.toLowerCase() === 'receipt')
+    ? 'Payment Receipt'
+    : 'Tax Invoice';
+  const [documentType, setDocumentType] = useState<'Tax Invoice' | 'Payment Receipt'>(initialType);
+
+  useEffect(() => {
+    const tp = searchParams.get('type')?.toLowerCase();
+    if (tp === 'receipt' || tp === 'payment receipt') {
+      setDocumentType('Payment Receipt');
+    } else if (tp === 'invoice' || tp === 'tax invoice') {
+      setDocumentType('Tax Invoice');
+    }
+  }, [searchParams]);
+
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareBlob, setShareBlob] = useState<Blob | undefined>();
@@ -111,56 +128,37 @@ export const InvoiceDetailsPage: React.FC = () => {
   const activeOrganisation =
     storeOrganisation && storeOrganisation.isActive !== false ? storeOrganisation : null;
 
-  const doctorName = activePractitioner?.name?.trim() || '';
-  const doctorQual = activePractitioner?.qualifications?.trim() || '';
-  const rawReg = activePractitioner?.registrationNumber?.trim() || '';
-  const doctorReg = rawReg
-    ? (rawReg.startsWith('Reg') ? rawReg : `Reg: ${rawReg}`)
-    : '';
-  const doctorAddress = activePractitioner?.address?.trim() || '';
-  const doctorPhone = activePractitioner?.phone?.trim() || '';
-  const doctorEmail = activePractitioner?.email?.trim() || '';
-
-  const rawOrgName = activeOrganisation?.name?.trim();
-  const hasClinic = Boolean(
-    activeOrganisation &&
-    activeOrganisation.isActive !== false &&
-    rawOrgName &&
-    rawOrgName.length > 0 &&
-    rawOrgName.toLowerCase() !== 'independent practitioner'
-  );
-
-  const clinicName = hasClinic ? rawOrgName! : '';
-  const formattedClinicAddress = hasClinic
-    ? [
-        activeOrganisation?.address?.trim(),
-        activeOrganisation?.city?.trim(),
-        activeOrganisation?.state?.trim() && activeOrganisation?.pincode?.trim()
-          ? `${activeOrganisation.state.trim()} - ${activeOrganisation.pincode.trim()}`
-          : (activeOrganisation?.state?.trim() || activeOrganisation?.pincode?.trim()),
-      ].filter(Boolean).join(', ')
-    : '';
-  const clinicAddress = formattedClinicAddress || doctorAddress;
-  const clinicPhone = (hasClinic && activeOrganisation?.phone?.trim())
-    ? activeOrganisation.phone.trim()
-    : doctorPhone;
-  const clinicEmail = (hasClinic && activeOrganisation?.email?.trim())
-    ? activeOrganisation.email.trim()
-    : doctorEmail;
-  const clinicGstin = (hasClinic && activeOrganisation?.registrationNumber?.trim())
-    ? activeOrganisation.registrationNumber.trim()
-    : '';
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
 
   const handleCancelInvoice = async () => {
     if (!invoice?.id || invoice.status === 'Cancelled') return;
     const reason = window.prompt('Enter cancellation reason:');
     if (reason === null) return;
     await db.invoices.update(invoice.id, { status: 'Cancelled', notes: `${invoice.notes || ''}${invoice.notes ? '\n' : ''}Cancelled: ${reason.trim() || 'No reason recorded'}`, updatedAt: new Date() });
+
+    // Inventory audit reversal
+    if (isInventoryEntitled) {
+      try {
+        await inventoryApi.reverseInvoiceStock(invoice.id.toString(), reason?.trim() || 'Invoice cancelled');
+      } catch (revErr) {
+        console.warn('Inventory reversal notice:', revErr);
+      }
+    }
+
     navigate(`/invoices/${invoice.id}`);
   };
 
   const handleSavePdf = async () => {
     if (!invoice) return;
+
+    // Desktop: use browser's native print engine for pixel-perfect PDF output
+    // (identical to "Microsoft Print to PDF" / Ctrl+P)
+    if (!isMobileDevice()) {
+      savePdfNative();
+      return;
+    }
+
+    // Mobile: fallback to html2canvas + jsPDF for direct download/share
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('invoice-sheet');
@@ -248,16 +246,13 @@ export const InvoiceDetailsPage: React.FC = () => {
     );
   }
 
-  const grossSubtotalPaisa = items.reduce((acc, it) => acc + (it.subtotalPaisa || it.quantity * it.unitPricePaisa), 0);
-  const itemDiscountsPaisa = items.reduce((acc, it) => acc + (it.discountAmtPaisa || 0), 0);
-  const doctorDiscountPaisa = invoice.discountTotal || 0;
-  const grandTotalPaisa = invoice.grandTotal || 0;
 
   return (
     <div className="invoice-print-container">
       {/* Interactive Top Action Toolbar (Hidden in print) */}
       <div className="invoice-print-toolbar no-print">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Row 1 / Left: Navigation & Document Identification */}
+        <div className="invoice-toolbar-nav">
           <button
             type="button"
             className="btn-back"
@@ -267,8 +262,8 @@ export const InvoiceDetailsPage: React.FC = () => {
             <Icon name="arrow-left" size={14} />
             <span>Back</span>
           </button>
-          <span style={{ fontSize: '13px', color: 'var(--color-outline)' }}>/</span>
-          <span style={{ fontFamily: 'var(--font-data)', fontWeight: 700 }}>
+          <span className="invoice-toolbar-slash">/</span>
+          <span className="invoice-toolbar-doc-num">
             {invoice.invoiceNumber}
           </span>
           <span className={`invoices-status-pill ${invoice.status.toLowerCase()}`}>
@@ -276,15 +271,8 @@ export const InvoiceDetailsPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Document Type Switcher */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="no-print" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: '12px' }}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/invoices')}>View Invoice History</button>
-            {invoice.status !== 'Cancelled' && (
-              <button type="button" className="btn btn-danger btn-sm" onClick={handleCancelInvoice}>Cancel Invoice</button>
-            )}
-          </div>
-
+        {/* Row 2 / Center: Document Type Switcher Tabs */}
+        <div className="invoice-toolbar-tabs-wrap">
           <div className="invoices-status-tabs">
             <button
               type="button"
@@ -301,7 +289,10 @@ export const InvoiceDetailsPage: React.FC = () => {
               Payment Receipt
             </button>
           </div>
+        </div>
 
+        {/* Row 3 / Right: Action Buttons Group */}
+        <div className="invoice-toolbar-actions">
           {invoice.status === 'Draft' && (
             <button
               type="button"
@@ -313,10 +304,10 @@ export const InvoiceDetailsPage: React.FC = () => {
             </button>
           )}
 
-          {/* Save PDF (Primary direct download action) */}
+          {/* Save PDF (Primary direct action) */}
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm invoice-btn-save"
             onClick={handleSavePdf}
             disabled={isGeneratingPdf}
             id="btn-save-pdf"
@@ -348,9 +339,37 @@ export const InvoiceDetailsPage: React.FC = () => {
             title="Open browser print dialog"
           >
             <Icon name="print" size={16} />
-            <span>Print {documentType}</span>
+            <span>Print</span>
           </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => navigate('/invoices')}
+            title="View all invoices and receipts"
+          >
+            <Icon name="clock" size={14} />
+            <span>History</span>
+          </button>
+
+          {invoice.status !== 'Cancelled' && (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={handleCancelInvoice}
+              title="Cancel this invoice"
+            >
+              <Icon name="trash" size={14} />
+              <span>Cancel</span>
+            </button>
+          )}
         </div>
+      </div>
+
+      {/* Mobile swipe hint banner (visible only on small screens) */}
+      <div className="invoice-mobile-hint no-print">
+        <Icon name="info" size={14} />
+        <span>A4 Print Preview • Swipe horizontally to inspect full document</span>
       </div>
 
       {/* Floating toast notification */}
@@ -380,440 +399,34 @@ export const InvoiceDetailsPage: React.FC = () => {
       )}
 
       {/* A4 Printed Sheet Canvas (794px Standard Ratio) */}
-      <div className="invoice-a4-sheet" id="invoice-sheet">
-        <div>
-          {/* Top Decorative Clinic Ribbon & Micro Watermark Bar */}
-          <div
-            className="invoice-official-ribbon"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingBottom: '10px',
-              borderBottom: '1px solid #e2e8f0',
-              marginBottom: '14px',
-              gap: '12px',
-              flexWrap: 'nowrap',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexShrink: 0 }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-primary)', flexShrink: 0 }} />
-              <span
-                style={{
-                  fontFamily: 'var(--font-data)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-outline)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                OFFICIAL REGISTERED CLINICAL VETERINARY DOCUMENT
-              </span>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '11px',
-                fontFamily: 'var(--font-data)',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              <span style={{ color: 'var(--color-outline)', whiteSpace: 'nowrap' }}>
-                Doc Ref: <strong>{invoice.invoiceNumber}</strong>
-              </span>
-              <span
-                style={{
-                  background: 'var(--color-surface-container-high)',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontWeight: 600,
-                  color: 'var(--color-primary)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Original for Recipient
-              </span>
-            </div>
-          </div>
-
-          {/* Section 1: Clinic Header & Tax Invoice Block */}
-          <div className="invoice-print-header">
-            {/* Clinic / Practice Credentials (Left) */}
-            <div className="invoice-print-logo-col">
-              <div className="invoice-print-logo-box" style={{ overflow: 'hidden' }}>
-                {hasClinic && activeOrganisation?.logoDataUrl ? (
-                  <img
-                    src={activeOrganisation.logoDataUrl}
-                    alt="Clinic Logo"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                ) : activePractitioner?.photoDataUrl ? (
-                  <img
-                    src={activePractitioner.photoDataUrl}
-                    alt={doctorName}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Icon name="pets" size={26} />
-                )}
-              </div>
-              <div>
-                {hasClinic ? (
-                  <>
-                    <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, margin: '0 0 2px 0', letterSpacing: '-0.02em', color: 'var(--color-on-surface)' }}>
-                      {clinicName}
-                    </h1>
-                    {doctorName && (
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block' }}>
-                        {doctorName}{doctorQual ? ` · ${doctorQual}` : ''}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 800, margin: '0 0 2px 0', letterSpacing: '-0.02em', color: 'var(--color-on-surface)' }}>
-                      {doctorName || 'Independent Veterinary Practitioner'}
-                    </h1>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.04em', textTransform: 'uppercase', display: 'block' }}>
-                      Independent Veterinary Practitioner{doctorQual ? ` · ${doctorQual}` : ''}
-                    </span>
-                  </>
-                )}
-
-                {/* Address */}
-                {(clinicAddress || doctorAddress) && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                    {clinicAddress || doctorAddress}
-                  </p>
-                )}
-
-                {/* Phone & Email */}
-                {(clinicPhone || clinicEmail) && (
-                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                    {clinicPhone && (
-                      <>
-                        Phone: <strong>{clinicPhone}</strong>
-                      </>
-                    )}
-                    {clinicPhone && clinicEmail && ' • '}
-                    {clinicEmail && (
-                      <>
-                        Email: <strong>{clinicEmail}</strong>
-                      </>
-                    )}
-                  </p>
-                )}
-
-                {/* Professional Reg & GSTIN */}
-                <div style={{ marginTop: '6px', fontSize: '11px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
-                  {hasClinic && doctorName && doctorReg && (
-                    <span style={{ margin: '0 6px' }}>•</span>
-                  )}
-                  {doctorReg && (
-                    <span><strong>{doctorReg}</strong></span>
-                  )}
-                  {clinicGstin && (
-                    <>
-                      <span style={{ margin: '0 6px' }}>•</span>
-                      <span>GSTIN: <strong>{clinicGstin}</strong></span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Document Meta Card (Right) */}
-            <div className="invoice-print-meta-col">
-              <div className="invoice-print-badge">
-                {documentType.toUpperCase()}
-              </div>
-              <div style={{ fontSize: '13px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <span style={{ color: 'var(--color-outline)' }}>Invoice No:</span>
-                <strong style={{ fontFamily: 'var(--font-data)' }}>{invoice.invoiceNumber}</strong>
-              </div>
-              <div style={{ fontSize: '12px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                <span style={{ color: 'var(--color-outline)' }}>Date of Issue:</span>
-                <span style={{ fontFamily: 'var(--font-data)' }}>
-                  {new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-              </div>
-              {linkedRxNumbers.length > 0 && (
-                <div style={{ fontSize: '12px', display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--color-outline)' }}>
-                    {linkedRxNumbers.length > 1 ? 'Prescription Refs:' : 'Prescription Ref:'}
-                  </span>
-                  <strong style={{ fontFamily: 'var(--font-data)', color: 'var(--color-primary)' }}>
-                    {linkedRxNumbers.map((r: string) => `#${r}`).join(', ')}
-                  </strong>
-                </div>
-              )}
-              <div style={{ fontSize: '11px', color: 'var(--color-tertiary)', fontWeight: 700, marginTop: '2px' }}>
-                STATUS: {invoice.status.toUpperCase()}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 2: Patient & Client Signalment Panel */}
-          <div className="invoice-print-grid-dossier">
-            {/* Client Dossier */}
-            <div className="invoice-print-dossier-box">
-              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                Billed Client (Owner / Farmer)
-              </span>
-              <strong style={{ fontSize: '15px', color: 'var(--color-on-surface)' }}>
-                {formatOwnerPrimary(owner, 'Walk-in Client')}
-              </strong>
-              {owner?.phone && (
-                <span style={{ fontSize: '12px', fontFamily: 'var(--font-data)', color: 'var(--color-on-surface-variant)' }}>
-                  Phone: {owner.phone}
-                </span>
-              )}
-              {owner?.address && (
-                <span style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                  {owner.address}
-                </span>
-              )}
-            </div>
-
-            {/* Patient Dossier */}
-            <div className="invoice-print-dossier-box">
-              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                Animal Signalment Profile
-              </span>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                <strong style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-on-surface)' }}>
-                  {!isArtificialOrBlankName(patient?.name) ? patient?.name : formatAnimalSubtitle(patient)}
-                </strong>
-                {patient?.species && (
-                  <span style={{ fontSize: '11px', fontWeight: 600, background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
-                    {patient.species} {patient.breed ? `· ${patient.breed}` : ''}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--color-on-surface-variant)', marginTop: '2px' }}>
-                {patient?.sex && patient.sex !== 'Unknown' && <span>Sex: <strong>{patient.sex}</strong></span>}
-                {patient?.sex && patient.sex !== 'Unknown' && <span>•</span>}
-                <span>
-                  Weight: <strong>{patient?.weightKg ? `${patient.weightKg.toFixed(1)} kg` : 'Weight N/A'}</strong>
-                </span>
-                {patient?.identificationRef && (
-                  <>
-                    <span>•</span>
-                    <span>Ear Tag / Ref: <strong>{patient.identificationRef}</strong></span>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Itemized Charges Clinical Table */}
-          <table className="invoice-print-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px', textAlign: 'center' }}>SL</th>
-                <th>Item / Clinical Description</th>
-                {(showHsnColumn || showSacColumn) && (
-                  <th style={{ width: '100px', textAlign: 'center' }}>
-                    {showHsnColumn && showSacColumn ? 'HSN / SAC' : showHsnColumn ? 'HSN Code' : 'SAC Code'}
-                  </th>
-                )}
-                <th style={{ width: '100px', textAlign: 'center' }}>Qty &amp; Unit</th>
-                <th style={{ width: '100px', textAlign: 'right' }}>Rate (₹)</th>
-                <th style={{ width: '120px', textAlign: 'right' }}>Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, idx) => {
-                const lineSubtotal = Math.round(it.quantity * it.unitPricePaisa);
-                const lineAmount = Math.max(0, lineSubtotal - (it.discountAmtPaisa || 0));
-                const sl = String(idx + 1).padStart(2, '0');
-
-                // Determine appropriate HSN/SAC code
-                let code = 'SAC 9983';
-                if (it.category === 'Medicine' || it.category === 'Prescription Medicine') code = 'HSN 3004';
-                else if (it.category === 'Procedure Fee') code = 'SAC 9993';
-                else if (it.category === 'Certificate' || it.category === 'Necropsy Report' || it.isGovPrescribed) code = 'SAC 9997';
-
-                return (
-                  <tr key={it.id || idx} className={it.isGovPrescribed ? 'gov-row' : ''}>
-                    <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', color: 'var(--color-outline)' }}>
-                      {sl}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <strong style={{ color: 'var(--color-on-surface)' }}>{it.description}</strong>
-                        <span style={{ fontSize: '10px', fontWeight: 600, background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', color: '#475569' }}>
-                          {it.category}
-                        </span>
-                      </div>
-
-                      {/* Multi-Prescription / Patient Snapshot Sub-line */}
-                      {(it.prescriptionNumber || it.patientName) && (
-                        <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant, #64748b)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {it.patientName && (
-                            <span>
-                              Patient: <strong>{it.patientName}</strong>
-                              {it.ownerName ? ` (${it.ownerName})` : ''}
-                            </span>
-                          )}
-                          {it.prescriptionNumber && (
-                            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-                              Rx #{it.prescriptionNumber}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* STATUTORY GOVERNMENT ORDER NOTE DIRECTLY BELOW THIS SPECIFIC ITEM */}
-                      {it.isGovPrescribed && (
-                        <span className="invoice-print-go-subnote">
-                          {it.govOrderNote ||
-                            `As per the rate fixed by ${it.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD'} dated ${it.govOrderDate || '13-12-2023'}`}
-                        </span>
-                      )}
-                    </td>
-                    {(showHsnColumn || showSacColumn) && (
-                      <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                        {code}
-                      </td>
-                    )}
-                    <td style={{ textAlign: 'center', fontFamily: 'var(--font-data)', fontSize: '12px' }}>
-                      {it.quantity} {it.unit || 'units'}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-data)', fontSize: '12px' }}>
-                      {((it.unitPricePaisa || 0) / 100).toFixed(2)}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-data)', fontWeight: 700 }}>
-                      {((lineAmount || 0) / 100).toFixed(2)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {/* Section 4: Dual Ledger Partition */}
-          <div className="invoice-print-ledger-grid">
-            {/* Left Side: Amount in Words & Notes */}
-            <div className="invoice-print-words-box">
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)', letterSpacing: '0.04em' }}>
-                  Invoice Total in Words
-                </span>
-                <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', marginTop: '2px' }}>
-                  {numberToWordsINR(grandTotalPaisa)}
-                </div>
-              </div>
-
-              {/* Statutory Exemption Box */}
-              <div className="invoice-print-statutory-gst">
-                <strong>Statutory Exemption Notice:</strong> Healthcare services and diagnostic examinations provided by registered clinical veterinary professionals are fully exempt from Goods and Services Tax (GST) as per{' '}
-                <strong>Notification No. 12/2017-Central Tax (Rate)</strong>.
-              </div>
-
-              {showSpecialInstructionsForOwner && invoice.notes && (
-                <div style={{ fontSize: '11px', color: 'var(--color-on-surface-variant)' }}>
-                  <strong>Special Instructions / Remarks:</strong> {invoice.notes}
-                </div>
-              )}
-            </div>
-
-            {/* Right Side: Ledger Totals */}
-            <div className="invoice-print-totals-box">
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>Gross Subtotal:</span>
-                <span style={{ fontFamily: 'var(--font-data)', fontWeight: 600 }}>
-                  {formatINR(grossSubtotalPaisa)}
-                </span>
-              </div>
-
-              {itemDiscountsPaisa > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Item Discounts:</span>
-                  <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                    -{formatINR(itemDiscountsPaisa)}
-                  </span>
-                </div>
-              )}
-
-              {doctorDiscountPaisa > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Doctor / Courtesy Discount:</span>
-                  <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-tertiary)' }}>
-                    -{formatINR(doctorDiscountPaisa)}
-                  </span>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>GST (0.0% Exempt):</span>
-                <span style={{ fontFamily: 'var(--font-data)' }}>₹0.00</span>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingTop: '8px',
-                  borderTop: '2px solid #cbd5e1',
-                  marginTop: '4px',
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800 }}>
-                  Grand Total:
-                </span>
-                <span style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 800, color: 'var(--color-primary)' }}>
-                  {formatINR(grandTotalPaisa)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 5: Legal Footer & Veterinarian Digital Signatory Stamp */}
-        <div>
-          <div className="invoice-print-signature-section">
-            {/* Signature Block aligned bottom-right with exact labels */}
-            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', marginLeft: 'auto' }}>
-              <div style={{ height: '36px', display: 'flex', alignItems: 'center', marginBottom: '2px' }}>
-                {activePractitioner?.signatureDataUrl && (
-                  <img
-                    src={activePractitioner.signatureDataUrl}
-                    alt="Veterinarian Signature"
-                    style={{ maxHeight: '36px', maxWidth: '140px', objectFit: 'contain' }}
-                  />
-                )}
-              </div>
-              <div style={{ fontSize: '13px', color: 'var(--color-on-surface)' }}>
-                <strong>Name:</strong> {doctorName}{doctorQual ? ` (${doctorQual})` : ''}
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>
-                <strong>Registration Number:</strong> {rawReg || 'N/A'}
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>
-                Authorized Signatory
-              </div>
-            </div>
-          </div>
-
-          {/* Micro Audit Note */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontFamily: 'var(--font-data)', color: 'var(--color-outline)', marginTop: '8px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
-            <span>Computer-generated official {documentType.toLowerCase()} • Valid without physical seal.</span>
-            <span>
-              Generated: {new Date().toLocaleDateString('en-IN')} {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} IST
-            </span>
-          </div>
-        </div>
+      <div className="invoice-sheet-container" id="invoice-sheet-container">
+        {documentType === 'Payment Receipt' ? (
+          <ReceiptDocument
+            invoice={invoice}
+            items={items}
+            patient={patient}
+            owner={owner}
+            activePractitioner={activePractitioner}
+            activeOrganisation={activeOrganisation}
+            linkedRxNumbers={linkedRxNumbers}
+            showSpecialInstructionsForOwner={showSpecialInstructionsForOwner}
+            id="invoice-sheet"
+          />
+        ) : (
+          <InvoiceDocument
+            invoice={invoice}
+            items={items}
+            patient={patient}
+            owner={owner}
+            activePractitioner={activePractitioner}
+            activeOrganisation={activeOrganisation}
+            linkedRxNumbers={linkedRxNumbers}
+            showHsnColumn={showHsnColumn}
+            showSacColumn={showSacColumn}
+            showSpecialInstructionsForOwner={showSpecialInstructionsForOwner}
+            id="invoice-sheet"
+          />
+        )}
       </div>
 
       {/* Share Document Modal */}

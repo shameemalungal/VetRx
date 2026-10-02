@@ -9,10 +9,25 @@ import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 import { authRouter } from './auth/auth.controller.js';
 import { practiceRouter } from './practice/practice.controller.js';
+import { practiceMemberRouter } from './auth/practice-member.controller.js';
+import { platformAdminRouter } from './platform/platform-admin.controller.js';
 import { healthRouter } from './health/health.controller.js';
+import { clinicalRouter } from './clinical/clinical.controller.js';
+import { commercialRouter } from './commercial/commercial.controller.js';
+import { webhookRouter, publicPaymentsRouter } from './commercial/webhook.controller.js';
+import { inventoryRouter } from './inventory/inventory.controller.js';
+import { EmailService } from './email/email.service.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
 export function createApp() {
+  // Initialize Transactional Email Service
+  EmailService.configure({
+    enabled: env.EMAIL_ENABLED,
+    fromEmail: env.EMAIL_FROM,
+    fromName: env.EMAIL_FROM_NAME,
+    brevoApiKey: env.BREVO_API_KEY,
+  });
+
   const app = express();
 
   // Trust reverse proxy (e.g. NGINX on VPS)
@@ -27,7 +42,15 @@ export function createApp() {
   );
 
   // CORS Configuration (Strict Origins Only)
-  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  const defaultOrigins = [
+    'https://app.vetrx.brightbase.in',
+    'https://vetrx.brightbase.in',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+  ];
+  const configuredOrigins = env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',').map((o) => o.trim()) : [];
+  const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
   app.use(
     cors({
       origin: (origin, callback) => {
@@ -80,7 +103,14 @@ export function createApp() {
   // Mount API Endpoints
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/commercial/webhooks', webhookRouter);
+  app.use('/api/commercial/payments/return', publicPaymentsRouter);
+  app.use('/api/practice', practiceMemberRouter);
   app.use('/api/practice', practiceRouter);
+  app.use('/api/platform/admin', platformAdminRouter);
+  app.use('/api/commercial', commercialRouter);
+  app.use('/api/inventory', inventoryRouter);
+  app.use('/api', clinicalRouter);
 
   // 404 Catch-All
   app.use((req, res, next) => {

@@ -1,6 +1,14 @@
 import type { Request } from 'express';
 
-export type UserRole = 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'PRACTICE_STAFF';
+export type UserRole =
+  | 'PRACTICE_OWNER'
+  | 'PRACTICE_ADMIN'
+  | 'VETERINARIAN'
+  | 'STAFF'
+  | 'PRACTICE_STAFF'
+  | 'READ_ONLY';
+
+export type PlatformRoleType = 'PLATFORM_SUPER_ADMIN';
 
 export interface SafeUserDTO {
   id: string;
@@ -8,6 +16,8 @@ export interface SafeUserDTO {
   name: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  platformRole?: PlatformRoleType | null;
+  hasPassword?: boolean;
   createdAt: string;
 }
 
@@ -25,7 +35,9 @@ export interface SafeMembershipDTO {
   practiceId: string;
   userId: string;
   role: UserRole;
+  isClinicalApprover?: boolean;
   isActive: boolean;
+  permissions?: string[];
 }
 
 export interface SafePracticeSettingsDTO {
@@ -45,11 +57,21 @@ export interface SafePracticeSettingsDTO {
   mykgvoaMemberId: string | null;
 }
 
+export interface PracticeMembershipSummaryDTO {
+  practiceId: string;
+  practiceName: string;
+  role: UserRole;
+  isClinicalApprover: boolean;
+  isCurrent: boolean;
+}
+
 export interface AuthMeResponse {
   user: SafeUserDTO;
-  practice: SafePracticeDTO;
-  membership: SafeMembershipDTO;
+  practice: SafePracticeDTO | null;
+  membership: SafeMembershipDTO | null;
+  permissions: string[];
   settings: SafePracticeSettingsDTO | null;
+  practices?: PracticeMembershipSummaryDTO[];
 }
 
 export interface ApiErrorResponse {
@@ -64,8 +86,14 @@ export interface ApiErrorResponse {
 export interface AuthenticatedRequest extends Request {
   id?: string;
   user?: SafeUserDTO;
+  session?: {
+    id: string;
+    practiceId?: string | null;
+  };
   practice?: SafePracticeDTO;
   membership?: SafeMembershipDTO;
+  permissions?: string[];
+  platformRole?: PlatformRoleType | null;
 }
 
 export interface AuthenticatedIdentity {

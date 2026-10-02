@@ -14,10 +14,26 @@ export interface RecordAuditParams {
 }
 
 export class AuditService {
+  public static mockLogs: RecordAuditParams[] = [];
+
+  static clearMockLogs(): void {
+    this.mockLogs = [];
+  }
+
+  static getMockLogs(): RecordAuditParams[] {
+    return this.mockLogs;
+  }
+
   /**
    * Records a security or domain audit log entry asynchronously without blocking caller.
    */
   static async record(params: RecordAuditParams): Promise<void> {
+    this.mockLogs.push({ ...params });
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      return;
+    }
+
     try {
       await prisma.auditLog.create({
         data: {

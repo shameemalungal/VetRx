@@ -323,6 +323,18 @@ export async function ensureMasterDataSeeded(): Promise<void> {
         seenSex.add(key);
       }
     }
+
+    // Ensure species category items are deduplicated on name in Dexie
+    const speciesItems = await db.masterDataItems.where('category').equals('species').toArray();
+    const seenSpecies = new Set<string>();
+    for (const item of speciesItems) {
+      const key = item.name.toLowerCase().trim();
+      if (seenSpecies.has(key)) {
+        await db.masterDataItems.delete(item.id!);
+      } else {
+        seenSpecies.add(key);
+      }
+    }
   } catch (err) {
     console.error('Failed to ensure master data seeded:', err);
   }

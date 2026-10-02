@@ -4,6 +4,8 @@
 // ==============================================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { switchTenantDb, ensureSeeded } from '../db/schema';
+import { useSettingsStore } from '../store/settingsStore';
 
 export interface AuthUser {
   id: string;
@@ -11,6 +13,8 @@ export interface AuthUser {
   name: string;
   avatarUrl: string | null;
   emailVerified: boolean;
+  platformRole?: string | null;
+  hasPassword?: boolean;
   createdAt: string;
 }
 
@@ -27,8 +31,10 @@ export interface AuthMembership {
   id: string;
   practiceId: string;
   userId: string;
-  role: 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'PRACTICE_STAFF';
+  role: 'PRACTICE_OWNER' | 'PRACTICE_ADMIN' | 'VETERINARIAN' | 'STAFF' | 'PRACTICE_STAFF' | 'READ_ONLY';
+  isClinicalApprover?: boolean;
   isActive: boolean;
+  permissions?: string[];
 }
 
 export interface AuthPracticeSettings {
@@ -48,15 +54,49 @@ export interface AuthPracticeSettings {
   mykgvoaMemberId: string | null;
 }
 
+export interface AuthPracticeSummary {
+  practiceId: string;
+  practiceName: string;
+  role: string;
+  isClinicalApprover: boolean;
+  isCurrent: boolean;
+}
+
+export interface RegisterParams {
+  name: string;
+  email: string;
+  password: string;
+  practiceName?: string;
+  practiceType?: 'INDEPENDENT' | 'CLINIC';
+  isClinicalApprover?: boolean;
+  phone?: string;
+  address?: string;
+  teamMembers?: Array<{ name?: string; email: string; role: string }>;
+  invitationToken?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   practice: AuthPractice | null;
   membership: AuthMembership | null;
   settings: AuthPracticeSettings | null;
+  permissions: string[];
+  practices: AuthPracticeSummary[];
   isLoading: boolean;
   error: string | null;
+  can: (permission: string) => boolean;
+  hasRole: (role: string) => boolean;
+  isPracticeOwner: () => boolean;
+  isPlatformAdmin: () => boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, practiceName?: string) => Promise<void>;
+  register: (
+    nameOrParams: string | RegisterParams,
+    email?: string,
+    password?: string,
+    practiceName?: string,
+    invitationToken?: string
+  ) => Promise<void>;
+  switchPractice: (practiceId: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updatePracticeSettings: (updates: Partial<AuthPracticeSettings>) => Promise<void>;
@@ -72,8 +112,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [practice, setPractice] = useState<AuthPractice | null>(null);
   const [membership, setMembership] = useState<AuthMembership | null>(null);
   const [settings, setSettings] = useState<AuthPracticeSettings | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [practices, setPractices] = useState<AuthPracticeSummary[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const can = useCallback(
+    (permission: string) => {
+      return permissions.includes(permission);
+    },
+    [permissions]
+  );
+
+  const hasRole = useCallback(
+    (role: string) => {
+      if (!membership) return false;
+      if (membership.role === role) return true;
+      if (role === 'STAFF' && membership.role === 'PRACTICE_STAFF') return true;
+      return false;
+    },
+    [membership]
+  );
+
+  const isPracticeOwner = useCallback(() => {
+    return membership?.role === 'PRACTICE_OWNER';
+  }, [membership]);
+
+  const isPlatformAdmin = useCallback(() => {
+    return user?.platformRole === 'PLATFORM_SUPER_ADMIN';
+  }, [user]);
 
   const refreshSession = useCallback(async () => {
     try {
@@ -90,11 +157,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPractice(data.practice);
         setMembership(data.membership);
         setSettings(data.settings);
+        setPermissions(data.permissions || data.membership?.permissions || []);
+        if (data.practices) setPractices(data.practices);
+        switchTenantDb(data.practice?.id);
+        await ensureSeeded();
+        void useSettingsStore.getState().loadSettings(data.settings, data.user);
       } else {
         setUser(null);
         setPractice(null);
         setMembership(null);
         setSettings(null);
+        setPermissions([]);
+        setPractices([]);
+        switchTenantDb(null);
+        useSettingsStore.getState().reset();
       }
     } catch (err) {
       console.warn('Session check could not reach backend, starting in guest mode:', err);
@@ -102,6 +178,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPractice(null);
       setMembership(null);
       setSettings(null);
+      setPermissions([]);
+      setPractices([]);
+      switchTenantDb(null);
+      useSettingsStore.getState().reset();
     } finally {
       setIsLoading(false);
     }
@@ -129,15 +209,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPractice(data.practice);
     setMembership(data.membership);
     setSettings(data.settings);
+    setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
-  const register = async (name: string, email: string, password: string, practiceName?: string) => {
+  const register = async (
+    nameOrParams: string | RegisterParams,
+    email?: string,
+    password?: string,
+    practiceName?: string,
+    invitationToken?: string
+  ) => {
     setError(null);
+    const payload =
+      typeof nameOrParams === 'object'
+        ? nameOrParams
+        : {
+            name: nameOrParams,
+            email: email!,
+            password: password!,
+            practiceName,
+            invitationToken,
+          };
+
     const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ name, email, password, practiceName }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -149,6 +251,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPractice(data.practice);
     setMembership(data.membership);
     setSettings(data.settings);
+    setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
+  };
+
+  const switchPractice = async (practiceId: string) => {
+    setError(null);
+    const res = await fetch(`${API_BASE}/api/auth/switch-practice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ practiceId }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error?.message || 'Failed to switch practice.');
+    }
+
+    setUser(data.user);
+    setPractice(data.practice);
+    setMembership(data.membership);
+    setSettings(data.settings);
+    setPermissions(data.permissions || data.membership?.permissions || []);
+    if (data.practices) setPractices(data.practices);
+    switchTenantDb(data.practice?.id);
+    await ensureSeeded();
+    await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
   const logout = async () => {
@@ -163,6 +295,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPractice(null);
       setMembership(null);
       setSettings(null);
+      setPermissions([]);
+      setPractices([]);
+      switchTenantDb(null);
+      useSettingsStore.getState().reset();
     }
   };
 
@@ -189,10 +325,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         practice,
         membership,
         settings,
+        permissions,
+        practices,
         isLoading,
         error,
+        can,
+        hasRole,
+        isPracticeOwner,
+        isPlatformAdmin,
         login,
         register,
+        switchPractice,
         logout,
         refreshSession,
         updatePracticeSettings,

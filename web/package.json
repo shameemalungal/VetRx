@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "tsx test_phase7_dosing.ts && tsx test_dose_and_import_fixes.ts && tsx test_shared_medicine_form.ts && tsx test_medicine_formulation_persistence.ts && tsx test_platform_header_layout.ts && tsx test_inventory_addon_v1.ts",
+    "test:browser": "node ../scripts/run_browser_uat.mjs",
+    "test:browser:smoke": "node ../scripts/browser_smoke.mjs"
   },
   "dependencies": {
     "@types/html2canvas": "^0.5.35",

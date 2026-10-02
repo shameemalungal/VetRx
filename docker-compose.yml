@@ -45,6 +45,11 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:4000/api/auth/google/callback}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_FROM: ${EMAIL_FROM:-supportvetrx@gmail.com}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-VetRx}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
     ports:
       - "4000:4000"
     depends_on:

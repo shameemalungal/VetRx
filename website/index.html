@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VetRx | Veterinary Practice Management Software</title>
+    <meta
+      name="description"
+      content="VetRx is a veterinary practice management software platform for veterinarians and veterinary clinics. Manage patients, prescriptions, medicines, invoices and practice workflows in one place."
+    />
+    <link rel="canonical" href="https://vetrx.brightbase.in/" />
+    <meta property="og:title" content="VetRx | Veterinary Practice Management Software" />
+    <meta
+      property="og:description"
+      content="VetRx is a veterinary practice management software platform for veterinarians and veterinary clinics. Manage patients, prescriptions, medicines, invoices and practice workflows in one place."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vetrx.brightbase.in/" />
+    <meta property="og:image" content="https://vetrx.brightbase.in/vetrx_logo_full.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VetRx | Veterinary Practice Management Software" />
+    <meta
+      name="twitter:description"
+      content="VetRx is a veterinary practice management software platform for veterinarians and veterinary clinics. Manage patients, prescriptions, medicines, invoices and practice workflows in one place."
+    />
+    <meta name="twitter:image" content="https://vetrx.brightbase.in/vetrx_logo_full.png" />
+    <meta name="theme-color" content="#08756D" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/vetrx_logo_mark.png" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Tailwind Play CDN for immediate preview and styling alignment -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              teal: {
+                DEFAULT: '#0D9186',
+                primary: '#0D9186',
+                deep: '#075E59',
+                dark: '#075E59',
+                bright: '#16A79B',
+                soft: '#DDF5F2',
+                50: '#F0FAF9',
+                100: '#DDF5F2',
+                200: '#B8EBE5',
+                300: '#7DE5D3',
+                400: '#19B8A5',
+                500: '#0D9186',
+                600: '#0B7D74',
+                700: '#075E59',
+                800: '#064945',
+                900: '#043734',
+                950: '#02211F',
+              },
+              aqua: {
+                DEFAULT: '#19B8A5',
+                light: '#E6FAF7',
+                border: '#8CE2D7',
+              },
+              mint: {
+                DEFAULT: '#7DE5D3',
+                soft: '#EAFBF8',
+              },
+              sky: {
+                blue: '#4DA8FF',
+                soft: '#EBF4FF',
+              },
+              electric: {
+                blue: '#356DFF',
+                soft: '#EBF1FF',
+              },
+              violet: {
+                DEFAULT: '#7C5CFF',
+                soft: '#F2EFFF',
+              },
+              warm: {
+                accent: '#FFB86B',
+                soft: '#FFF5EB',
+              },
+              coral: {
+                soft: '#FF7F7F',
+              },
+              surface: {
+                DEFAULT: '#FFFFFF',
+                canvas: '#F6FAFA',
+                subtle: '#EEF5F4',
+                card: '#FFFFFF',
+                dark: '#06252A',
+                hero: '#062F35',
+              },
+              content: {
+                primary: '#112221',
+                secondary: '#4A605D',
+                muted: '#7E9491',
+                inverse: '#F6FAFA',
+              },
+              clinical: {
+                success: '#1EA87A',
+                warning: '#E68A00',
+                border: '#DBE9E6',
+                card: '#FFFFFF',
+              },
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              heading: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            },
+            boxShadow: {
+              subtle: '0 1px 3px rgba(13, 145, 134, 0.05), 0 10px 25px -5px rgba(23, 37, 37, 0.04)',
+              clinical: '0 12px 34px -10px rgba(13, 145, 134, 0.14), 0 2px 6px -1px rgba(0, 0, 0, 0.03)',
+              floating: '0 20px 40px -15px rgba(7, 94, 89, 0.22)',
+              'card-lift': '0 20px 35px -10px rgba(13, 145, 134, 0.16), 0 6px 14px -3px rgba(6, 47, 53, 0.06)',
+              'hero-glow': '0 0 60px -10px rgba(25, 184, 165, 0.35)',
+              'plan-highlight': '0 20px 45px -10px rgba(13, 145, 134, 0.25), 0 0 0 2px #0D9186',
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="bg-surface-canvas text-content-primary font-sans antialiased selection:bg-teal-100 selection:text-teal-dark overflow-x-hidden min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -85,13 +85,96 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
     throw new Error(`Target printable element "${String(elementOrId)}" not found in DOM.`);
   }
 
+  const atomicSelectors = [
+    '.avoid-break',
+    '.signature-block',
+    'tr',
+    '.medication-row',
+    '.stationery-signalment-grid',
+    '.stationery-findings-box',
+    '.stationery-advice-grid',
+    '.invoice-print-ledger-and-signoff',
+    '.invoice-print-ledger-grid',
+    '.invoice-print-footer-wrap',
+    '.invoice-print-signature-section',
+    '.prescription-sig-box',
+    '.invoice-sig-box',
+    '.receipt-sig-box',
+    '.prescription-legal-footer',
+  ];
+
+  interface AvoidBreakBox {
+    topPx: number;
+    bottomPx: number;
+  }
+
+  const avoidBoxes: AvoidBreakBox[] = [];
+
   // Render element canvas at 2x resolution for print-grade clarity
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
-    windowWidth: element.scrollWidth || 794,
+    windowWidth: 1200,
+    onclone: (clonedDoc) => {
+      clonedDoc.body.classList.add('generating-pdf');
+
+      const target = (typeof elementOrId === 'string'
+        ? clonedDoc.getElementById(elementOrId)
+        : clonedDoc.getElementById(element.id)) ||
+        (element.className ? clonedDoc.querySelector(`.${element.className.split(' ')[0]}`) : null);
+
+      if (target) {
+        // Strip any screen container styles from parents up to body so sheet has true 794px width
+        let parent = target.parentElement;
+        while (parent && parent !== clonedDoc.body) {
+          parent.style.width = '1200px';
+          parent.style.maxWidth = 'none';
+          parent.style.display = 'block';
+          parent.style.border = 'none';
+          parent.style.borderRadius = '0';
+          parent.style.boxShadow = 'none';
+          parent.style.padding = '0';
+          parent.style.margin = '0';
+          parent.style.background = 'transparent';
+          parent = parent.parentElement;
+        }
+
+        const targetEl = target as HTMLElement;
+        targetEl.style.width = '794px';
+        targetEl.style.maxWidth = '794px';
+        targetEl.style.minWidth = '794px';
+        targetEl.style.boxSizing = 'border-box';
+        targetEl.style.border = 'none';
+        targetEl.style.borderRadius = '0';
+        targetEl.style.boxShadow = 'none';
+        targetEl.style.padding = '4px 6px 14px 6px';
+        targetEl.style.margin = '0 auto';
+        targetEl.style.background = '#ffffff';
+
+        // Strip any screen preview borders/paddings from inner wrappers
+        target.querySelectorAll('.invoice-a4-sheet, .rx-a4-sheet, .prescription-sheet-wrapper, .invoice-sheet-container').forEach((wrapper) => {
+          const w = wrapper as HTMLElement;
+          w.style.border = 'none';
+          w.style.borderRadius = '0';
+          w.style.boxShadow = 'none';
+          w.style.padding = '0';
+          w.style.margin = '0';
+        });
+
+        // Measure avoidBoxes in the EXACT cloned target that html2canvas renders
+        const targetRect = target.getBoundingClientRect();
+        target.querySelectorAll(atomicSelectors.join(',')).forEach((el) => {
+          const rect = (el as HTMLElement).getBoundingClientRect();
+          const topPx = Math.round((rect.top - targetRect.top) * 2);
+          const bottomPx = Math.round((rect.bottom - targetRect.top) * 2);
+          if (bottomPx > topPx) {
+            avoidBoxes.push({ topPx, bottomPx });
+          }
+        });
+      }
+    },
   });
 
   const pdf = new jsPDF({
@@ -102,23 +185,33 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
 
   const pageWidthMm = 210;
   const pageHeightMm = 297;
-  const marginMm = 6;
-  const contentWidthMm = pageWidthMm - marginMm * 2;
-  const contentHeightMm = pageHeightMm - marginMm * 2;
+  const marginTopMm = 6;
+  const marginBottomMm = 6;
+  const marginLeftMm = 8;
+  const marginRightMm = 8;
+  const contentWidthMm = pageWidthMm - marginLeftMm - marginRightMm;
+  const contentHeightMm = pageHeightMm - marginTopMm - marginBottomMm;
 
   // Convert canvas to mm height
   const imgWidthPx = canvas.width;
   const imgHeightPx = canvas.height;
   const totalHeightMm = (imgHeightPx * contentWidthMm) / imgWidthPx;
 
-  if (totalHeightMm <= contentHeightMm) {
-    // Fits comfortably on a single A4 page
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    pdf.addImage(imgData, 'JPEG', marginMm, marginMm, contentWidthMm, totalHeightMm);
+  // If height fits within page height (allowing 12mm tolerance for subpixel font/table variations)
+  if (totalHeightMm <= contentHeightMm + 12) {
+    // Fits comfortably on a single A4 page with preserved aspect ratio
+    const imgData = canvas.toDataURL('image/png');
+    const scaleFactor = Math.min(1, contentHeightMm / totalHeightMm);
+    const renderWidthMm = contentWidthMm * scaleFactor;
+    const renderHeightMm = totalHeightMm * scaleFactor;
+    const offsetX = (pageWidthMm - renderWidthMm) / 2;
+    const offsetY = marginTopMm;
+    pdf.addImage(imgData, 'PNG', offsetX, offsetY, renderWidthMm, renderHeightMm);
   } else {
-    // Multi-page document: slice canvas page-by-page
+    // Multi-page document: smart boundary-aware canvas slicing
     const pxPerMm = imgWidthPx / contentWidthMm;
     const pageHeightPx = Math.floor(contentHeightMm * pxPerMm);
+
     let renderedHeightPx = 0;
     let pageIndex = 0;
 
@@ -127,7 +220,44 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
         pdf.addPage('a4', 'portrait');
       }
 
-      const sliceHeightPx = Math.min(pageHeightPx, imgHeightPx - renderedHeightPx);
+      let sliceHeightPx = Math.min(pageHeightPx, imgHeightPx - renderedHeightPx);
+      const tentativeCutPx = renderedHeightPx + sliceHeightPx;
+
+      // If this slice doesn't reach the end, verify if cut line intersects an indivisible block
+      if (tentativeCutPx < imgHeightPx) {
+        const intersectingBoxes = avoidBoxes.filter(
+          (b) =>
+            b.topPx < tentativeCutPx &&
+            b.bottomPx > tentativeCutPx &&
+            b.topPx > renderedHeightPx + pageHeightPx * 0.25
+        );
+
+        if (intersectingBoxes.length > 0) {
+          // Adjust cut line to just above the earliest intersecting element
+          const earliestTop = Math.min(...intersectingBoxes.map((b) => b.topPx));
+          const adjustedSlice = Math.floor(earliestTop - renderedHeightPx);
+          if (adjustedSlice > 0) {
+            sliceHeightPx = adjustedSlice;
+          }
+        }
+
+        // Guard against orphan signature fragment on trailing page:
+        // If remaining content after cut is very small (< 130px at 2x scale),
+        // pull the cut earlier so preceding card (advice/ledger/item) moves together with sign-off
+        const remainingAfterCut = imgHeightPx - (renderedHeightPx + sliceHeightPx);
+        if (remainingAfterCut > 0 && remainingAfterCut < 130 * 2) {
+          const prevBoxes = avoidBoxes
+            .filter((b) => b.bottomPx <= (renderedHeightPx + sliceHeightPx) && b.topPx > renderedHeightPx + pageHeightPx * 0.3)
+            .sort((a, b) => b.topPx - a.topPx);
+          if (prevBoxes.length > 0) {
+            const pullBackSlice = Math.floor(prevBoxes[0].topPx - renderedHeightPx);
+            if (pullBackSlice > pageHeightPx * 0.25) {
+              sliceHeightPx = pullBackSlice;
+            }
+          }
+        }
+      }
+
       const pageCanvas = document.createElement('canvas');
       pageCanvas.width = imgWidthPx;
       pageCanvas.height = sliceHeightPx;
@@ -148,9 +278,9 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
           sliceHeightPx
         );
 
-        const pageImgData = pageCanvas.toDataURL('image/jpeg', 0.95);
+        const pageImgData = pageCanvas.toDataURL('image/png');
         const sliceHeightMm = (sliceHeightPx * contentWidthMm) / imgWidthPx;
-        pdf.addImage(pageImgData, 'JPEG', marginMm, marginMm, contentWidthMm, sliceHeightMm);
+        pdf.addImage(pageImgData, 'PNG', marginLeftMm, marginTopMm, contentWidthMm, sliceHeightMm);
       }
 
       renderedHeightPx += sliceHeightPx;
@@ -159,6 +289,24 @@ export async function generatePdfBlob(elementOrId: HTMLElement | string): Promis
   }
 
   return pdf.output('blob');
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).generatePdfBlob = generatePdfBlob;
+}
+
+/**
+ * Uses the browser's native print engine to generate a PDF.
+ * This produces output identical to "Microsoft Print to PDF" / "Save as PDF"
+ * because it uses Chrome/Edge's actual CSS rendering engine rather than
+ * re-implementing CSS in JavaScript (which is what html2canvas does).
+ *
+ * On desktop browsers this is the preferred method for pixel-perfect PDFs.
+ * The user will see the browser's print dialog where they can choose
+ * "Save as PDF" or "Microsoft Print to PDF".
+ */
+export function savePdfNative(): void {
+  window.print();
 }
 
 /**

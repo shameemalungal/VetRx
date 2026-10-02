@@ -9,11 +9,13 @@ export interface Practitioner {
   name: string;
   registrationNumber: string;
   qualifications: string;
+  designation?: string;
   phone: string;
   email: string;
   address: string;
   photoDataUrl?: string; // base64 image, optional
   signatureDataUrl?: string; // base64 image, optional
+  isActive?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -145,12 +147,25 @@ export interface Medicine {
   brandName: string;
   genericName?: string;
   presentation: string;    // e.g. Tablet, Syrup, Injection, Drops
-  strengthVolume?: string; // e.g. 500mg, 15ml
+  packSize?: string;       // e.g. 30 mL bottle, 2 mL vial, 10 tablets/strip
+  strength?: string;       // e.g. 5 mg/mL, 125 mg/tablet
+  strengthVolume?: string; // e.g. 500mg, 15ml (backward compat alias)
   defaultUnit?: string;    // e.g. tablets, ml, vial
+  dispenseUnit?: string;   // e.g. tablet, capsule, vial, bottle
   category?: string;       // e.g. Antibiotic, NSAID, Otic / Topical
   isActive?: boolean;      // defaults to true (undefined treated as active)
   notes?: string;
   source?: 'prescription' | 'manual' | 'seed';
+
+  // Structured Strength (Master Data)
+  strengthValue?: number;
+  strengthUnit?: string;
+  strengthPerValue?: number;
+  strengthPerUnit?: string;
+
+  // Structured Pack Size (Commercial Packaging)
+  packSizeValue?: number;
+  packSizeUnit?: string;
 
   // Dosing rules (deterministic, veterinarian-configured)
   dosingMethod?: DosingMethod;
@@ -198,20 +213,60 @@ export interface Medicine {
 
 // ── Prescription ──────────────────────────────────────────────
 
-export type PrescriptionStatus = 'Draft' | 'Issued' | 'Cancelled';
+export type PrescriptionStatus =
+  | 'Draft'
+  | 'Pending Approval'
+  | 'Changes Requested'
+  | 'Approved'
+  | 'Issued'
+  | 'Cancelled';
+
+export interface PrescriptionWorkflowHistoryItem {
+  id: string;
+  version: number;
+  status: string;
+  action: string;
+  actorUserId: string;
+  actorUser?: { id: string; name: string; email: string };
+  targetUserId?: string | null;
+  targetUser?: { id: string; name: string; email: string } | null;
+  remarks?: string | null;
+  createdAt: string | Date;
+}
 
 export interface Prescription {
   id?: number;
   rxNumber: string;        // e.g. RX-2026-0892
   patientId: number;
   ownerId: number;
-  practitionerId: number;
+  practitionerId?: number;
   packageId?: number;      // if created from a package
   symptoms?: string;
   diagnosis?: string;
   instructions?: string;   // owner advice / follow-up
   followUpDays?: number;
+  recheckIntervalPreset?: string; // 'None' | '3 days' | '5 days' | '7 days' | '14 days' | 'Custom'
+  recheckIntervalCustom?: string; // e.g. '10 days', '2 weeks', 'After 5 days'
   status: PrescriptionStatus;
+  version?: number;
+  forwardingRemarks?: string | null;
+  forwardedByUserId?: string | null;
+  forwardedByUser?: { id: string; name: string; email: string } | null;
+  forwardedToUserId?: string | null;
+  forwardedToUser?: { id: string; name: string; email: string; role?: string; isClinicalApprover?: boolean } | null;
+  forwardedAt?: string | Date | null;
+  approvedByUserId?: string | null;
+  approvedByUser?: { id: string; name: string; email: string } | null;
+  approvedAt?: string | Date | null;
+  approvedVersion?: number | null;
+  approvalRemarks?: string | null;
+  requestedByUserId?: string | null;
+  requestedByUser?: { id: string; name: string; email: string } | null;
+  requestedAt?: string | Date | null;
+  changeRequestRemarks?: string | null;
+  workflowHistory?: PrescriptionWorkflowHistoryItem[];
+  items?: PrescriptionItem[];
+  patient?: any;
   issuedAt?: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
@@ -226,10 +281,15 @@ export interface PrescriptionItem {
   brandName: string;       // snapshot at time of Rx
   genericName?: string;
   presentation: string;
+  packSize?: string;
+  strength?: string;
   strengthVolume?: string;
-  dose?: string;           // Final approved dose e.g. "240 mg", "1 tablet"
-  quantity: number;
-  unit: string;            // tablets, ml, vials …
+  dose?: string;           // Final approved numeric or clinical dose e.g. "240", "1.17"
+  doseUnit?: string;       // Clinical dose unit e.g. "mg", "g", "mL", "mg/kg"
+  quantity: number;        // Dispense quantity
+  unit: string;            // Dispense unit e.g. "tablets", "vial", "bottle", "mL"
+  dispenseQuantity?: number; // Explicit alias for quantity
+  dispenseUnit?: string;   // Explicit alias for unit
   frequency: string;       // SID, BID, TID, q12h …
   durationDays?: number;
   route?: string;          // PO, SC, IV, Topical …
@@ -262,6 +322,8 @@ export interface TreatmentPackageItem {
   brandName: string;
   genericName?: string;
   presentation: string;
+  packSize?: string;
+  strength?: string;
   strengthVolume?: string;
   dose?: string;
   quantity: number;

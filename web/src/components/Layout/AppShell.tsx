@@ -7,30 +7,23 @@
 // =============================================================
 
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../ui/Icon';
 import { VetRxLogo } from '../ui/VetRxLogo';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useAuth } from '../../context/AuthContext';
+import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './AppShell.css';
 
-// ── Nav items — order and icons match Stitch screens ──────────
-const NAV_ITEMS = [
-  { label: 'Home',               path: '/',                icon: 'home'        },
-  { label: 'Patients',           path: '/patients',        icon: 'patients'    },
-  { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
-  { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
-  { label: 'Medicines',          path: '/medicines',       icon: 'pill'        },
-  { label: 'Invoices & Receipts',path: '/invoices',        icon: 'invoices'    },
-] as const;
+// ── Bottom nav shows the 4 most-used items (matches Stitch mobile) ──────────
 
 // Bottom nav shows the 4 most-used items (matches Stitch mobile)
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home',     path: '/',              icon: 'home',         ariaLabel: 'Home' },
+  { label: 'Home',     path: '/dashboard',     icon: 'home',         ariaLabel: 'Home' },
   { label: 'Patients', path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
   { label: 'Rx',       path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
   { label: 'Invoices', path: '/invoices',      icon: 'invoices',     ariaLabel: 'Invoices & Receipts' },
@@ -57,7 +50,7 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ children }) => {
-  const { user, practice, logout } = useAuth();
+  const { user, practice, logout, isPlatformAdmin } = useAuth();
   const { practitioner, organisation } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -219,7 +212,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     };
   }, [searchQuery]);
 
-  // ── Live Notifications (Draft Prescriptions & Draft Invoices) ──
+  // ── Live Notifications (Pending Approvals, Draft Prescriptions & Draft Invoices) ──
+  const pendingRx = useLiveQuery(
+    () => db.prescriptions.where('status').equals('Pending Approval').toArray(),
+    []
+  );
   const draftRx = useLiveQuery(
     () => db.prescriptions.where('status').equals('Draft').toArray(),
     []
@@ -229,13 +226,33 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     []
   );
 
-  const totalNotifications = (draftRx?.length || 0) + (draftInvs?.length || 0);
+  const pendingApprovalsCount = pendingRx?.length || 0;
+  const totalNotifications = pendingApprovalsCount + (draftRx?.length || 0) + (draftInvs?.length || 0);
+
+  const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+
+  const navItems = React.useMemo(() => {
+    const items = [
+      { label: 'Home',               path: '/dashboard',       icon: 'home'        },
+      { label: 'Patients',           path: '/patients',        icon: 'patients'    },
+      { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
+      { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
+      { label: 'Medicines',          path: '/medicines',       icon: 'pill'        },
+    ];
+    if (isInventoryEntitled) {
+      items.push({ label: 'Inventory', path: '/inventory', icon: 'inventory' });
+    }
+    items.push({ label: 'Invoices & Receipts', path: '/invoices', icon: 'invoices' });
+    return items;
+  }, [isInventoryEntitled]);
 
   // ── Derive current page label for mobile header ──────────────
   const currentNav =
-    [...NAV_ITEMS].reverse().find((n) =>
-      n.path === '/' ? location.pathname === '/' : location.pathname.startsWith(n.path)
-    ) ?? NAV_ITEMS[0];
+    [...navItems].reverse().find((n) =>
+      n.path === '/dashboard'
+        ? location.pathname === '/' || location.pathname === '/dashboard'
+        : location.pathname.startsWith(n.path)
+    ) ?? navItems[0];
 
   const handleSelectResult = (url: string) => {
     navigate(url);
@@ -255,7 +272,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       <aside className="sidebar" aria-label="Main navigation">
         {/* Logo + clinic */}
         <div className="sidebar-header">
-          <VetRxLogo size={28} />
+          <Link to="/dashboard" aria-label="VetRx Dashboard" style={{ display: 'inline-flex', textDecoration: 'none' }}>
+            <VetRxLogo size={28} />
+          </Link>
           <div className="sidebar-clinic-tag">
             <span className="sidebar-clinic-dot" aria-hidden="true" />
             <span className="truncate">
@@ -266,23 +285,81 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Nav links */}
         <nav className="sidebar-nav" aria-label="Sections">
-          {NAV_ITEMS.map(({ label, path, icon }) => (
+          {navItems.map(({ label, path, icon }) => (
             <NavLink
               key={path}
               to={path}
-              end={path === '/'}
+              end={path === '/dashboard'}
               className={({ isActive }) =>
                 `sidebar-nav-item${isActive ? ' active' : ''}`
               }
             >
               <Icon name={icon} size={18} />
-              {label}
+              <span style={{ flex: 1 }}>{label}</span>
+              {path === '/prescriptions' && pendingApprovalsCount > 0 && (
+                <span
+                  style={{
+                    background: '#fef3c7',
+                    color: '#b45309',
+                    border: '1px solid #fde68a',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                  }}
+                  title={`${pendingApprovalsCount} pending clinical approvals`}
+                >
+                  {pendingApprovalsCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
 
         {/* Footer — Settings + practitioner */}
         <div className="sidebar-footer">
+          {isPlatformAdmin?.() && (
+            <button
+              type="button"
+              className="sidebar-nav-item"
+              id="sidebar-switch-to-platform-btn"
+              onClick={() => navigate('/platform/dashboard')}
+              style={{
+                background: 'rgba(0, 104, 95, 0.08)',
+                color: 'var(--color-primary, #00685f)',
+                border: '1px solid rgba(0, 104, 95, 0.2)',
+                marginBottom: '8px',
+                width: '100%',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+              title="Switch to Platform Super Admin context"
+            >
+              <Icon name="swap-horiz" size={18} />
+              <span style={{ flex: 1 }}>Switch to Platform</span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  background: 'var(--color-primary, #00685f)',
+                  color: '#fff',
+                  padding: '1px 6px',
+                  borderRadius: '4px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Admin
+              </span>
+            </button>
+          )}
+
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -540,6 +617,29 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       </div>
                     ) : (
                       <div className="popover-list">
+                        {pendingRx?.map((rx) => (
+                          <button
+                            key={rx.id}
+                            type="button"
+                            className="popover-item"
+                            style={{ background: '#fffbeb' }}
+                            onClick={() => {
+                              navigate(`/prescriptions/${rx.id}`);
+                              setIsNotificationsOpen(false);
+                            }}
+                          >
+                            <div className="popover-item-icon" style={{ background: '#fef3c7', color: '#b45309' }}>
+                              <Icon name="clock" size={14} />
+                            </div>
+                            <div className="popover-item-content">
+                              <span className="popover-item-title" style={{ color: '#92400e', fontWeight: 600 }}>
+                                Clinical Approval Needed
+                              </span>
+                              <span className="popover-item-sub data-mono">{rx.rxNumber} • Awaiting doctor sign-off</span>
+                            </div>
+                          </button>
+                        ))}
+
                         {draftRx?.map((rx) => (
                           <button
                             key={rx.id}
@@ -658,6 +758,22 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                       <span>Workspace &amp; Practice Settings</span>
                     </button>
 
+                    {isPlatformAdmin?.() && (
+                      <button
+                        type="button"
+                        className="profile-popover-item"
+                        id="switch-to-platform-btn"
+                        data-testid="profile-menu-platform-console"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          navigate('/platform/dashboard');
+                        }}
+                      >
+                        <Icon name="swap-horiz" size={16} />
+                        <span>Switch to Platform</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       className="profile-popover-item profile-logout-btn"
@@ -714,7 +830,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <NavLink
               key={path}
               to={path}
-              end={path === '/'}
+              end={path === '/dashboard'}
               className={({ isActive }) =>
                 `bottom-nav-item${isActive ? ' active' : ''}`
               }
