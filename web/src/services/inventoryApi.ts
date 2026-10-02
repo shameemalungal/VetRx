@@ -222,33 +222,66 @@ export interface InventoryDashboardData {
   };
 }
 
+export interface ParsedInvoiceItemData {
+  lineNumber?: number;
+  name: string;
+  category: InventoryCategory;
+  presentation?: string | null;
+  packing?: string | null;
+  packSize?: string | null;
+  hsnCode?: string | null;
+  stockUnit?: string | null;
+  batchNumber: string;
+  manufacturingDate?: string | null;
+  expiryDate: string;
+  quantity: number;
+  schemeQuantity?: number;
+  freeQuantity?: number;
+  purchaseRate: number;
+  mrp?: number | null;
+  schemeDiscountPercent?: number;
+  discountPercent?: number;
+  gstPercent?: number;
+  taxableValue?: number;
+  matchedMedicineId?: number | null;
+  matchedMedicineName?: string | null;
+  createNewMedicineMaster?: boolean;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
+  rawOcrText?: string;
+  flags?: string[];
+}
+
 export interface ParsedInvoiceData {
   supplier: {
     name: string;
     gstin?: string | null;
+    pan?: string | null;
+    fssai?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    state?: string | null;
+    dlNo?: string | null;
   };
+  supplierName?: string;
+  supplierGstin?: string | null;
   invoiceNumber: string;
   invoiceDate: string;
+  invoiceTime?: string | null;
+  dueDate?: string | null;
+  paymentType?: string | null;
+  taxableAmount?: number | null;
+  totalTax?: number | null;
+  totalDiscount?: number | null;
+  totalItems?: number | null;
+  totalQuantity?: number | null;
+  netPayable?: number | null;
   totalAmount?: number | null;
   isDuplicateWarning?: boolean;
   duplicateMessage?: string | null;
-  items: Array<{
-    name: string;
-    category: InventoryCategory;
-    presentation?: string | null;
-    packSize?: string | null;
-    stockUnit?: string | null;
-    batchNumber?: string | null;
-    manufacturingDate?: string | null;
-    expiryDate?: string | null;
-    quantity: number;
-    purchaseRate: number;
-    mrp?: number | null;
-    matchedMedicineId?: number | null;
-    matchedMedicineName?: string | null;
-    confidence?: 'HIGH' | 'MEDIUM' | 'NONE';
-    flags?: string[];
-  }>;
+  warnings?: string[];
+  detectedCount?: number;
+  items: ParsedInvoiceItemData[];
 }
 
 export interface PrescriptionStockResolution {

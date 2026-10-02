@@ -181,20 +181,32 @@ export interface StockResolutionItemDTO {
 
 export interface ExtractedInvoiceItemDTO {
   tempId: string;
+  lineNumber?: number;
   name: string;
   category: InventoryCategory;
   genericName?: string;
   dosageForm?: string;
   packSize?: string;
+  packing?: string;
+  hsnCode?: string;
   stockUnit: string;
   presentation: string;
   batchNumber: string;
   manufacturingDate?: string | null;
   expiryDate: string;
   quantity: number;
+  schemeQuantity?: number;
+  freeQuantity?: number;
   purchaseRate: number;
   mrp: number;
+  schemeDiscountPercent?: number;
+  discountPercent?: number;
+  gstPercent?: number;
+  taxableValue?: number;
   lineTotal?: number;
+  rawDescription?: string;
+  rawOcrText?: string;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   // Matching fields
   matchedMedicineId?: string | null;
   matchedItemId?: string | null;
@@ -204,13 +216,43 @@ export interface ExtractedInvoiceItemDTO {
 }
 
 export interface InvoiceExtractionResultDTO {
+  supplier?: {
+    name: string;
+    gstin?: string | null;
+    pan?: string | null;
+    fssai?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    dlNo?: string | null;
+    address?: string | null;
+    state?: string | null;
+  };
   supplierName: string;
   supplierGstin?: string | null;
   invoiceNumber: string;
   invoiceDate: string;
+  invoiceTime?: string | null;
+  dueDate?: string | null;
+  customerName?: string | null;
+  customerAddress?: string | null;
+  customerPhone?: string | null;
+  customerGstin?: string | null;
+  paymentType?: string | null;
+  taxableAmount?: number;
+  totalTax?: number;
+  totalDiscount?: number;
+  totalItems?: number;
+  totalQuantity?: number;
+  netPayable?: number;
   totalAmount?: number;
   items: ExtractedInvoiceItemDTO[];
   isDuplicate: boolean;
+  isDuplicateWarning?: boolean;
+  duplicateMessage?: string | null;
   existingPurchaseId?: string | null;
   warnings: string[];
+  detectedCount?: number;
+  rawExtractedText?: string;
+  confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
 }
+
