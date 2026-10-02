@@ -1,6 +1,6 @@
 // ==============================================================================
 // VetRx — Universal Purchase Invoice Importer & Semantic Parser
-// Format-agnostic, semantic invoice extraction for PDF, Images & Text
+// Format-agnostic, multi-line semantic invoice extraction for Images, PDF & Text
 // ==============================================================================
 
 import type {
@@ -20,15 +20,51 @@ interface MasterCatalogueItem {
 
 export class UniversalInvoiceParserService {
   /**
+   * Run OCR on an uploaded image (base64 string or binary buffer).
+   */
+  static async recognizeImage(input: string | Buffer): Promise<string> {
+    try {
+      let buffer: Buffer;
+      if (typeof input === 'string') {
+        if (input.startsWith('data:')) {
+          const base64Data = input.split(',')[1] || '';
+          buffer = Buffer.from(base64Data, 'base64');
+        } else {
+          buffer = Buffer.from(input, 'base64');
+        }
+      } else {
+        buffer = input;
+      }
+
+      if (!buffer || buffer.length === 0) {
+        throw new Error('Empty image buffer provided for OCR');
+      }
+
+      // Dynamic import to avoid heavy TypeScript AST heap exhaustion on Windows
+      const tesseractModule: any = await import('tesseract.js');
+      const recognizeFn = tesseractModule.default?.recognize || tesseractModule.recognize;
+      const { data } = await recognizeFn(buffer, 'eng');
+      return data?.text || '';
+    } catch (err: any) {
+      console.error('[UniversalInvoiceParserService.recognizeImage] OCR failed:', err);
+      throw new Error(`OCR extraction failed: ${err.message || 'Unable to read image'}`);
+    }
+  }
+
+  /**
    * Universal format-agnostic parsing of purchase invoice text content with practice-aware duplicate checking.
    */
   static async parseInvoiceText(
     rawContent: string,
-    practiceId?: string
+    practiceId?: string,
+    existingCatalogue: MasterCatalogueItem[] = [],
+    existingInvoiceKeys: Array<{ supplierName: string; invoiceNumber: string; id: string }> = []
   ): Promise<any> {
     let existingPurchases: any[] = [];
-    if (practiceId) {
-      existingPurchases = await InventoryService.listPurchases(practiceId);
+    if (practiceId && existingInvoiceKeys.length === 0) {
+      try {
+        existingPurchases = await InventoryService.listPurchases(practiceId);
+      } catch {}
     }
 
     const lines = rawContent
@@ -47,31 +83,41 @@ export class UniversalInvoiceParserService {
     let isDuplicateWarning = false;
     let duplicateMessage: string | null = null;
 
-    if (invoiceNumber && existingPurchases.length > 0) {
+    const allExisting = existingInvoiceKeys.length > 0 ? existingInvoiceKeys : existingPurchases;
+    if (invoiceNumber && allExisting.length > 0) {
       const normInv = invoiceNumber.trim().toLowerCase();
-      const match = existingPurchases.find(
+      const match = allExisting.find(
         (p) => p.invoiceNumber && p.invoiceNumber.trim().toLowerCase() === normInv
       );
       if (match) {
         isDuplicateWarning = true;
         duplicateMessage = `Duplicate invoice warning: Invoice ${invoiceNumber} already exists for this practice.`;
+        warnings.push(duplicateMessage);
       }
     }
 
     const rawItems = this.extractLineItems(lines);
     const items = rawItems.map((raw, idx) => {
-      const item = this.normalizeAndMatchItem(raw, idx, []);
+      const item = this.normalizeAndMatchItem(raw, idx, existingCatalogue);
       return {
         ...item,
         name: raw.name,
         batchNumber: raw.batch,
         expiryDate: raw.expiry,
         quantity: raw.quantity,
+        freeQuantity: raw.free || 0,
         purchaseRate: raw.purchaseRate,
         mrp: raw.mrp,
         packSize: raw.packSize || item.packSize,
       };
     });
+
+    if (items.length === 0) {
+      warnings.push('No line items were automatically detected. Please check document quality or enter items manually.');
+    }
+
+    const calculatedTotal = items.reduce((sum, it) => sum + (it.quantity * it.purchaseRate), 0);
+    const finalTotal = typeof totalAmount === 'number' && totalAmount > 0 ? totalAmount : Math.round(calculatedTotal * 100) / 100;
 
     return {
       supplier: {
@@ -82,16 +128,19 @@ export class UniversalInvoiceParserService {
       supplierGstin,
       invoiceNumber,
       invoiceDate,
-      totalAmount,
+      totalAmount: finalTotal,
       isDuplicateWarning,
+      isDuplicate: isDuplicateWarning,
       duplicateMessage,
       items,
       warnings,
+      detectedCount: items.length,
+      rawExtractedText: rawContent,
     };
   }
 
   /**
-   * Universal format-agnostic parsing of purchase invoice text content.
+   * Universal format-agnostic parsing of purchase invoice text content (DTO returning signature).
    */
   static parseInvoice(
     rawContent: string,
@@ -105,7 +154,7 @@ export class UniversalInvoiceParserService {
 
     const warnings: string[] = [];
 
-    // 1. Extract Invoice Metadata (Supplier, Invoice Number, Date, GSTIN)
+    // 1. Extract Invoice Metadata
     const supplierInfo = this.extractSupplier(lines);
     const invoiceNumber = this.extractInvoiceNumber(lines);
     const invoiceDate = this.extractInvoiceDate(lines);
@@ -138,19 +187,32 @@ export class UniversalInvoiceParserService {
 
     // 4. Normalize & Match with existing medicines / inventory catalogue
     const items: ExtractedInvoiceItemDTO[] = rawItems.map((raw, idx) => {
-      return this.normalizeAndMatchItem(raw, idx, existingCatalogue);
+      const item = this.normalizeAndMatchItem(raw, idx, existingCatalogue);
+      return {
+        ...item,
+        name: raw.name,
+        batchNumber: raw.batch,
+        expiryDate: raw.expiry,
+        quantity: raw.quantity,
+        purchaseRate: raw.purchaseRate,
+        mrp: raw.mrp,
+        packSize: raw.packSize || item.packSize,
+      };
     });
 
     if (items.length === 0) {
       warnings.push('No line items were automatically detected. Please check document quality or enter items manually.');
     }
 
+    const calculatedTotal = items.reduce((sum, it) => sum + (it.quantity * it.purchaseRate), 0);
+    const finalTotal = typeof totalAmount === 'number' && totalAmount > 0 ? totalAmount : Math.round(calculatedTotal * 100) / 100;
+
     return {
       supplierName: supplierInfo || 'Unknown Supplier',
       supplierGstin,
       invoiceNumber: invoiceNumber || `INV-${Date.now().toString().slice(-6)}`,
       invoiceDate: invoiceDate || new Date().toISOString().split('T')[0],
-      totalAmount,
+      totalAmount: finalTotal,
       items,
       isDuplicate,
       existingPurchaseId,
@@ -177,7 +239,7 @@ export class UniversalInvoiceParserService {
     for (const line of topLines) {
       if (
         /(?:pharma|pharmaceuticals|enterprises|agencies|distributors|laboratories|biotech|vet|surgicals|medicos|healthcare)/i.test(line) &&
-        !/(?:invoice|bill\s*to|ship\s*to|gstin|pan|date|dl\s*no)/i.test(line) &&
+        !/(?:invoice|bill\s*to|ship\s*to|customer|gstin|pan|date|dl\s*no)/i.test(line) &&
         line.length >= 4 && line.length <= 60
       ) {
         return line.trim();
@@ -204,7 +266,7 @@ export class UniversalInvoiceParserService {
       const match = line.match(/(?:inv(?:oice)?(?:\s*no\.?|\s*number|#)?|bill\s*no\.?)[\s:]+([A-Za-z0-9\/-]{2,30})/i);
       if (match && match[1]) {
         const val = match[1].trim();
-        if (!/date|gstin|terms/i.test(val)) {
+        if (!/date|gstin|terms|customer/i.test(val)) {
           return val;
         }
       }
@@ -254,36 +316,43 @@ export class UniversalInvoiceParserService {
   }
 
   // --------------------------------------------------------------------------
-  // Line Items Parsing
+  // Multi-Line Items Extraction
   // --------------------------------------------------------------------------
 
   private static extractLineItems(lines: string[]): any[] {
     const items: any[] = [];
 
-    // Detect header row index
-    let headerIdx = -1;
+    // Find table start header line
+    let startIdx = 0;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i].toLowerCase();
-      const hasProduct = /item|product|description|particulars|medicine|drug/i.test(l);
-      const hasBatchOrQty = /batch|b\.no|qty|quantity|pack/i.test(l);
-      if (hasProduct && hasBatchOrQty) {
-        headerIdx = i;
+      if (
+        (/item|description|particulars|product|medicine|drug/i.test(l) && /qty|quantity|batch|mrp|rate/i.test(l)) ||
+        /sl\.\s*mkt|mkt\s*rack/i.test(l)
+      ) {
+        startIdx = i + 1;
         break;
       }
     }
 
-    const contentLines = headerIdx !== -1 ? lines.slice(headerIdx + 1) : lines.slice(8);
+    const candidateLines = lines.slice(startIdx);
 
-    for (let i = 0; i < contentLines.length; i++) {
-      const line = contentLines[i];
+    for (let i = 0; i < candidateLines.length; i++) {
+      const line = candidateLines[i].trim();
+      if (!line || line.length < 5) continue;
 
-      // Stop condition: summary totals reached
-      if (/^(?:total|grand\s*total|subtotal|terms|bank\s*details|declaration|rupees\s*in\s*words|amount\s*in\s*words)/i.test(line)) {
+      // Stop scanning when reaching totals or footer sections
+      if (/^(?:total\s*qty|total\s*amount|grand\s*total|sub\s*total|net\s*amount|taxable\s*amount|cgst|sgst|igst|bank\s*details|declaration|rupees\s*in\s*words|amount\s*in\s*words|terms\s*&|for\s+[a-z]+)/i.test(line)) {
         break;
       }
 
-      // Ignore noise lines
-      if (line.length < 5 || /page\s*\d|\*{4,}|={4,}|-{4,}/i.test(line)) {
+      // Ignore noise lines (page numbers, dashes, stars)
+      if (/^page\s*\d|^-{4,}|^={4,}|^\*{4,}/i.test(line)) {
+        continue;
+      }
+
+      // Skip lines that are purely header/metadata labels
+      if (/^(?:sl\.|mkt|rack|hsn|pack|batch|exp|mrp|rate|amount|customer|dl\s*no|gstin|pan|invoice\s*no|date:)/i.test(line)) {
         continue;
       }
 
@@ -297,9 +366,9 @@ export class UniversalInvoiceParserService {
   }
 
   private static parseSingleItemLine(line: string): any | null {
-    // 1. Check for key-value formatted line (e.g. Item: Sample Medicine Qty: 5 Batch: B1 Exp: 01/2028 Rate: 100)
+    // 0. Key-Value format: "Item: Ceftriaxone ... Qty: 20 Batch: CFX901 Exp: 09/2028 Rate: 42 MRP: 65"
     const kvMatch = line.match(/(?:Item|Particulars)[\s:]+(.*?)(?=\s*Qty:|\s*Batch:|$)(?:\s*Qty[\s:]+(\d+))?(?:\s*Batch[\s:]+([^\s]+))?(?:\s*Exp(?:iry)?[\s:]+([^\s]+))?(?:\s*Rate[\s:]+([\d.]+))?(?:\s*MRP[\s:]+([\d.]+))?/i);
-    if (kvMatch && kvMatch[1]) {
+    if (kvMatch && kvMatch[1] && (kvMatch[2] || kvMatch[3] || kvMatch[4])) {
       const kvName = kvMatch[1].trim();
       const kvQty = kvMatch[2] ? parseInt(kvMatch[2], 10) : 1;
       const kvBatch = kvMatch[3] ? kvMatch[3].trim() : 'BATCH-DETECT';
@@ -312,35 +381,66 @@ export class UniversalInvoiceParserService {
         batch: kvBatch,
         expiry: kvExp,
         quantity: kvQty,
+        free: 0,
         purchaseRate: kvRate,
         mrp: kvMrp,
         packSize: '',
       };
     }
 
-    // Look for quantity
-    const numbers = line.match(/\b\d+(?:\.\d+)?\b/g);
-    if (!numbers || numbers.length === 0) return null;
+    // 1. Standard Indian Pharma Table Line:
+    // [Sl] [Mkt] [Rack] [Item Description] [Pack] [HSN] [Qty] [Free] [Batch] [Exp Date] [MRP] [Rate] [Amount]
+    // Example: "1 ALKM A1 CEFTRIAXONE 1G INJECTION 1 VIAL 30042099 20 0 CFX901 09/2028 65.00 42.00 840.00"
+    const patA = /(.*?)(?:\s+(?:300\d{1,5}|\d{4,8}))?\s+(\d+)\s+(\d+)\s+([A-Za-z0-9-]{3,15})\s+((?:0[1-9]|1[0-2])[\/.-](?:\d{2}|\d{4}))\s+([\d.,]+)\s+([\d.,]+)(?:\s+[\d.,]+)?$/;
+    let match = line.match(patA);
+    if (match) {
+      const rawLeft = match[1].trim();
+      const qty = parseInt(match[2], 10);
+      const free = parseInt(match[3], 10);
+      const batch = match[4];
+      const expiry = this.normalizeExpiryDate(match[5]);
+      const num1 = parseFloat(match[6].replace(/,/g, ''));
+      const num2 = parseFloat(match[7].replace(/,/g, ''));
 
-    let batch = '';
-    let expiry = '';
-    let packSize = '';
-    let qty = 1;
-    let rate = 0;
-    let mrp = 0;
+      const mrp = Math.max(num1, num2);
+      const rate = Math.min(num1, num2);
 
-    // Pattern matching standard invoice column flow
+      return this.cleanLineItem(rawLeft, qty, free, batch, expiry, mrp, rate);
+    }
+
+    // 2. Pattern B: [Item Description...] [HSN] [Qty] [Batch] [Exp Date] [MRP] [Rate] [Amount] (no Free column)
+    const patB = /(.*?)(?:\s+(?:300\d{1,5}|\d{4,8}))?\s+(\d+)\s+([A-Za-z0-9-]{3,15})\s+((?:0[1-9]|1[0-2])[\/.-](?:\d{2}|\d{4}))\s+([\d.,]+)\s+([\d.,]+)(?:\s+[\d.,]+)?$/;
+    match = line.match(patB);
+    if (match) {
+      const rawLeft = match[1].trim();
+      const qty = parseInt(match[2], 10);
+      const free = 0;
+      const batch = match[3];
+      const expiry = this.normalizeExpiryDate(match[4]);
+      const num1 = parseFloat(match[5].replace(/,/g, ''));
+      const num2 = parseFloat(match[6].replace(/,/g, ''));
+
+      const mrp = Math.max(num1, num2);
+      const rate = Math.min(num1, num2);
+
+      return this.cleanLineItem(rawLeft, qty, free, batch, expiry, mrp, rate);
+    }
+
+
+    // 3. Tab / Pipe / Multi-space column separated table line
     const cols = line.split(/\s{2,}|\t|\|/).map((c) => c.trim()).filter(Boolean);
+    if (cols.length >= 4) {
+      let rawName = cols[0];
+      let batch = '';
+      let expiry = '';
+      let packSize = '';
+      let qty = 1;
+      let rate = 0;
+      let mrp = 0;
 
-    let name = '';
-
-    if (cols.length >= 3) {
-      name = cols[0].replace(/^\d+[\s.-]+/, ''); // remove leading serial number
-      const remainingCols = cols.slice(1);
-      const remainingNumbers: number[] = [];
-
-      for (const col of remainingCols) {
-        if (!packSize && /^\d+(?:\.\d+)?\s*(?:ml|l|mg|g|gm|kg|pcs|piece|pieces|tabs?|caps?|vials?|amps?|foils?|box|strip)$/i.test(col)) {
+      for (let c = 1; c < cols.length; c++) {
+        const col = cols[c];
+        if (!packSize && /^\d+(?:\.\d+)?\s*(?:ml|l|mg|g|gm|kg|pcs|piece|tabs?|caps?|vials?|amps?|foils?|box|strip)$/i.test(col)) {
           packSize = col;
           continue;
         }
@@ -348,66 +448,161 @@ export class UniversalInvoiceParserService {
           expiry = this.normalizeExpiryDate(col);
           continue;
         }
-        if (!expiry && /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.test(col)) {
-          expiry = this.normalizeDateString(col);
-          continue;
-        }
-        if (!batch && /^[A-Z0-9-]{3,15}$/i.test(col) && !/^\d+(?:\.\d+)?$/.test(col)) {
+        if (!batch && /^[A-Za-z0-9-]{3,15}$/i.test(col) && !/^\d+(?:\.\d+)?$/.test(col) && !/^(?:tab|tabs|inj|syr|syrup|strip|bottle|mg|ml|gm)$/i.test(col)) {
           batch = col;
           continue;
         }
-        const num = parseFloat(col.replace(/,/g, ''));
-        if (!isNaN(num)) {
-          remainingNumbers.push(num);
-        }
-      }
-
-      if (remainingNumbers.length >= 1) {
-        qty = remainingNumbers[0];
-      }
-      if (remainingNumbers.length >= 2) {
-        rate = remainingNumbers[1];
-      }
-      if (remainingNumbers.length >= 3) {
-        mrp = remainingNumbers[2];
-      }
-    } else {
-      // Single continuous string line: parse using regex boundaries
-      const cleaned = line.replace(/^\d+[\s.-]+/, '');
-      const tokens = cleaned.split(/\s+/);
-      const nameTokens: string[] = [];
-
-      for (const t of tokens) {
-        const num = parseFloat(t.replace(/,/g, ''));
-        if (!isNaN(num) && (t.includes('.') || nameTokens.length >= 2)) {
-          if (qty === 1 && Number.isInteger(num) && num > 0 && num <= 10000) {
-            qty = num;
-          } else if (rate === 0 && num > 0) {
-            rate = num;
-          } else if (mrp === 0 && num >= rate) {
-            mrp = num;
+        const subTokens = col.split(/\s+/).filter(Boolean);
+        for (const st of subTokens) {
+          const num = parseFloat(st.replace(/,/g, ''));
+          if (!isNaN(num)) {
+            if (qty === 1 && Number.isInteger(num) && num > 0 && num < 10000 && !/^300\d+$/.test(st)) {
+              qty = num;
+            } else if (rate === 0 && num > 0) {
+              rate = num;
+            } else if (mrp === 0 && num >= rate) {
+              mrp = num;
+            }
           }
-        } else if (!batch && /^[A-Z0-9]{3,12}$/i.test(t) && !/tab|inj|syr|strip|bottle|mg|ml|gm/i.test(t) && /\d/.test(t)) {
-          batch = t;
-        } else if (!expiry && /\d{1,2}[\/.-]\d{2,4}/.test(t)) {
-          expiry = this.normalizeExpiryDate(t);
-        } else if (rate === 0) {
-          nameTokens.push(t);
         }
       }
-      name = nameTokens.join(' ');
+
+      if (rawName && rawName.length > 2) {
+        return this.cleanLineItem(rawName, qty, 0, batch || 'BATCH-DETECT', expiry, mrp, rate, packSize);
+      }
     }
 
+    // 4. Pattern C: Expiry date token anchor
+    // Highly resilient against varied spacing or missing non-critical columns
+    const expMatch = line.match(/\b(0[1-9]|1[0-2])[\/.-](\d{2}|\d{4})\b/);
+    if (expMatch) {
+      const expStr = expMatch[0];
+      const expIdx = line.indexOf(expStr);
+      const beforeExp = line.substring(0, expIdx).trim();
+      const afterExp = line.substring(expIdx + expStr.length).trim();
+
+      const beforeTokens = beforeExp.split(/\s+/).filter(Boolean);
+      const afterTokens = afterExp.split(/\s+/).filter(Boolean);
+
+      let batch = 'BATCH-DETECT';
+      if (beforeTokens.length > 0) {
+        const last = beforeTokens[beforeTokens.length - 1];
+        if (/^[A-Za-z0-9-]{3,15}$/.test(last) && !/^(?:ml|l|mg|g|gm|tab|tabs|inj|vial|box|strip)$/i.test(last)) {
+          batch = last;
+          beforeTokens.pop();
+        }
+      }
+
+      const numbersAfter = afterTokens
+        .map((t) => parseFloat(t.replace(/,/g, '')))
+        .filter((n) => !isNaN(n) && n > 0);
+
+      let mrp = 0;
+      let rate = 0;
+      if (numbersAfter.length >= 2) {
+        mrp = Math.max(numbersAfter[0], numbersAfter[1]);
+        rate = Math.min(numbersAfter[0], numbersAfter[1]);
+      } else if (numbersAfter.length === 1) {
+        rate = numbersAfter[0];
+        mrp = Math.round(rate * 1.35);
+      }
+
+      let qty = 1;
+      let free = 0;
+      const remainingBefore: string[] = [];
+
+      for (let i = beforeTokens.length - 1; i >= 0; i--) {
+        const t = beforeTokens[i];
+        const n = parseFloat(t.replace(/,/g, ''));
+        if (!isNaN(n) && !t.includes('.') && n <= 5000) {
+          if (/^300\d+$/.test(t)) {
+            // HSN code, ignore
+          } else if (qty === 1) {
+            qty = n;
+          } else if (free === 0) {
+            free = n;
+          }
+        } else {
+          remainingBefore.unshift(t);
+        }
+      }
+
+      const rawLeft = remainingBefore.join(' ');
+      const expiry = this.normalizeExpiryDate(expStr);
+      return this.cleanLineItem(rawLeft, qty, free, batch, expiry, mrp, rate);
+    }
+
+    return null;
+  }
+
+  private static cleanLineItem(
+    rawLeft: string,
+    qty: number,
+    free: number,
+    batch: string,
+    expiry: string,
+    mrp: number,
+    rate: number,
+    explicitPackSize?: string
+  ): any | null {
+    let tokens = rawLeft.split(/\s+/).filter(Boolean);
+
+    // Remove leading serial number (e.g. "1", "2.")
+    if (tokens.length > 0 && /^\d+[\s.-]*$/.test(tokens[0])) {
+      tokens.shift();
+    }
+
+    // Remove known Mkt code (e.g. "ALKM", "CIPLA", "INTAS", "CADIL", "ZYDUS", "MANK", "MSD", "ZOETI", "VIRBA", "SUTUR")
+    if (tokens.length > 2 && /^[A-Z]{3,6}$/.test(tokens[0])) {
+      tokens.shift();
+    }
+
+    // Remove Rack code (e.g. "A1", "R4", "B2", "C1", "D2", "E1", "F3", "G2", "B3", "R5", "A4", "C2", "S1")
+    if (tokens.length > 1 && /^[A-Z]\d{1,2}$|^R\d{1,2}$/i.test(tokens[0])) {
+      tokens.shift();
+    }
+
+    // Extract pack size from the end of tokens if not explicitly provided from column
+    let packSize = explicitPackSize || '';
+    if (!explicitPackSize && tokens.length > 1) {
+      const lastToken = tokens[tokens.length - 1];
+      const secondLastToken = tokens[tokens.length - 2];
+      const twoTokens = `${secondLastToken} ${lastToken}`;
+
+      const packTwoRegex = /^(?:\d+(?:\.\d+)?)\s*(?:vial|vials|tab|tabs|strip|strips|bottle|bottles|foil|foils|tube|tubes|amp|amps|box|boxes|ampoule|ampoules|ml|l|mg|g|gm|kg|pcs|piece|pieces)$/i;
+      const packOneRegex = /^(?:\d+(?:\.\d+)?\s*(?:ml|l|mg|g|gm|kg)|10's|1's|10x10|1x10|1x1|1x5|vial|strip|foil|tube|bottle)$/i;
+
+      if (packTwoRegex.test(twoTokens)) {
+        if (!packSize) packSize = twoTokens.toUpperCase();
+        tokens.splice(tokens.length - 2, 2);
+      } else if (packOneRegex.test(lastToken)) {
+        if (!packSize) packSize = lastToken.toUpperCase();
+        tokens.pop();
+      }
+
+      // Remove trailing unit if trailing unit artifact
+      if (tokens.length > 1 && /^(?:ml|l|mg|g|gm|kg|pcs|piece|pieces|vials?|tabs?)$/i.test(tokens[tokens.length - 1])) {
+        tokens.pop();
+      }
+    }
+
+    // Remove trailing HSN if any leaked into name
+    if (tokens.length > 1 && /^300\d{3,6}$/.test(tokens[tokens.length - 1])) {
+      tokens.pop();
+    }
+
+    const name = tokens.join(' ').trim();
     if (!name || name.length < 2) return null;
 
     return {
-      name: name.trim(),
+      name,
+      packSize,
+      quantity: qty || 1,
+      free: free || 0,
       batch: batch || 'BATCH-DETECT',
       expiry: expiry || '',
-      quantity: qty,
-      purchaseRate: rate,
-      mrp: mrp > 0 ? mrp : Math.round(rate * 1.3),
-      packSize: packSize || '',
+      mrp: mrp > 0 ? mrp : Math.round(rate * 1.35),
+      purchaseRate: rate > 0 ? rate : 100,
     };
   }
 
@@ -442,7 +637,6 @@ export class UniversalInvoiceParserService {
     // Expiry validation
     let expiryDate = raw.expiry;
     if (!expiryDate) {
-      // Default to 18 months from now for safety review
       const d = new Date();
       d.setMonth(d.getMonth() + 18);
       expiryDate = d.toISOString().split('T')[0];
@@ -474,7 +668,7 @@ export class UniversalInvoiceParserService {
       name: rawName,
       category,
       dosageForm,
-      packSize,
+      packSize: raw.packSize || packSize,
       stockUnit,
       presentation,
       batchNumber,
@@ -518,7 +712,6 @@ export class UniversalInvoiceParserService {
     const l = name.toLowerCase();
 
     if (category !== 'MEDICINE') {
-      // Generic non-medicine packaging
       let stockUnit = 'Piece';
       if (/box|pack/i.test(l)) stockUnit = 'Box';
       if (/roll/i.test(l)) stockUnit = 'Roll';
@@ -567,7 +760,6 @@ export class UniversalInvoiceParserService {
       const wtMatch = name.match(/(\d+(?:\.\d+)?\s*(?:gm|g|kg))/i);
       packSize = wtMatch ? wtMatch[1] : '100 gm';
     } else {
-      // Tablets / Capsules
       dosageForm = /cap(?:sule)?/i.test(l) ? 'Capsule' : 'Tablet';
       stockUnit = 'Strip';
       const countMatch = name.match(/(\d+)\s*(?:tabs?|caps?|tablets?)/i);
@@ -679,7 +871,6 @@ export class UniversalInvoiceParserService {
     if (isNaN(month) || month < 1 || month > 12) month = 12;
     if (isNaN(year) || year < 2020) year = 2028;
 
-    // Standard normalized monthly expiry format: YYYY-MM-01
     return `${year}-${String(month).padStart(2, '0')}-01`;
   }
 

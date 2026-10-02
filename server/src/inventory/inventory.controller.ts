@@ -290,13 +290,39 @@ inventoryRouter.post('/suppliers', async (req: AuthenticatedRequest, res, next) 
 // Universal Purchase Invoice Importer (Extraction & Confirmation)
 // ------------------------------------------------------------------------------
 
-inventoryRouter.post('/purchases/extract', async (req: AuthenticatedRequest, res, next) => {
+// ------------------------------------------------------------------------------
+// Universal Purchase Invoice Importer (Extraction & Confirmation)
+// ------------------------------------------------------------------------------
+
+const parseInvoiceHandler = async (req: AuthenticatedRequest, res: any, next: any) => {
   try {
     const practiceId = getPracticeId(req);
-    const schema = z.object({
-      content: z.string().min(1), // raw text / extracted OCR string from PDF or image
-    });
-    const { content } = schema.parse(req.body);
+    const body = req.body || {};
+
+    let rawText = (typeof body.content === 'string' ? body.content : '') ||
+                  (typeof body.invoiceText === 'string' ? body.invoiceText : '');
+    const fileBase64 = typeof body.fileBase64 === 'string' ? body.fileBase64 : '';
+
+    // If an image base64 was uploaded and text is not directly pasted/provided
+    if (fileBase64 && (!rawText || rawText.trim().length < 5 || rawText.startsWith('[Image File Attached:') || rawText.startsWith('INVOICE:'))) {
+      try {
+        const ocrText = await UniversalInvoiceParserService.recognizeImage(fileBase64);
+        if (ocrText && ocrText.trim().length > 0) {
+          rawText = ocrText;
+        }
+      } catch (ocrErr: any) {
+        console.error('[Invoice OCR Error]:', ocrErr);
+        return res.status(422).json({
+          error: `OCR extraction failed: ${ocrErr.message || 'Unable to recognize text from uploaded image'}`
+        });
+      }
+    }
+
+    if (!rawText || rawText.trim().length === 0) {
+      return res.status(400).json({
+        error: 'No invoice text or readable image file was provided for extraction',
+      });
+    }
 
     // Build catalogue for fuzzy matching
     let catalogue: Array<{ id: string; name: string; genericName?: string | null; type: 'medicine' | 'item' }> = [];
@@ -324,39 +350,49 @@ inventoryRouter.post('/purchases/extract', async (req: AuthenticatedRequest, res
       id: p.id,
     }));
 
-    const result = UniversalInvoiceParserService.parseInvoice(content, catalogue, existingKeys);
+    const result = await UniversalInvoiceParserService.parseInvoiceText(rawText, practiceId, catalogue, existingKeys);
     res.status(200).json(result);
   } catch (err) {
     next(err);
   }
-});
+};
+
+inventoryRouter.post('/purchases/parse-invoice', parseInvoiceHandler);
+inventoryRouter.post('/purchases/extract', parseInvoiceHandler);
 
 inventoryRouter.post('/purchases/confirm', async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
-      supplierName: z.string().min(1),
+      supplierName: z.string().min(1).optional(),
+      supplier: z.object({
+        name: z.string().min(1),
+        gstin: z.string().nullable().optional(),
+        phone: z.string().nullable().optional(),
+        email: z.string().nullable().optional(),
+      }).optional(),
       supplierGstin: z.string().nullable().optional(),
       invoiceNumber: z.string().min(1),
       invoiceDate: z.string().min(4),
       notes: z.string().nullable().optional(),
+      totalAmount: z.number().optional(),
       items: z.array(
         z.object({
-          tempId: z.string(),
+          tempId: z.string().optional(),
           name: z.string().min(1),
-          category: z.enum(['MEDICINE', 'CONSUMABLE', 'LAB_MATERIAL', 'SURGICAL_MATERIAL', 'OTHER']),
-          genericName: z.string().optional(),
-          dosageForm: z.string().optional(),
-          packSize: z.string().optional(),
-          stockUnit: z.string(),
-          presentation: z.string(),
+          category: z.enum(['MEDICINE', 'CONSUMABLE', 'LAB_MATERIAL', 'SURGICAL_MATERIAL', 'OTHER']).default('MEDICINE'),
+          genericName: z.string().nullable().optional(),
+          dosageForm: z.string().nullable().optional(),
+          packSize: z.string().nullable().optional(),
+          stockUnit: z.string().nullable().optional(),
+          presentation: z.string().nullable().optional(),
           batchNumber: z.string().min(1),
           manufacturingDate: z.string().nullable().optional(),
           expiryDate: z.string().min(4),
           quantity: z.number().positive(),
           purchaseRate: z.number().min(0),
-          mrp: z.number().min(0),
-          matchedMedicineId: z.string().nullable().optional(),
+          mrp: z.number().min(0).optional(),
+          matchedMedicineId: z.any().nullable().optional(),
           matchedItemId: z.string().nullable().optional(),
           createNewMedicineMaster: z.boolean().optional(),
           flags: z.array(z.string()).optional(),
@@ -366,9 +402,28 @@ inventoryRouter.post('/purchases/confirm', async (req: AuthenticatedRequest, res
     });
 
     const data = schema.parse(req.body);
+
+    // Normalize supplier name
+    const finalSupplierName = data.supplierName || data.supplier?.name || 'Pharma Supplier';
+    const finalSupplierGstin = data.supplierGstin || data.supplier?.gstin || null;
+
+    // Normalize items
+    const normalizedItems = data.items.map((it, idx) => ({
+      ...it,
+      tempId: it.tempId || `item_${idx}_${Date.now()}`,
+      stockUnit: it.stockUnit || (it.category === 'MEDICINE' ? 'Strip' : 'Piece'),
+      presentation: it.presentation || (it.category === 'MEDICINE' ? 'Tablet, 10 tablets' : 'General Material'),
+      mrp: it.mrp ?? Math.round(it.purchaseRate * 1.35),
+    }));
+
     const purchaseInvoice = await InventoryService.confirmPurchaseInvoice(
       practiceId,
-      data as any,
+      {
+        ...data,
+        supplierName: finalSupplierName,
+        supplierGstin: finalSupplierGstin,
+        items: normalizedItems as any,
+      },
       req.user?.id || null
     );
     res.status(201).json(purchaseInvoice);
