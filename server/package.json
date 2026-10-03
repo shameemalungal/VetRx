@@ -24,8 +24,9 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "prisma": "^6.4.1",
-    "sharp": "^0.35.5",
+    "sharp": "^0.33.5",
     "tesseract.js": "^7.0.0",
+    "vetrx-monorepo": "file:..",
     "zod": "^3.24.2"
   },
   "devDependencies": {
