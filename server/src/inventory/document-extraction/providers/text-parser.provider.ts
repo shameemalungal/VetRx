@@ -72,7 +72,7 @@ export class TextParserProvider implements IDocumentExtractionProvider {
       const line = lines[i];
 
       // Table boundary detection
-      if (/Particulars|Description|Item\s*Name|Product/i.test(line) && /Batch|Exp|Qty|Rate|MRP/i.test(line)) {
+      if (/Particulars|Description|Item\s*Name|Product/i.test(line) && /Batch|Exp|Qty|Rate|MRP|HSN/i.test(line)) {
         inTable = true;
         continue;
       }
@@ -80,25 +80,34 @@ export class TextParserProvider implements IDocumentExtractionProvider {
         inTable = true;
         continue;
       }
-      if (/Total\s*Items|Total\s*Qty|Taxable\s*Amount|Net\s*Payable|Declaration|Received\s*All\s*Items|BANK\s*:/i.test(line)) {
+      if (/^\d{1,3}\.\s+\d+\s+[A-Z0-9]/i.test(line)) {
+        inTable = true;
+      }
+
+      if (/^(?:CLASS\s*TOTAL|GST\s*\d|TOTAL\s+[\d.]+|Total\s*Items|Total\s*Qty|Taxable\s*Amount|Net\s*Payable|Declaration|Received\s*All\s*Items|BANK\s*:|Grand\s*Total)/i.test(line)) {
         inTable = false;
+        continue;
       }
 
       // Skip lines outside table if table markers were found, or skip known noise
       if (
-        /^TAX\s*INVOICE|GSTIN:|CHALAPPURAM|BANK\s*:|BRANCH\s*:|A\/C\s*NO|Printed\s*By|Page\s*\d|Declaration|NO\s*EXPIRY\s*RETURNS|Total\s*Outstanding|Outstanding\s*Amt|Software\s*@|Received\s*All\s*Items|Net\s*Payable/i.test(
+        /^TAX\s*INVOICE|GSTIN:|CHALAPPURAM|BANK\s*:|BRANCH\s*:|A\/C\s*NO|Printed\s*By|Page\s*\d|Declaration|NO\s*EXPIRY\s*RETURNS|Total\s*Outstanding|Outstanding\s*Amt|Software\s*@|Received\s*All\s*Items|Net\s*Payable|Party\s*Name|Phone\s*:|D\.L\.No|SALES\s*ORDER|CREDIT|Invoice\s*No|Invoice\s*Date|Due\s*Date|Cases\s*\d|Terms\s*&|Authorised\s*Signatory|Continue\s*Page/i.test(
           line
         )
       ) {
         continue;
       }
-      if (/^SNo\s+Rack|^Particulars\s+Packing|^HSN\s+Batch|^Tax\s*Tot/i.test(line)) {
+      if (/^SNo\s+Rack|^Particulars\s+Packing|^HSN\s+Batch|^Tax\s*Tot|^S\.\s*Qty/i.test(line)) {
+        continue;
+      }
+
+      if (!inTable) {
         continue;
       }
 
       const item = this.parseSingleTableRow(line);
       if (item && item.itemName && item.itemName.length >= 2) {
-        const sig = `${item.batchNumber}_${item.itemName.substring(0, 5).toLowerCase()}`;
+        const sig = item.rawOcrText ? item.rawOcrText.trim() : `${item.itemName.toLowerCase()}_${item.packing}_${item.batchNumber}_${item.expiryDate}_${item.purchaseRate}`;
         if (!seenSignatures.has(sig)) {
           seenSignatures.add(sig);
           items.push({
@@ -113,12 +122,26 @@ export class TextParserProvider implements IDocumentExtractionProvider {
   }
 
   private parseSingleTableRow(line: string): Omit<DocumentExtractionLineItem, 'lineNumber'> | null {
-    const expMatch = line.match(/\b(0[1-9]|1[0-2])[\/-](2[4-9]|3[0-9]|202[4-9]|203[0-9])\b/);
-    if (!expMatch) {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+
+    // Skip known header / summary / separator lines
+    if (/^(?:S\.?\s*Qty|SNo|Particulars|Product\s*Name|Batch\s*Exp|CLASS\s*TOTAL|GST\s*\d|TOTAL\s*[\d.]+|Rs\.\s*|MSG:|Terms\s*&|BANK\s*NAME|ACCOUNT\s*NO|BRANCH\s*:|Authorised\s*Signatory|Continue\s*Page|Page\s*No)/i.test(trimmed)) {
       return null;
     }
 
-    const expStr = expMatch[0];
+    // Pattern 1: Standard Expiry date row (e.g. 08/27, 05/2028, 12-26, etc.)
+    const expMatch = trimmed.match(/\b(0[1-9]|1[0-2])[\/-](2[4-9]|3[0-9]|202[4-9]|203[0-9])\b/);
+    if (expMatch) {
+      return this.parseExpiryTableRow(trimmed, expMatch[0]);
+    }
+
+    // Pattern 2: Tabular Sales Order / Delivery Challan row with HSN Code and blank Batch/Expiry
+    // e.g., "1. 200 AVAC 4'S AVABOOST BOLUS 23099090 60.00 43.00 0.00 0.00 0.00 8600.00 8600.00"
+    return this.parseHsnTableRow(trimmed);
+  }
+
+  private parseExpiryTableRow(line: string, expStr: string): Omit<DocumentExtractionLineItem, 'lineNumber'> | null {
     const expIdx = line.indexOf(expStr);
     const beforeExp = line.substring(0, expIdx).trim();
     const afterExp = line.substring(expIdx + expStr.length).trim();
@@ -272,6 +295,104 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     };
   }
 
+  private parseHsnTableRow(line: string): Omit<DocumentExtractionLineItem, 'lineNumber'> | null {
+    // Look for HSN (e.g. 23099090, 30049085, 30049011, 30049015, 30042019, 30039011, 3004, etc. or generic 4-8 digits)
+    const hsnMatch = line.match(/\b(2309\d{0,4}|3004\d{0,4}|3003\d{0,4}|3002\d{0,4}|3001\d{0,4}|3005\d{0,4}|3808\d{0,4}|9018\d{0,4}|88888889|\d{4,8})\b/);
+    if (!hsnMatch) {
+      return null;
+    }
+
+    const hsn = hsnMatch[0];
+    const hsnIdx = line.indexOf(hsn);
+    const beforeHsn = line.substring(0, hsnIdx).trim();
+    const afterHsn = line.substring(hsnIdx + hsn.length).trim();
+
+    const afterTokens = afterHsn.split(/\s+/).filter(Boolean);
+    const numbers: number[] = [];
+    for (const tok of afterTokens) {
+      const cleanNum = tok.replace(/[^0-9.]/g, '');
+      if (cleanNum && !isNaN(parseFloat(cleanNum))) {
+        numbers.push(parseFloat(cleanNum));
+      }
+    }
+
+    if (numbers.length < 2) {
+      return null;
+    }
+
+    let cleanBefore = beforeHsn.replace(/^\d+[\.\s]+/, '').trim(); // Strip line index (e.g. "1. ")
+    let qty = 1;
+    const qtyMatch = cleanBefore.match(/^(\d+)\s+(.+)$/);
+    if (qtyMatch) {
+      qty = parseInt(qtyMatch[1], 10);
+      cleanBefore = qtyMatch[2].trim();
+    }
+
+    // Check for Manufacturer / Brand prefix (e.g. "AVAC", "AUXE", "VETO", "EVAN", "VIRB", "AYUR", "CARE", "INTA", "GENE", "NATU", "HIMA", "ALEM", "T.T.", "ZENE")
+    let mfr = '';
+    const mfrMatch = cleanBefore.match(/^([A-Z0-9\.\-]{2,6})\s+(.+)$/);
+    if (mfrMatch && !/^(?:TAB|CAP|INJ|SYP|BOLUS|POWDER|GEL|OINT|SOL|VET|PLUS)$/i.test(mfrMatch[1])) {
+      mfr = mfrMatch[1];
+      cleanBefore = mfrMatch[2].trim();
+    }
+
+    // Check for Packing prefix (e.g. "4'S", "2'S", "10ML", "50GM", "30 LTR", "50 LTR", "300MG", "20ML", "500ML", "10'S", "15ML", "300ML", "250GM", "3.375G", "1'S", "100ML", "5ML", "VIAL", "30*20G", "20 LTR", "6'S", "1 LTR", "25ML", "200GM", "20GM", "5GM", "600ML", "30GM", "3GMS", "4.5GM", "8GM", "3GM", "19GM", "1 KG", "5 KG")
+    let packing = '';
+    const packMatch = cleanBefore.match(/^(\d+(?:\*[\w*]+|'S|\s*LTR|\s*ML|\s*GM|\s*GMS|\s*KG|\s*G|\s*MG|\s*VIAL)?|VIAL)\s+(.+)$/i);
+    if (packMatch) {
+      packing = packMatch[1].trim();
+      cleanBefore = packMatch[2].trim();
+    }
+
+    const itemName = cleanBefore.trim();
+    if (!itemName || itemName.length < 2) {
+      return null;
+    }
+
+    // In JJ Pharma layout: MRP Rate DIS SGST CGST Amount Net
+    // e.g. [60.00, 43.00, 0.00, 0.00, 0.00, 8600.00, 8600.00]
+    let mrp = numbers[0] || 0;
+    let rate = numbers[1] || 0;
+    let disc = 0;
+    let gst = 5;
+    let taxable = Math.round(qty * rate * 100) / 100;
+
+    if (numbers.length >= 6) {
+      mrp = numbers[0];
+      rate = numbers[1];
+      disc = numbers[2];
+      const sgst = numbers[3];
+      const cgst = numbers[4];
+      gst = sgst + cgst > 0 ? (sgst + cgst) : 0;
+      taxable = numbers[numbers.length - 2] || taxable;
+    } else if (numbers.length >= 3) {
+      mrp = numbers[0];
+      rate = numbers[1];
+      taxable = numbers[numbers.length - 1] || taxable;
+    }
+
+    // Fallback batch for sales orders where batch is blank
+    const batchNumber = 'SO-BATCH';
+
+    return {
+      itemName,
+      packing: packing || '',
+      hsnCode: hsn,
+      batchNumber,
+      expiryDate: '',
+      quantity: qty || 1,
+      schemeQuantity: 0,
+      mrp: mrp || 0,
+      purchaseRate: rate || 0,
+      schemeDiscountPercent: 0,
+      discountPercent: disc || 0,
+      gstPercent: gst || 5,
+      taxableValue: taxable,
+      confidence: 'HIGH',
+      rawOcrText: line,
+    };
+  }
+
   private normalizeExpiry(exp: string): string {
     const parts = exp.split(/[\/-]/);
     if (parts.length === 2) {
@@ -344,7 +465,7 @@ export class TextParserProvider implements IDocumentExtractionProvider {
           line.length < 60
         ) {
           name = line
-            .replace(/^[)\]\}/\\|+vV✓Jj$;:_.\s-]+|[)\]\}/\\|+vV✓Jj$;:_.\s-]+$/g, '')
+            .replace(/^[)\]\}/\\|+vV✓$;:_.\s-]+|[)\]\}/\\|+vV✓$;:_.\s-]+$/g, '')
             .trim();
         }
       }
@@ -430,11 +551,11 @@ export class TextParserProvider implements IDocumentExtractionProvider {
 
     for (const line of lines) {
       if (!totalItems) {
-        const tim = line.match(/Total\s*Items[\s.:]+(\d+)/i);
+        const tim = line.match(/Total\s*Items[\s.:-]+(\d+)/i);
         if (tim) totalItems = parseInt(tim[1], 10);
       }
       if (!totalQuantity) {
-        const tqm = line.match(/Total\s*Qty[\s.:]+(\d+)/i);
+        const tqm = line.match(/Total\s*Qty[\s.:-]+(\d+)/i);
         if (tqm) totalQuantity = parseInt(tqm[1], 10);
       }
       if (!taxableAmount) {
@@ -459,10 +580,10 @@ export class TextParserProvider implements IDocumentExtractionProvider {
       }
       if (!netPayable) {
         const npm =
+          line.match(/Grand\s*Total[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Net\s*Payable[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Net\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
-          line.match(/Total\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
-          line.match(/Grand\s*Total[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
+          line.match(/Total\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
         if (npm) netPayable = parseFloat(npm[1].replace(/,/g, ''));
       }
     }
