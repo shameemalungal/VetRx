@@ -337,17 +337,57 @@ export const inventoryApi = {
   },
 
   // Dashboard
-  getDashboard: () =>
-    inventoryRequest<InventoryDashboardData>('/api/inventory/dashboard'),
+  getDashboard: async (): Promise<InventoryDashboardData> => {
+    const res = await inventoryRequest<any>('/api/inventory/dashboard');
+    const totalItems = res.totalItems ?? res.uniqueItemCount ?? res.totalUniqueItems ?? 0;
+    const totalUnits = res.totalUnits ?? res.totalUnitsInStock ?? res.totalPhysicalUnits ?? 0;
+    const totalStockValue = res.totalStockValue ?? res.stockValueINR ?? res.stockValuation ?? 0;
+    const usedTodayUnits = res.usedTodayUnits ?? res.unitsUsedToday ?? 0;
+    const usedTodayValue = res.usedTodayValue ?? res.valueUsedTodayINR ?? 0;
+    const lowStockCount = res.lowStockCount ?? res.counts?.lowStock ?? 0;
+    const outOfStockCount = res.outOfStockCount ?? res.counts?.outOfStock ?? 0;
+    const expiringSoonCount = res.expiringSoonCount ?? res.counts?.expiringSoon ?? 0;
+    const expiredCount = res.expiredCount ?? res.counts?.expired ?? 0;
+    const recentPurchases = res.recentPurchases ?? [];
+    const recentMovements = res.recentMovements ?? [];
+
+    const alerts = res.alerts ?? {
+      expiringSoon: [],
+      expired: [],
+      lowStock: [],
+      outOfStock: [],
+    };
+
+    return {
+      totalItems,
+      totalUnits,
+      totalStockValue,
+      usedTodayUnits,
+      usedTodayValue,
+      lowStockCount,
+      outOfStockCount,
+      expiringSoonCount,
+      expiredCount,
+      recentPurchases,
+      recentMovements,
+      alerts,
+    };
+  },
 
   // Items
-  getItems: (params?: { category?: string; search?: string; lowStockOnly?: boolean }) => {
+  getItems: async (params?: { category?: string; search?: string; lowStockOnly?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.category && params.category !== 'ALL') q.set('category', params.category);
     if (params?.search) q.set('search', params.search);
     if (params?.lowStockOnly) q.set('lowStockOnly', 'true');
     const qs = q.toString();
-    return inventoryRequest<{ items: InventoryItem[] }>(`/api/inventory/items${qs ? `?${qs}` : ''}`);
+    const res = await inventoryRequest<any>(`/api/inventory/items${qs ? `?${qs}` : ''}`);
+    const rawItems: any[] = Array.isArray(res) ? res : res?.items || [];
+    const items: InventoryItem[] = rawItems.map((i) => ({
+      ...i,
+      totalStock: i.totalStock ?? i.currentStock ?? i.validStock ?? 0,
+    }));
+    return { items };
   },
 
   getItem: (id: string) =>
@@ -368,13 +408,21 @@ export const inventoryApi = {
     }),
 
   // Batches
-  getBatches: (params?: { itemId?: string; expiredOnly?: boolean; expiringDays?: number }) => {
+  getBatches: async (params?: { itemId?: string; expiredOnly?: boolean; expiringDays?: number }) => {
     const q = new URLSearchParams();
     if (params?.itemId) q.set('itemId', params.itemId);
     if (params?.expiredOnly) q.set('expiredOnly', 'true');
     if (params?.expiringDays) q.set('expiringDays', String(params.expiringDays));
     const qs = q.toString();
-    return inventoryRequest<{ batches: InventoryBatch[] }>(`/api/inventory/batches${qs ? `?${qs}` : ''}`);
+    const res = await inventoryRequest<any>(`/api/inventory/batches${qs ? `?${qs}` : ''}`);
+    const rawBatches: any[] = Array.isArray(res) ? res : res?.batches || [];
+    const batches: InventoryBatch[] = rawBatches.map((b) => ({
+      ...b,
+      quantity: b.quantity ?? b.currentQuantity ?? 0,
+      unitCost: b.unitCost ?? b.purchaseRate ?? 0,
+      itemId: b.itemId ?? b.inventoryItemId,
+    }));
+    return { batches };
   },
 
   // Stock operations
@@ -435,21 +483,23 @@ export const inventoryApi = {
     ),
 
   // Transactions / Movements
-  getTransactions: (params?: { itemId?: string; limit?: number }) => {
+  getTransactions: async (params?: { itemId?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.itemId) q.set('itemId', params.itemId);
     if (params?.limit) q.set('limit', String(params.limit));
     const qs = q.toString();
-    return inventoryRequest<{ transactions: InventoryTransaction[] }>(
-      `/api/inventory/transactions${qs ? `?${qs}` : ''}`
-    );
+    const res = await inventoryRequest<any>(`/api/inventory/transactions${qs ? `?${qs}` : ''}`);
+    const transactions: InventoryTransaction[] = Array.isArray(res) ? res : res?.transactions || [];
+    return { transactions };
   },
 
   // Purchases & Importer
-  getPurchases: () =>
-    inventoryRequest<{ purchases: PurchaseInvoice[]; suppliers: Supplier[] }>(
-      '/api/inventory/purchases'
-    ),
+  getPurchases: async () => {
+    const res = await inventoryRequest<any>('/api/inventory/purchases');
+    const purchases: PurchaseInvoice[] = Array.isArray(res) ? res : res?.purchases || [];
+    const suppliers: Supplier[] = res?.suppliers || [];
+    return { purchases, suppliers };
+  },
 
   parseInvoice: (data: { invoiceText?: string; fileName?: string; fileBase64?: string }) =>
     inventoryRequest<ParsedInvoiceData>('/api/inventory/purchases/parse-invoice', {
@@ -491,13 +541,25 @@ export const inventoryApi = {
     ),
 
   // Alerts
-  getAlerts: () =>
-    inventoryRequest<{
-      expiringSoon: Array<any>;
-      expired: Array<any>;
-      lowStock: Array<any>;
-      outOfStock: Array<any>;
-    }>('/api/inventory/alerts'),
+  getAlerts: async () => {
+    const res = await inventoryRequest<any>('/api/inventory/alerts');
+    const expiringSoon = res?.expiringSoon || [];
+    const expired = res?.expired || [];
+    const lowStock = res?.lowStock || [];
+    const outOfStock = res?.outOfStock || [];
+    return {
+      expiringSoon,
+      expired,
+      lowStock,
+      outOfStock,
+      counts: res?.counts || {
+        expiringSoon: expiringSoon.length,
+        expired: expired.length,
+        lowStock: lowStock.length,
+        outOfStock: outOfStock.length,
+      },
+    };
+  },
 
   // Clinical & Invoicing Integration
   resolvePrescriptionStock: (

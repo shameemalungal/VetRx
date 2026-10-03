@@ -1057,7 +1057,7 @@ export class InventoryService {
   // 12. Dashboard Summary
   // --------------------------------------------------------------------------
 
-  static async getDashboardSummary(practiceId: string): Promise<InventoryDashboardDTO> {
+  static async getDashboardSummary(practiceId: string): Promise<InventoryDashboardDTO & any> {
     const items = await this.listItems(practiceId);
     const batches = await this.listBatches(practiceId);
     const today = new Date().toISOString().split('T')[0];
@@ -1084,15 +1084,54 @@ export class InventoryService {
     const recentMovements = (await this.listTransactions(practiceId)).slice(0, 5);
 
     return {
+      totalItems: uniqueItemCount,
       uniqueItemCount,
+      totalUnits: totalUnitsInStock,
       totalUnitsInStock,
+      totalStockValue: Math.round(stockValueINR * 100) / 100,
       stockValueINR: Math.round(stockValueINR * 100) / 100,
+      usedTodayUnits: unitsUsedToday,
       unitsUsedToday,
+      usedTodayValue: Math.round(valueUsedTodayINR * 100) / 100,
       valueUsedTodayINR: Math.round(valueUsedTodayINR * 100) / 100,
       lowStockCount: alerts.counts.lowStock,
       outOfStockCount: alerts.counts.outOfStock,
       expiringSoonCount: alerts.counts.expiringSoon,
       expiredCount: alerts.counts.expired,
+      alerts: {
+        expiringSoon: alerts.expiringSoon.map((b) => ({
+          batchId: b.id,
+          itemId: b.inventoryItemId,
+          itemName: b.itemName,
+          batchNumber: b.batchNumber,
+          expiryDate: b.expiryDate,
+          quantity: b.currentQuantity,
+          daysRemaining: b.daysToExpiry,
+          isCritical: b.expiryStatus === 'CRITICAL',
+        })),
+        expired: alerts.expired.map((b) => ({
+          batchId: b.id,
+          itemId: b.inventoryItemId,
+          itemName: b.itemName,
+          batchNumber: b.batchNumber,
+          expiryDate: b.expiryDate,
+          quantity: b.currentQuantity,
+        })),
+        lowStock: alerts.lowStock.map((i) => ({
+          itemId: i.id,
+          itemName: i.name,
+          category: i.category,
+          currentStock: i.validStock,
+          minimumStockLevel: i.minimumStockLevel,
+          targetStockLevel: i.targetStockLevel,
+        })),
+        outOfStock: alerts.outOfStock.map((i) => ({
+          itemId: i.id,
+          itemName: i.name,
+          category: i.category,
+          minimumStockLevel: i.minimumStockLevel,
+        })),
+      },
       recentPurchases,
       recentMovements,
     };

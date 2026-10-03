@@ -50,7 +50,9 @@ export const InventoryDashboardPage: React.FC = () => {
     (dashboard?.lowStockCount || 0) +
     (dashboard?.outOfStockCount || 0);
 
-  const isEmpty = (dashboard?.totalItems || 0) === 0 && (dashboard?.totalUnits || 0) === 0;
+  const totalItems = dashboard?.totalItems ?? (dashboard as any)?.uniqueItemCount ?? 0;
+  const totalUnits = dashboard?.totalUnits ?? (dashboard as any)?.totalUnitsInStock ?? 0;
+  const isEmpty = totalItems === 0 && totalUnits === 0;
 
   return (
     <div className="inventory-page-container">
@@ -242,7 +244,7 @@ export const InventoryDashboardPage: React.FC = () => {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {dashboard?.alerts.expiringSoon.slice(0, 3).map((exp) => (
+                  {(dashboard?.alerts?.expiringSoon || []).slice(0, 3).map((exp) => (
                     <div
                       key={exp.batchId}
                       style={{

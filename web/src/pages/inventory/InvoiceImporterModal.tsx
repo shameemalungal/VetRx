@@ -43,7 +43,6 @@ export const InvoiceImporterModal: React.FC<InvoiceImporterModalProps> = ({
   const [invoiceDate, setInvoiceDate] = useState('');
   const [invoiceTime, setInvoiceTime] = useState('');
   const [paymentType, setPaymentType] = useState('CREDIT');
-  const [netPayable, setNetPayable] = useState<number>(0);
 
   const [isDuplicateWarning, setIsDuplicateWarning] = useState(false);
   const [duplicateMessage, setDuplicateMessage] = useState('');
@@ -201,40 +200,62 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       setInvoiceDate(parsed.invoiceDate || new Date().toISOString().split('T')[0]);
       setInvoiceTime(parsed.invoiceTime || '');
       setPaymentType(parsed.paymentType || 'CREDIT');
-      setNetPayable(parsed.netPayable || parsed.totalAmount || 0);
 
       setIsDuplicateWarning(Boolean(parsed.isDuplicateWarning));
       setDuplicateMessage(parsed.duplicateMessage || '');
       setBypassDuplicateWarning(false);
       setExtractionWarnings(parsed.warnings || []);
 
-      const normalized: ParsedInvoiceItemData[] = (parsed.items || []).map((item, idx) => ({
-        lineNumber: item.lineNumber || idx + 1,
-        name: item.name,
-        category: item.category || 'MEDICINE',
-        presentation: item.presentation || '',
-        packing: item.packing || item.packSize || '',
-        packSize: item.packSize || item.packing || '',
-        hsnCode: item.hsnCode || '',
-        stockUnit: item.stockUnit || (item.category === 'MEDICINE' ? 'Strip' : 'Piece'),
-        batchNumber: item.batchNumber || '',
-        manufacturingDate: item.manufacturingDate || '',
-        expiryDate: item.expiryDate || '',
-        quantity: item.quantity || 1,
-        schemeQuantity: item.schemeQuantity || 0,
-        purchaseRate: item.purchaseRate || 0,
-        mrp: item.mrp || 0,
-        schemeDiscountPercent: item.schemeDiscountPercent || 0,
-        discountPercent: item.discountPercent || 0,
-        gstPercent: item.gstPercent || 5,
-        taxableValue: item.taxableValue || Math.round((item.quantity || 1) * (item.purchaseRate || 0) * 100) / 100,
-        matchedMedicineId: item.matchedMedicineId,
-        matchedMedicineName: item.matchedMedicineName,
-        createNewMedicineMaster: !item.matchedMedicineId && item.category === 'MEDICINE',
-        confidence: item.confidence || 'HIGH',
-        rawOcrText: item.rawOcrText,
-        flags: item.flags || [],
-      }));
+      const normalized: ParsedInvoiceItemData[] = (parsed.items || []).map((item, idx) => {
+        const qty = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+        let rate = Number(item.purchaseRate) || 0;
+        let mrp = Number(item.mrp) || 0;
+        let taxable = Number(item.taxableValue) || 0;
+        const disc = Number(item.discountPercent) || Number(item.schemeDiscountPercent) || 0;
+
+        // Sanity check: if an 8-digit HSN or batch number was parsed into rate/taxable
+        if (rate > 50000 && qty > 0) {
+          if (taxable > 0 && taxable < 500000) {
+            rate = Math.round((taxable / qty) * 100) / 100;
+          } else if (mrp > 0 && mrp < 50000) {
+            rate = Math.round(mrp * 0.75 * 100) / 100;
+          } else {
+            rate = 100;
+          }
+        }
+
+        if (taxable > 500000 || taxable <= 0) {
+          taxable = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+        }
+
+        return {
+          lineNumber: item.lineNumber || idx + 1,
+          name: item.name,
+          category: item.category || 'MEDICINE',
+          presentation: item.presentation || '',
+          packing: item.packing || item.packSize || '',
+          packSize: item.packSize || item.packing || '',
+          hsnCode: item.hsnCode || '',
+          stockUnit: item.stockUnit || (item.category === 'MEDICINE' ? 'Strip' : 'Piece'),
+          batchNumber: item.batchNumber || '',
+          manufacturingDate: item.manufacturingDate || '',
+          expiryDate: item.expiryDate || '',
+          quantity: qty,
+          schemeQuantity: item.schemeQuantity || 0,
+          purchaseRate: rate,
+          mrp: mrp > 0 ? mrp : Math.round(rate * 1.35 * 100) / 100,
+          schemeDiscountPercent: item.schemeDiscountPercent || 0,
+          discountPercent: disc,
+          gstPercent: item.gstPercent !== undefined ? Number(item.gstPercent) : 5,
+          taxableValue: taxable,
+          matchedMedicineId: item.matchedMedicineId,
+          matchedMedicineName: item.matchedMedicineName,
+          createNewMedicineMaster: !item.matchedMedicineId && item.category === 'MEDICINE',
+          confidence: item.confidence || 'HIGH',
+          rawOcrText: item.rawOcrText,
+          flags: item.flags || [],
+        };
+      });
 
       setItems(normalized);
       setStep('REVIEW');
@@ -250,11 +271,12 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       const next = [...prev];
       const updated = { ...next[index], [field]: val };
 
-      // Auto-recalculate taxable value when quantity or purchaseRate changes
-      if (field === 'quantity' || field === 'purchaseRate') {
+      // Auto-recalculate taxable value when quantity, purchaseRate, or discount changes
+      if (field === 'quantity' || field === 'purchaseRate' || field === 'discountPercent' || field === 'schemeDiscountPercent') {
         const q = Number(field === 'quantity' ? val : updated.quantity) || 0;
         const r = Number(field === 'purchaseRate' ? val : updated.purchaseRate) || 0;
-        updated.taxableValue = Math.round(q * r * 100) / 100;
+        const d = Number(field === 'discountPercent' || field === 'schemeDiscountPercent' ? val : (updated.discountPercent || updated.schemeDiscountPercent)) || 0;
+        updated.taxableValue = Math.round(q * r * (1 - d / 100) * 100) / 100;
       }
 
       next[index] = updated;
@@ -362,7 +384,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
         },
         invoiceNumber: invoiceNumber.trim(),
         invoiceDate,
-        totalAmount: Number(netPayable) || calculateSumNet(),
+        totalAmount: calculateSumNet(),
         items: items.map((it) => ({
           name: it.name.trim(),
           category: it.category,
@@ -391,8 +413,21 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
 
   return (
     <div className="inv-modal-overlay">
-      <div className="inv-modal-card modal-large" style={{ maxWidth: '1240px', width: '96vw', maxHeight: '92vh' }}>
-        <div className="inv-modal-header" style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+      <div
+        className="inv-modal-card modal-large"
+        style={{
+          maxWidth: '1360px',
+          width: '98vw',
+          height: step === 'REVIEW' ? '95vh' : 'auto',
+          maxHeight: '95vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: step === 'REVIEW' ? 'hidden' : 'auto',
+          padding: '16px 20px',
+          gap: '10px',
+        }}
+      >
+        <div className="inv-modal-header" style={{ flexShrink: 0, borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
@@ -531,74 +566,76 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
             </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '12px' }}>
-            {/* Duplicate warning banner */}
-            {isDuplicateWarning && (
-              <div
-                className="inv-warning-banner"
-                style={{
-                  background: '#fffbeb',
-                  border: '1px solid #fde68a',
-                  borderLeft: '4px solid #f59e0b',
-                  color: '#92400e',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
-                  <Icon name="alert-triangle" size={18} />
-                  <span>{duplicateMessage || 'Duplicate invoice warning: This invoice already exists.'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: '10px', overflow: 'hidden' }}>
+            {/* Top Collapsible / Fixed Bar: Warnings, Supplier details, Bulk Fill tools */}
+            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Duplicate warning banner */}
+              {isDuplicateWarning && (
+                <div
+                  className="inv-warning-banner"
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderLeft: '4px solid #f59e0b',
+                    color: '#92400e',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '13px' }}>
+                    <Icon name="alert-triangle" size={16} />
+                    <span>{duplicateMessage || 'Duplicate invoice warning: This invoice already exists.'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>
+                      <input
+                        type="checkbox"
+                        checked={bypassDuplicateWarning}
+                        onChange={(e) => setBypassDuplicateWarning(e.target.checked)}
+                      />
+                      <span>Import Anyway (Confirm duplicate stock creation)</span>
+                    </label>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>
-                    <input
-                      type="checkbox"
-                      checked={bypassDuplicateWarning}
-                      onChange={(e) => setBypassDuplicateWarning(e.target.checked)}
-                    />
-                    <span>Import Anyway (Confirm duplicate stock creation)</span>
-                  </label>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* Extraction consistency alerts */}
-            {extractionWarnings.length > 0 && !isDuplicateWarning && (
+              {/* Extraction consistency alerts */}
+              {extractionWarnings.length > 0 && !isDuplicateWarning && (
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderLeft: '4px solid #16a34a',
+                    color: '#166534',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Icon name="check-circle" size={15} />
+                  <span>{extractionWarnings.join(' | ')}</span>
+                </div>
+              )}
+
+              {/* Supplier & Invoice Header Details */}
               <div
                 style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderLeft: '4px solid #16a34a',
-                  color: '#166534',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  display: 'flex',
-                  alignItems: 'center',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                   gap: '8px',
+                  padding: '8px 12px',
+                  background: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
                 }}
               >
-                <Icon name="check-circle" size={16} />
-                <span>{extractionWarnings.join(' | ')}</span>
-              </div>
-            )}
-
-            {/* Supplier & Invoice Header Details */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                gap: '10px',
-                padding: '12px',
-                background: '#f8fafc',
-                borderRadius: '10px',
-                border: '1px solid #e2e8f0',
-              }}
-            >
-              <div>
-                <label className="form-label" style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
-                  Supplier Name
-                </label>
+                <div>
+                  <label className="form-label" style={{ fontSize: '11px', color: '#475569', fontWeight: 600, margin: 0 }}>
+                    Supplier Name
+                  </label>
                 <input
                   type="text"
                   className="form-input"
@@ -851,54 +888,67 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                 + Add Line Item
               </button>
             </div>
+          </div>
 
-            <style>{`
-              .inv-clean-input::-webkit-outer-spin-button,
-              .inv-clean-input::-webkit-inner-spin-button {
-                -webkit-appearance: none;
-                margin: 0;
-              }
-              .inv-clean-input[type=number] {
-                -moz-appearance: textfield;
-              }
-              .inv-clean-input {
-                width: 100%;
-                box-sizing: border-box;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                padding: 4px 6px;
-                font-size: 12px;
-                background: #ffffff;
-                transition: border-color 0.15s ease, box-shadow 0.15s ease;
-              }
-              .inv-clean-input:focus {
-                border-color: var(--color-primary, #00685f);
-                outline: none;
-                box-shadow: 0 0 0 2px rgba(0, 104, 95, 0.15);
-              }
-            `}</style>
+          <style>{`
+            .inv-clean-input::-webkit-outer-spin-button,
+            .inv-clean-input::-webkit-inner-spin-button {
+              -webkit-appearance: none;
+              margin: 0;
+            }
+            .inv-clean-input[type=number] {
+              -moz-appearance: textfield;
+            }
+            .inv-clean-input {
+              width: 100%;
+              box-sizing: border-box;
+              border: 1px solid #cbd5e1;
+              border-radius: 6px;
+              padding: 4px 6px;
+              font-size: 12px;
+              background: #ffffff;
+              transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            }
+            .inv-clean-input:focus {
+              border-color: var(--color-primary, #00685f);
+              outline: none;
+              box-shadow: 0 0 0 2px rgba(0, 104, 95, 0.15);
+            }
+            .inv-sticky-table th {
+              position: sticky;
+              top: 0;
+              background: #f1f5f9;
+              z-index: 10;
+              box-shadow: inset 0 -1px 0 #cbd5e1;
+              font-weight: 700;
+              color: #334155;
+              padding: 8px 6px;
+              font-size: 11.5px;
+            }
+          `}</style>
 
-            <div style={{ maxHeight: '420px', overflowX: 'auto', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-              <table className="inventory-table" style={{ fontSize: '12px', minWidth: '1260px', margin: 0, width: '100%', borderCollapse: 'collapse' }}>
-                <thead style={{ position: 'sticky', top: 0, background: '#f1f5f9', zIndex: 2 }}>
-                  <tr>
-                    <th style={{ width: '36px', minWidth: '36px', textAlign: 'center' }}>#</th>
-                    <th style={{ minWidth: '240px' }}>Medicine / Item Name</th>
-                    <th style={{ width: '85px', minWidth: '85px' }}>Packing</th>
-                    <th style={{ width: '95px', minWidth: '95px' }}>HSN</th>
-                    <th style={{ width: '105px', minWidth: '105px' }}>Batch No</th>
-                    <th style={{ width: '110px', minWidth: '110px' }}>Exp (YYYY-MM)</th>
-                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Qty</th>
-                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Sch Qty</th>
-                    <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>MRP (₹)</th>
-                    <th style={{ width: '90px', minWidth: '90px', textAlign: 'right' }}>Rate (₹)</th>
-                    <th style={{ width: '75px', minWidth: '75px', textAlign: 'right' }}>Disc %</th>
-                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>GST %</th>
-                    <th style={{ width: '105px', minWidth: '105px', textAlign: 'right' }}>Taxable (₹)</th>
-                    <th style={{ width: '38px', minWidth: '38px', textAlign: 'center' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
+          {/* Scrollable Table Area with Permanently Sticky Header */}
+          <div style={{ flex: 1, minHeight: '220px', overflowX: 'auto', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#ffffff', position: 'relative' }}>
+            <table className="inventory-table inv-sticky-table" style={{ fontSize: '12px', minWidth: '1260px', margin: 0, width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '36px', minWidth: '36px', textAlign: 'center' }}>#</th>
+                  <th style={{ minWidth: '240px', textAlign: 'left' }}>Medicine / Item Name</th>
+                  <th style={{ width: '85px', minWidth: '85px', textAlign: 'left' }}>Packing</th>
+                  <th style={{ width: '95px', minWidth: '95px', textAlign: 'left' }}>HSN</th>
+                  <th style={{ width: '105px', minWidth: '105px', textAlign: 'left' }}>Batch No</th>
+                  <th style={{ width: '110px', minWidth: '110px', textAlign: 'left' }}>Exp (YYYY-MM)</th>
+                  <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Qty</th>
+                  <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Sch Qty</th>
+                  <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>MRP (₹)</th>
+                  <th style={{ width: '90px', minWidth: '90px', textAlign: 'right' }}>Rate (₹)</th>
+                  <th style={{ width: '75px', minWidth: '75px', textAlign: 'right' }}>Disc %</th>
+                  <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>GST %</th>
+                  <th style={{ width: '105px', minWidth: '105px', textAlign: 'right' }}>Taxable (₹)</th>
+                  <th style={{ width: '38px', minWidth: '38px', textAlign: 'center' }}></th>
+                </tr>
+              </thead>
+              <tbody>
                   {items.map((it, idx) => (
                     <tr key={idx} style={{ background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
                       <td style={{ textAlign: 'center', fontWeight: 600, color: '#64748b' }}>
@@ -1080,19 +1130,20 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
             {/* Totals & Cross-Check Footer */}
             <div
               style={{
+                flexShrink: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '12px 18px',
+                padding: '8px 14px',
                 background: '#f8fafc',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 flexWrap: 'wrap',
-                gap: '12px',
+                gap: '10px',
               }}
             >
-              <div style={{ display: 'flex', gap: '20px', color: '#475569', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '16px', color: '#475569', flexWrap: 'wrap' }}>
                 <span>
                   Total Items: <strong style={{ color: '#0f172a' }}>{items.length}</strong>
                 </span>
@@ -1114,7 +1165,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
               </div>
               <div>
                 Net Payable Total:{' '}
-                <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '18px', fontWeight: 800 }}>
+                <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '16px', fontWeight: 800 }}>
                   ₹
                   {calculateSumNet().toLocaleString('en-IN', {
                     minimumFractionDigits: 2,
@@ -1125,7 +1176,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+            <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
