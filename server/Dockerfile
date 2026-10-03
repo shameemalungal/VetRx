@@ -17,7 +17,7 @@ COPY server/package.json server/package-lock.json ./
 COPY prisma ./prisma/
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN npm ci || npm install
 
 # Copy server source and configuration
 COPY server/tsconfig.json ./
