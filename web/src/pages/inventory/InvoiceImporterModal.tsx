@@ -43,8 +43,6 @@ export const InvoiceImporterModal: React.FC<InvoiceImporterModalProps> = ({
   const [invoiceDate, setInvoiceDate] = useState('');
   const [invoiceTime, setInvoiceTime] = useState('');
   const [paymentType, setPaymentType] = useState('CREDIT');
-  const [taxableAmount, setTaxableAmount] = useState<number>(0);
-  const [totalTax, setTotalTax] = useState<number>(0);
   const [netPayable, setNetPayable] = useState<number>(0);
 
   const [isDuplicateWarning, setIsDuplicateWarning] = useState(false);
@@ -203,8 +201,6 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       setInvoiceDate(parsed.invoiceDate || new Date().toISOString().split('T')[0]);
       setInvoiceTime(parsed.invoiceTime || '');
       setPaymentType(parsed.paymentType || 'CREDIT');
-      setTaxableAmount(parsed.taxableAmount || 0);
-      setTotalTax(parsed.totalTax || 0);
       setNetPayable(parsed.netPayable || parsed.totalAmount || 0);
 
       setIsDuplicateWarning(Boolean(parsed.isDuplicateWarning));
@@ -296,11 +292,36 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
   };
 
   const calculateSumQty = () => items.reduce((sum, it) => sum + Number(it.quantity || 0), 0);
+
   const calculateSumTaxable = () =>
-    items.reduce((sum, it) => sum + (Number(it.taxableValue) || Number(it.quantity || 0) * Number(it.purchaseRate || 0)), 0);
+    items.reduce((sum, it) => {
+      const q = Number(it.quantity || 0);
+      const r = Number(it.purchaseRate || 0);
+      const disc = Number(it.discountPercent || it.schemeDiscountPercent || 0);
+      const rowTaxable =
+        Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
+          ? Number(it.taxableValue)
+          : Math.round(q * r * (1 - disc / 100) * 100) / 100;
+      return sum + rowTaxable;
+    }, 0);
+
+  const calculateSumGst = () =>
+    items.reduce((sum, it) => {
+      const q = Number(it.quantity || 0);
+      const r = Number(it.purchaseRate || 0);
+      const disc = Number(it.discountPercent || it.schemeDiscountPercent || 0);
+      const rowTaxable =
+        Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
+          ? Number(it.taxableValue)
+          : Math.round(q * r * (1 - disc / 100) * 100) / 100;
+      const gstPct = Number(it.gstPercent || 0);
+      return sum + Math.round(((rowTaxable * gstPct) / 100) * 100) / 100;
+    }, 0);
+
   const calculateSumNet = () => {
     const tax = calculateSumTaxable();
-    return Math.round(tax * 1.05 * 100) / 100;
+    const gst = calculateSumGst();
+    return Math.round((tax + gst) * 100) / 100;
   };
 
   const handleConfirm = async () => {
@@ -831,24 +852,50 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
               </button>
             </div>
 
-            <div style={{ maxHeight: '360px', overflowX: 'auto', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-              <table className="inventory-table" style={{ fontSize: '12px', minWidth: '1050px', margin: 0 }}>
+            <style>{`
+              .inv-clean-input::-webkit-outer-spin-button,
+              .inv-clean-input::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+              }
+              .inv-clean-input[type=number] {
+                -moz-appearance: textfield;
+              }
+              .inv-clean-input {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 4px 6px;
+                font-size: 12px;
+                background: #ffffff;
+                transition: border-color 0.15s ease, box-shadow 0.15s ease;
+              }
+              .inv-clean-input:focus {
+                border-color: var(--color-primary, #00685f);
+                outline: none;
+                box-shadow: 0 0 0 2px rgba(0, 104, 95, 0.15);
+              }
+            `}</style>
+
+            <div style={{ maxHeight: '420px', overflowX: 'auto', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+              <table className="inventory-table" style={{ fontSize: '12px', minWidth: '1260px', margin: 0, width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, background: '#f1f5f9', zIndex: 2 }}>
                   <tr>
-                    <th style={{ width: '36px', textAlign: 'center' }}>#</th>
-                    <th style={{ minWidth: '220px' }}>Medicine / Item Name</th>
-                    <th style={{ width: '80px' }}>Packing</th>
-                    <th style={{ width: '90px' }}>HSN</th>
-                    <th style={{ width: '100px' }}>Batch No</th>
-                    <th style={{ width: '100px' }}>Exp (YYYY-MM)</th>
-                    <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                    <th style={{ width: '60px', textAlign: 'center' }}>Sch Qty</th>
-                    <th style={{ width: '85px', textAlign: 'right' }}>MRP (₹)</th>
-                    <th style={{ width: '85px', textAlign: 'right' }}>Rate (₹)</th>
-                    <th style={{ width: '70px', textAlign: 'right' }}>Disc %</th>
-                    <th style={{ width: '60px', textAlign: 'center' }}>GST %</th>
-                    <th style={{ width: '95px', textAlign: 'right' }}>Taxable (₹)</th>
-                    <th style={{ width: '40px', textAlign: 'center' }}></th>
+                    <th style={{ width: '36px', minWidth: '36px', textAlign: 'center' }}>#</th>
+                    <th style={{ minWidth: '240px' }}>Medicine / Item Name</th>
+                    <th style={{ width: '85px', minWidth: '85px' }}>Packing</th>
+                    <th style={{ width: '95px', minWidth: '95px' }}>HSN</th>
+                    <th style={{ width: '105px', minWidth: '105px' }}>Batch No</th>
+                    <th style={{ width: '110px', minWidth: '110px' }}>Exp (YYYY-MM)</th>
+                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Qty</th>
+                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Sch Qty</th>
+                    <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>MRP (₹)</th>
+                    <th style={{ width: '90px', minWidth: '90px', textAlign: 'right' }}>Rate (₹)</th>
+                    <th style={{ width: '75px', minWidth: '75px', textAlign: 'right' }}>Disc %</th>
+                    <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>GST %</th>
+                    <th style={{ width: '105px', minWidth: '105px', textAlign: 'right' }}>Taxable (₹)</th>
+                    <th style={{ width: '38px', minWidth: '38px', textAlign: 'center' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -860,10 +907,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                       <td>
                         <input
                           type="text"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.name}
                           onChange={(e) => updateItemField(idx, 'name', e.target.value)}
-                          style={{ fontSize: '12.5px', fontWeight: 600, padding: '3px 6px', width: '100%' }}
+                          style={{ fontWeight: 600 }}
                         />
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
                           {it.matchedMedicineId ? (
@@ -897,35 +944,32 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                       <td>
                         <input
                           type="text"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.packing || ''}
                           onChange={(e) => updateItemField(idx, 'packing', e.target.value)}
                           placeholder="e.g. 5ml"
-                          style={{ fontSize: '12px', padding: '3px 5px' }}
                         />
                       </td>
                       <td>
                         <input
                           type="text"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.hsnCode || ''}
                           onChange={(e) => updateItemField(idx, 'hsnCode', e.target.value)}
                           placeholder="HSN"
-                          style={{ fontSize: '12px', fontFamily: 'monospace', padding: '3px 5px' }}
+                          style={{ fontFamily: 'monospace' }}
                         />
                       </td>
                       <td>
                         <input
                           type="text"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.batchNumber}
                           placeholder="Batch"
                           onChange={(e) => updateItemField(idx, 'batchNumber', e.target.value)}
                           style={{
-                            fontSize: '12px',
                             fontFamily: 'monospace',
                             fontWeight: 600,
-                            padding: '3px 5px',
                             borderColor: !it.batchNumber ? '#f87171' : undefined,
                           }}
                         />
@@ -933,13 +977,11 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                       <td>
                         <input
                           type="text"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.expiryDate}
                           placeholder="YYYY-MM"
                           onChange={(e) => updateItemField(idx, 'expiryDate', e.target.value)}
                           style={{
-                            fontSize: '12px',
-                            padding: '3px 5px',
                             borderColor: !it.expiryDate ? '#f87171' : undefined,
                           }}
                         />
@@ -948,20 +990,20 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                         <input
                           type="number"
                           min="1"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.quantity}
                           onChange={(e) => updateItemField(idx, 'quantity', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'center', padding: '3px 4px' }}
+                          style={{ textAlign: 'center', fontWeight: 600 }}
                         />
                       </td>
                       <td>
                         <input
                           type="number"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.schemeQuantity || 0}
                           onChange={(e) => updateItemField(idx, 'schemeQuantity', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'center', padding: '3px 4px' }}
+                          style={{ textAlign: 'center' }}
                         />
                       </td>
                       <td>
@@ -969,10 +1011,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           type="number"
                           step="0.01"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.mrp || 0}
                           onChange={(e) => updateItemField(idx, 'mrp', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'right', padding: '3px 5px' }}
+                          style={{ textAlign: 'right' }}
                         />
                       </td>
                       <td>
@@ -980,10 +1022,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           type="number"
                           step="0.01"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.purchaseRate}
                           onChange={(e) => updateItemField(idx, 'purchaseRate', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'right', padding: '3px 5px', fontWeight: 600 }}
+                          style={{ textAlign: 'right', fontWeight: 600 }}
                         />
                       </td>
                       <td>
@@ -991,20 +1033,20 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           type="number"
                           step="0.1"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.schemeDiscountPercent || it.discountPercent || 0}
                           onChange={(e) => updateItemField(idx, 'schemeDiscountPercent', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'right', padding: '3px 5px' }}
+                          style={{ textAlign: 'right' }}
                         />
                       </td>
                       <td>
                         <input
                           type="number"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.gstPercent || 5}
                           onChange={(e) => updateItemField(idx, 'gstPercent', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'center', padding: '3px 4px' }}
+                          style={{ textAlign: 'center' }}
                         />
                       </td>
                       <td>
@@ -1012,10 +1054,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           type="number"
                           step="0.01"
                           min="0"
-                          className="form-input"
+                          className="inv-clean-input"
                           value={it.taxableValue || 0}
                           onChange={(e) => updateItemField(idx, 'taxableValue', Number(e.target.value))}
-                          style={{ fontSize: '12px', textAlign: 'right', padding: '3px 5px', fontWeight: 600 }}
+                          style={{ textAlign: 'right', fontWeight: 600 }}
                         />
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -1041,14 +1083,16 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 16px',
+                padding: '12px 18px',
                 background: '#f8fafc',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
                 fontSize: '13px',
+                flexWrap: 'wrap',
+                gap: '12px',
               }}
             >
-              <div style={{ display: 'flex', gap: '16px', color: '#475569' }}>
+              <div style={{ display: 'flex', gap: '20px', color: '#475569', flexWrap: 'wrap' }}>
                 <span>
                   Total Items: <strong style={{ color: '#0f172a' }}>{items.length}</strong>
                 </span>
@@ -1058,23 +1102,21 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                 <span>
                   Taxable Value:{' '}
                   <strong style={{ color: '#0f172a' }}>
-                    ₹{(taxableAmount > 0 ? taxableAmount : calculateSumTaxable()).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </strong>
                 </span>
-                {totalTax > 0 && (
-                  <span>
-                    GST Tax:{' '}
-                    <strong style={{ color: '#0f172a' }}>
-                      ₹{totalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </strong>
-                  </span>
-                )}
+                <span>
+                  GST Tax:{' '}
+                  <strong style={{ color: '#0f172a' }}>
+                    ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
+                </span>
               </div>
               <div>
                 Net Payable Total:{' '}
-                <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '17px', fontWeight: 800 }}>
+                <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '18px', fontWeight: 800 }}>
                   ₹
-                  {(Number(netPayable) || calculateSumNet()).toLocaleString('en-IN', {
+                  {calculateSumNet().toLocaleString('en-IN', {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}

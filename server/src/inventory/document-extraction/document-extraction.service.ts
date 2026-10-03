@@ -190,10 +190,31 @@ export class DocumentExtractionService {
     // Line Items Normalization & Medicine Master Matching
     const items: ExtractedInvoiceItemDTO[] = validLineItems.map((raw, idx) => {
       const matched = this.matchWithCatalogue(raw.itemName, existingCatalogue);
-      const calculatedLineTotal =
-        typeof raw.taxableValue === 'number' && raw.taxableValue > 0
-          ? raw.taxableValue
-          : Math.round((raw.quantity || 1) * (raw.purchaseRate || 0) * 100) / 100;
+
+      const qty = typeof raw.quantity === 'number' && raw.quantity > 0 ? raw.quantity : 1;
+      let rate = typeof raw.purchaseRate === 'number' ? raw.purchaseRate : 0;
+      let mrp = typeof raw.mrp === 'number' ? raw.mrp : 0;
+      const schDisc = typeof raw.schemeDiscountPercent === 'number' ? raw.schemeDiscountPercent : 0;
+      const disc = typeof raw.discountPercent === 'number' ? raw.discountPercent : schDisc;
+      const gst = typeof raw.gstPercent === 'number' ? raw.gstPercent : 5;
+      let taxable = typeof raw.taxableValue === 'number' ? raw.taxableValue : 0;
+
+      // Sanity Check 1: If rate was swapped with HSN/Batch (> 50,000) or rate > mrp * 2 (when mrp > 0)
+      if (rate > 50000 || (mrp > 0 && rate > mrp * 2)) {
+        if (taxable > 0 && taxable <= 50000) {
+          rate = Math.round((taxable / qty) * 100) / 100;
+        } else if (mrp > 0) {
+          rate = Math.round(mrp * 0.75 * 100) / 100;
+        }
+      }
+
+      // Sanity Check 2: Taxable value calculation
+      let calculatedLineTotal = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+      if (taxable > 0 && Math.abs(taxable - calculatedLineTotal) <= Math.max(5, calculatedLineTotal * 0.05)) {
+        calculatedLineTotal = taxable;
+      } else if (taxable > 0 && (calculatedLineTotal === 0 || calculatedLineTotal > 500000)) {
+        calculatedLineTotal = taxable;
+      }
 
       return {
         tempId: `item-${idx + 1}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -205,16 +226,16 @@ export class DocumentExtractionService {
         stockUnit: 'UNIT',
         presentation: raw.packing || matched.packSize || '',
         hsnCode: raw.hsnCode || '',
-        batchNumber: raw.batchNumber || 'BATCH-DETECT',
+        batchNumber: raw.batchNumber || 'SO-BATCH',
         expiryDate: raw.expiryDate || '',
-        quantity: typeof raw.quantity === 'number' && raw.quantity > 0 ? raw.quantity : 1,
+        quantity: qty,
         schemeQuantity: typeof raw.schemeQuantity === 'number' ? raw.schemeQuantity : 0,
         freeQuantity: typeof raw.schemeQuantity === 'number' ? raw.schemeQuantity : 0,
-        purchaseRate: typeof raw.purchaseRate === 'number' ? raw.purchaseRate : 0,
-        mrp: typeof raw.mrp === 'number' ? raw.mrp : 0,
-        schemeDiscountPercent: typeof raw.schemeDiscountPercent === 'number' ? raw.schemeDiscountPercent : 0,
-        discountPercent: typeof raw.discountPercent === 'number' ? raw.discountPercent : 0,
-        gstPercent: typeof raw.gstPercent === 'number' ? raw.gstPercent : 5,
+        purchaseRate: rate,
+        mrp: mrp || Math.round(rate * 1.35 * 100) / 100,
+        schemeDiscountPercent: schDisc,
+        discountPercent: disc,
+        gstPercent: gst,
         taxableValue: calculatedLineTotal,
         lineTotal: calculatedLineTotal,
         confidence: raw.confidence || 'HIGH',
