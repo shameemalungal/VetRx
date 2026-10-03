@@ -54,6 +54,67 @@ export const InvoiceImporterModal: React.FC<InvoiceImporterModalProps> = ({
 
   const [items, setItems] = useState<ParsedInvoiceItemData[]>([]);
 
+  // Bulk Apply Toolbar State
+  const defaultFutureExp = () => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 2);
+    return d.toISOString().split('T')[0];
+  };
+
+  const [bulkExpiryDate, setBulkExpiryDate] = useState<string>(defaultFutureExp());
+  const [bulkBatchNumber, setBulkBatchNumber] = useState<string>('SO-BATCH');
+  const [bulkGstPercent, setBulkGstPercent] = useState<number>(5);
+
+  const missingExpiryCount = items.filter((it) => !it.expiryDate || it.expiryDate.trim() === '').length;
+
+  const handleApplyExpiry = (onlyEmpty: boolean) => {
+    if (!bulkExpiryDate) return;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!onlyEmpty || !it.expiryDate || it.expiryDate.trim() === '') {
+          return { ...it, expiryDate: bulkExpiryDate };
+        }
+        return it;
+      })
+    );
+  };
+
+  const handleQuickAddYears = (years: number) => {
+    const baseDate = invoiceDate ? new Date(invoiceDate) : new Date();
+    baseDate.setFullYear(baseDate.getFullYear() + years);
+    const newExp = baseDate.toISOString().split('T')[0];
+    setBulkExpiryDate(newExp);
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!it.expiryDate || it.expiryDate.trim() === '') {
+          return { ...it, expiryDate: newExp };
+        }
+        return it;
+      })
+    );
+  };
+
+  const handleApplyBatch = (onlyEmpty: boolean) => {
+    if (!bulkBatchNumber) return;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (!onlyEmpty || !it.batchNumber || it.batchNumber.trim() === '') {
+          return { ...it, batchNumber: bulkBatchNumber };
+        }
+        return it;
+      })
+    );
+  };
+
+  const handleApplyGst = () => {
+    setItems((prev) =>
+      prev.map((it) => ({
+        ...it,
+        gstPercent: bulkGstPercent,
+      }))
+    );
+  };
+
   if (!isOpen) return null;
 
   const handleSampleInvoice = () => {
@@ -252,7 +313,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       return;
     }
 
-    // Verify all items have name, batch and expiry
+    // Verify product names and sanitize
     const invalidPhrases = /^(?:BRANCH|BANK|A\/C\s*NO|ACCOUNT|IFSC|GSTIN|INVOICE\s*NO|CUSTOMER|TOTAL|TAX\s*SUMMARY|DECLARATION)/i;
     for (let i = 0; i < items.length; i++) {
       if (!items[i].name.trim()) {
@@ -263,15 +324,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
         setError(`Item #${i + 1} ("${items[i].name}") appears to be invoice header/bank information. Please remove or correct this row.`);
         return;
       }
-      if (!items[i].batchNumber.trim()) {
-        setError(`Item #${i + 1} (${items[i].name}) is missing a batch number`);
-        return;
-      }
-      if (!items[i].expiryDate) {
-        setError(`Item #${i + 1} (${items[i].name}) is missing an expiry date`);
-        return;
-      }
     }
+
+    const defaultExp = bulkExpiryDate || defaultFutureExp();
+    const defaultBatch = bulkBatchNumber || 'SO-BATCH';
 
     try {
       setIsConfirming(true);
@@ -292,9 +348,9 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           presentation: it.presentation || `${it.packing || 'Standard'} ${it.stockUnit || 'Unit'}`,
           packSize: it.packing || it.packSize || undefined,
           stockUnit: it.stockUnit || undefined,
-          batchNumber: it.batchNumber.trim(),
+          batchNumber: it.batchNumber?.trim() || defaultBatch,
           manufacturingDate: it.manufacturingDate || undefined,
-          expiryDate: it.expiryDate,
+          expiryDate: it.expiryDate?.trim() || defaultExp,
           quantity: Number(it.quantity),
           purchaseRate: Number(it.purchaseRate) || 0,
           mrp: Number(it.mrp) || Math.round((Number(it.purchaseRate) || 0) * 1.35),
@@ -635,16 +691,141 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
               </div>
             </div>
 
-            {/* Multi-Row Medicine Line Items Table */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
-                Extracted Medicine Line Items ({items.length} detected rows)
+            {/* Missing Expiry Date Quick-Action Banner */}
+            {missingExpiryCount > 0 && (
+              <div
+                style={{
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#92400e', fontSize: '12.5px', fontWeight: 600 }}>
+                  <Icon name="alert-triangle" size={16} />
+                  <span>{missingExpiryCount} items do not have an expiry date (standard in Sales Orders & Challans).</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleQuickAddYears(2)}
+                    style={{ fontSize: '11.5px', padding: '4px 12px', background: '#fef3c7', borderColor: '#fcd34d', color: '#92400e', fontWeight: 700 }}
+                  >
+                    ⚡ Auto-Fill +2 Years ({bulkExpiryDate}) to All {missingExpiryCount} Items
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleQuickAddYears(3)}
+                    style={{ fontSize: '11.5px', padding: '4px 10px', background: '#fef3c7', borderColor: '#fcd34d', color: '#92400e', fontWeight: 700 }}
+                  >
+                    +3 Years
+                  </button>
+                </div>
               </div>
+            )}
+
+            {/* Bulk Quick-Fill Toolbar */}
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap',
+                fontSize: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icon name="edit-3" size={14} /> Bulk Fill Tools:
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: '#64748b' }}>Expiry:</span>
+                  <input
+                    type="date"
+                    value={bulkExpiryDate}
+                    onChange={(e) => setBulkExpiryDate(e.target.value)}
+                    style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleApplyExpiry(true)}
+                    style={{ fontSize: '11px', padding: '2px 8px' }}
+                    title="Fill expiry date for all rows that are currently empty"
+                  >
+                    Apply to Empty
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleApplyExpiry(false)}
+                    style={{ fontSize: '11px', padding: '2px 8px' }}
+                    title="Overwrite expiry date for all rows"
+                  >
+                    Apply to All
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid #cbd5e1', paddingLeft: '8px' }}>
+                  <span style={{ color: '#64748b' }}>Batch:</span>
+                  <input
+                    type="text"
+                    value={bulkBatchNumber}
+                    onChange={(e) => setBulkBatchNumber(e.target.value)}
+                    placeholder="Batch"
+                    style={{ width: '90px', padding: '2px 6px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleApplyBatch(true)}
+                    style={{ fontSize: '11px', padding: '2px 8px' }}
+                  >
+                    Apply to Empty
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid #cbd5e1', paddingLeft: '8px' }}>
+                  <span style={{ color: '#64748b' }}>GST:</span>
+                  <select
+                    value={bulkGstPercent}
+                    onChange={(e) => setBulkGstPercent(Number(e.target.value))}
+                    style={{ padding: '2px 4px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                  >
+                    <option value={0}>0%</option>
+                    <option value={5}>5%</option>
+                    <option value={12}>12%</option>
+                    <option value={18}>18%</option>
+                    <option value={28}>28%</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleApplyGst}
+                    style={{ fontSize: '11px', padding: '2px 8px' }}
+                  >
+                    Apply GST
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={addItemRow}
-                style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '6px' }}
+                style={{ fontSize: '11.5px', padding: '3px 10px', borderRadius: '6px', fontWeight: 600 }}
               >
                 + Add Line Item
               </button>

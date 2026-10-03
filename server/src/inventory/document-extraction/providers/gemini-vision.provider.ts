@@ -56,7 +56,9 @@ Understand the physical structure and spatial layout of the document.
 8. If a value is genuinely unreadable, return null rather than guessing.
 9. Do not invent product names, batch numbers, quantities, prices, dates, HSN codes, GST rates, or other values.
 10. Preserve the original product description as accurately as possible.
-11. Normalize expiry dates to YYYY-MM-01 (e.g. 08/27 -> 2027-08-01, 05/28 -> 2028-05-01).
+11. Normalize expiry dates to YYYY-MM-01 (e.g. 08/27 -> 2027-08-01, 05/28 -> 2028-05-01). If expiry date or batch is omitted or blank (such as in Sales Orders / Delivery Challans), return null for expiryDate and 'SO-BATCH' for batchNumber.
+12. Ensure 'purchaseRate' is strictly the UNIT purchase rate (e.g. 43.00, 30.00, 100.00), NOT the line total amount (e.g. 8600.00), and 'taxableValue' is quantity * unit rate (e.g. 200 * 43.00 = 8600.00).
+13. If this document has multiple pages, extract all product rows across ALL pages without stopping early. Verify against total item count on the summary page.
 
 Return strict JSON matching this exact structure:
 {
