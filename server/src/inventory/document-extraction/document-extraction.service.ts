@@ -15,6 +15,7 @@ import type {
 import { GeminiVisionProvider } from './providers/gemini-vision.provider.js';
 import { SpatialLayoutProvider } from './providers/spatial-layout.provider.js';
 import { TextParserProvider } from './providers/text-parser.provider.js';
+import { PdfExtractorProvider } from './providers/pdf-extractor.provider.js';
 import { InventoryService } from '../inventory.service.js';
 
 interface MasterCatalogueItem {
@@ -29,6 +30,7 @@ export class DocumentExtractionService {
   private static visionProvider = new GeminiVisionProvider();
   private static spatialProvider = new SpatialLayoutProvider();
   private static textProvider = new TextParserProvider();
+  private static pdfProvider = new PdfExtractorProvider();
 
   /**
    * Main entry point for Document Understanding from an image or PDF buffer.
@@ -43,35 +45,56 @@ export class DocumentExtractionService {
     let structuredDoc: StructuredInvoiceDocument | null = null;
     const warnings: string[] = [];
 
+    const isPdf =
+      mimeType === 'application/pdf' ||
+      (buffer.length >= 4 &&
+        buffer[0] === 0x25 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x44 &&
+        buffer[3] === 0x46);
+
+    const actualMimeType = isPdf ? 'application/pdf' : mimeType;
+
     // Step 1: Attempt Gemini Vision AI if API key is configured
     if (this.visionProvider.isAvailable()) {
       try {
         console.log('[DocumentExtractionService] Attempting Gemini Vision AI extraction...');
         structuredDoc = await this.visionProvider.extractDocument({
           buffer,
-          mimeType,
+          mimeType: actualMimeType,
         });
         console.log(
           `[DocumentExtractionService] Vision AI succeeded: ${structuredDoc.lineItems.length} line items detected.`
         );
       } catch (err: any) {
         console.warn(
-          `[DocumentExtractionService] Vision AI failed (${err.message}). Gracefully falling back to Spatial Layout OCR...`
+          `[DocumentExtractionService] Vision AI failed (${err.message}). Gracefully falling back to Document Layout Extractor...`
         );
-        warnings.push(`Vision AI unavailable (${err.message}); processed with Layout-Aware OCR.`);
+        warnings.push(`Vision AI unavailable (${err.message}); processed with Layout-Aware Extractor.`);
       }
     }
 
-    // Step 2: Fall back to Spatial Layout & Table ROI OCR
+    // Step 2: Fall back to appropriate document extractor
     if (!structuredDoc) {
-      console.log('[DocumentExtractionService] Running Spatial Layout-Aware Table Extractor...');
-      structuredDoc = await this.spatialProvider.extractDocument({
-        buffer,
-        mimeType,
-      });
-      console.log(
-        `[DocumentExtractionService] Spatial Layout OCR succeeded: ${structuredDoc.lineItems.length} line items detected.`
-      );
+      if (isPdf) {
+        console.log('[DocumentExtractionService] Running Multi-Page PDF Spatial Extractor...');
+        structuredDoc = await this.pdfProvider.extractDocument({
+          buffer,
+          mimeType: 'application/pdf',
+        });
+        console.log(
+          `[DocumentExtractionService] PDF Spatial Extractor succeeded: ${structuredDoc.lineItems.length} line items detected.`
+        );
+      } else {
+        console.log('[DocumentExtractionService] Running Spatial Layout-Aware Table Extractor...');
+        structuredDoc = await this.spatialProvider.extractDocument({
+          buffer,
+          mimeType: actualMimeType,
+        });
+        console.log(
+          `[DocumentExtractionService] Spatial Layout OCR succeeded: ${structuredDoc.lineItems.length} line items detected.`
+        );
+      }
     }
 
     // Step 3: Process structured document into standardized InvoiceExtractionResultDTO

@@ -22,6 +22,20 @@ export class SpatialLayoutProvider implements IDocumentExtractionProvider {
     rawText?: string;
     fileName?: string;
   }): Promise<StructuredInvoiceDocument> {
+    const isPdf =
+      payload.mimeType === 'application/pdf' ||
+      (payload.buffer.length >= 4 &&
+        payload.buffer[0] === 0x25 &&
+        payload.buffer[1] === 0x50 &&
+        payload.buffer[2] === 0x44 &&
+        payload.buffer[3] === 0x46);
+
+    if (isPdf) {
+      const { PdfExtractorProvider } = await import('./pdf-extractor.provider.js');
+      const pdfProvider = new PdfExtractorProvider();
+      return pdfProvider.extractDocument(payload);
+    }
+
     const sharpModule: any = await import('sharp');
     const sharp = sharpModule.default || sharpModule;
     const tesseractModule: any = await import('tesseract.js');
