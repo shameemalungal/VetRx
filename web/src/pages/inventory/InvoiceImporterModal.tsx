@@ -94,13 +94,15 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
     setError(null);
 
     const reader = new FileReader();
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
-    if (file.type.startsWith('image/')) {
+    if (isImage || isPdf) {
       reader.onload = (ev) => {
         const resultStr = String(ev.target?.result || '');
         setFileBase64(resultStr);
-        setImagePreviewUrl(resultStr);
-        setInvoiceText(''); // Will trigger backend OCR pipeline
+        setImagePreviewUrl(isImage ? resultStr : null);
+        setInvoiceText(''); // Direct multimodal document understanding pipeline
       };
       reader.readAsDataURL(file);
     } else {
@@ -251,9 +253,14 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
     }
 
     // Verify all items have name, batch and expiry
+    const invalidPhrases = /^(?:BRANCH|BANK|A\/C\s*NO|ACCOUNT|IFSC|GSTIN|INVOICE\s*NO|CUSTOMER|TOTAL|TAX\s*SUMMARY|DECLARATION)/i;
     for (let i = 0; i < items.length; i++) {
       if (!items[i].name.trim()) {
         setError(`Item #${i + 1} is missing a product name`);
+        return;
+      }
+      if (invalidPhrases.test(items[i].name.trim())) {
+        setError(`Item #${i + 1} ("${items[i].name}") appears to be invoice header/bank information. Please remove or correct this row.`);
         return;
       }
       if (!items[i].batchNumber.trim()) {

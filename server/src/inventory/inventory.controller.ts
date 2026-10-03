@@ -11,6 +11,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
 import { InventoryService } from './inventory.service.js';
 import { UniversalInvoiceParserService } from './universal-invoice-parser.service.js';
+import { DocumentExtractionService } from './document-extraction/document-extraction.service.js';
 import { prisma } from '../lib/prisma.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
@@ -287,9 +288,6 @@ inventoryRouter.post('/suppliers', async (req: AuthenticatedRequest, res, next) 
 });
 
 // ------------------------------------------------------------------------------
-// Universal Purchase Invoice Importer (Extraction & Confirmation)
-// ------------------------------------------------------------------------------
-
 // ------------------------------------------------------------------------------
 // Universal Purchase Invoice Importer (Extraction & Confirmation)
 // ------------------------------------------------------------------------------
@@ -302,27 +300,7 @@ const parseInvoiceHandler = async (req: AuthenticatedRequest, res: any, next: an
     let rawText = (typeof body.content === 'string' ? body.content : '') ||
                   (typeof body.invoiceText === 'string' ? body.invoiceText : '');
     const fileBase64 = typeof body.fileBase64 === 'string' ? body.fileBase64 : '';
-
-    // If an image base64 was uploaded and text is not directly pasted/provided
-    if (fileBase64 && (!rawText || rawText.trim().length < 5 || rawText.startsWith('[Image File Attached:') || rawText.startsWith('INVOICE:'))) {
-      try {
-        const ocrText = await UniversalInvoiceParserService.recognizeImage(fileBase64);
-        if (ocrText && ocrText.trim().length > 0) {
-          rawText = ocrText;
-        }
-      } catch (ocrErr: any) {
-        console.error('[Invoice OCR Error]:', ocrErr);
-        return res.status(422).json({
-          error: `OCR extraction failed: ${ocrErr.message || 'Unable to recognize text from uploaded image'}`
-        });
-      }
-    }
-
-    if (!rawText || rawText.trim().length === 0) {
-      return res.status(400).json({
-        error: 'No invoice text or readable image file was provided for extraction',
-      });
-    }
+    const fileName = typeof body.fileName === 'string' ? body.fileName : '';
 
     // Build catalogue for fuzzy matching
     let catalogue: Array<{ id: string; name: string; genericName?: string | null; type: 'medicine' | 'item' }> = [];
@@ -350,7 +328,61 @@ const parseInvoiceHandler = async (req: AuthenticatedRequest, res: any, next: an
       id: p.id,
     }));
 
-    const result = await UniversalInvoiceParserService.parseInvoiceText(rawText, practiceId, catalogue, existingKeys);
+    // If an image or PDF base64 document was uploaded, pass the document directly to the extraction engine
+    if (fileBase64 && fileBase64.trim().length > 10) {
+      try {
+        let mimeType = 'image/jpeg';
+        let cleanBase64 = fileBase64;
+
+        if (fileBase64.startsWith('data:')) {
+          const match = fileBase64.match(/^data:([^;]+);base64,/);
+          if (match && match[1]) {
+            mimeType = match[1];
+          }
+          cleanBase64 = fileBase64.split(',')[1] || '';
+        } else if (fileName.toLowerCase().endsWith('.pdf')) {
+          mimeType = 'application/pdf';
+        } else if (fileName.toLowerCase().endsWith('.png')) {
+          mimeType = 'image/png';
+        } else if (fileName.toLowerCase().endsWith('.webp')) {
+          mimeType = 'image/webp';
+        }
+
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        if (buffer.length === 0) {
+          return res.status(400).json({ error: 'Uploaded document data is empty or invalid' });
+        }
+
+        const result = await DocumentExtractionService.extractDocument(
+          buffer,
+          mimeType,
+          practiceId,
+          catalogue,
+          existingKeys
+        );
+
+        return res.status(200).json(result);
+      } catch (docErr: any) {
+        console.error('[Document Extraction Error]:', docErr);
+        return res.status(422).json({
+          error: `Document extraction failed: ${docErr.message || 'Unable to process document'}`
+        });
+      }
+    }
+
+    // Otherwise, process plain / structured text input
+    if (!rawText || rawText.trim().length === 0) {
+      return res.status(400).json({
+        error: 'No invoice document or readable text was provided for extraction',
+      });
+    }
+
+    const result = await UniversalInvoiceParserService.parseInvoiceText(
+      rawText,
+      practiceId,
+      catalogue,
+      existingKeys
+    );
     res.status(200).json(result);
   } catch (err) {
     next(err);

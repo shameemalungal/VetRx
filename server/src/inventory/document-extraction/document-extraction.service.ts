@@ -155,8 +155,17 @@ export class DocumentExtractionService {
       }
     }
 
+    // Filter out non-product noise rows
+    const invalidNamePhrases = /^(?:BRANCH|BANK|A\/C\s*NO|ACCOUNT|IFSC|GSTIN|INVOICE\s*NO|CUSTOMER|TOTAL|TAX\s*SUMMARY|DECLARATION|TERMS|CONDITIONS|SIGNATURE|NOTE:)/i;
+    const validLineItems = doc.lineItems.filter((it) => {
+      const name = (it.itemName || '').trim();
+      if (!name || name.length < 2) return false;
+      if (invalidNamePhrases.test(name)) return false;
+      return true;
+    });
+
     // Line Items Normalization & Medicine Master Matching
-    const items: ExtractedInvoiceItemDTO[] = doc.lineItems.map((raw, idx) => {
+    const items: ExtractedInvoiceItemDTO[] = validLineItems.map((raw, idx) => {
       const matched = this.matchWithCatalogue(raw.itemName, existingCatalogue);
       const calculatedLineTotal =
         typeof raw.taxableValue === 'number' && raw.taxableValue > 0
