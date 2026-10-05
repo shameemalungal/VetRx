@@ -53,13 +53,20 @@ export type InventoryCategory =
 export interface InventoryBatch {
   id: string;
   itemId: string;
+  inventoryItemId?: string;
+  itemName?: string;
+  itemCategory?: InventoryCategory;
   batchNumber: string;
   manufacturingDate?: string | null;
   expiryDate: string;
   quantity: number;
+  currentQuantity?: number;
+  initialQuantity?: number;
   unitCost: number;
+  purchaseRate?: number;
   mrp?: number | null;
   locationId?: string | null;
+  locationName?: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -69,7 +76,7 @@ export interface InventoryBatch {
 export interface InventoryItem {
   id: string;
   practiceId: string;
-  medicineId?: number | null;
+  medicineId?: number | string | null;
   category: InventoryCategory;
   name: string;
   genericName?: string | null;
@@ -87,6 +94,9 @@ export interface InventoryItem {
   updatedAt: string;
   batches?: InventoryBatch[];
   totalStock?: number;
+  validStock?: number;
+  currentStock?: number;
+  batchesCount?: number;
   stockStatus?: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
 
@@ -225,6 +235,7 @@ export interface InventoryDashboardData {
 export interface ParsedInvoiceItemData {
   lineNumber?: number;
   name: string;
+  genericName?: string | null;
   category: InventoryCategory;
   presentation?: string | null;
   packing?: string | null;
@@ -522,6 +533,7 @@ export const inventoryApi = {
       presentation?: string;
       packSize?: string;
       stockUnit?: string;
+      manufacturer?: string;
       batchNumber: string;
       manufacturingDate?: string;
       expiryDate: string;
@@ -539,6 +551,16 @@ export const inventoryApi = {
         body: JSON.stringify(data),
       }
     ),
+
+  // Idempotent backfill: links every MEDICINE InventoryItem to a Medicine master.
+  syncCatalogues: () =>
+    inventoryRequest<{
+      success: boolean;
+      totalInventoryItems: number;
+      medicineItemsCount: number;
+      linkedMedicinesCount: number;
+      consumableItemsCount: number;
+    }>('/api/inventory/sync-catalogues', { method: 'POST' }),
 
   // Alerts
   getAlerts: async () => {
@@ -575,13 +597,14 @@ export const inventoryApi = {
 
   deductInvoiceStock: (
     invoiceId: string,
-    items: Array<{ itemId?: string; medicineId?: number; medicineName?: string; quantity: number }>
+    items: Array<{ itemId?: string; medicineId?: number | string; medicineName?: string; description?: string; quantity: number }>,
+    invoiceNumber?: string
   ) =>
     inventoryRequest<{ success: boolean; deductions: any[] }>(
       '/api/inventory/invoices/deduct',
       {
         method: 'POST',
-        body: JSON.stringify({ invoiceId, items }),
+        body: JSON.stringify({ invoiceId, invoiceNumber, items }),
       }
     ),
 

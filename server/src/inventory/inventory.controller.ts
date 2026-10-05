@@ -415,6 +415,8 @@ inventoryRouter.post('/purchases/confirm', async (req: AuthenticatedRequest, res
           category: z.enum(['MEDICINE', 'CONSUMABLE', 'LAB_MATERIAL', 'SURGICAL_MATERIAL', 'OTHER']).default('MEDICINE'),
           genericName: z.string().nullable().optional(),
           dosageForm: z.string().nullable().optional(),
+          strength: z.string().nullable().optional(),
+          manufacturer: z.string().nullable().optional(),
           packSize: z.string().nullable().optional(),
           stockUnit: z.string().nullable().optional(),
           presentation: z.string().nullable().optional(),
@@ -502,16 +504,37 @@ inventoryRouter.post('/prescriptions/resolve-stock', async (req: AuthenticatedRe
     const schema = z.object({
       items: z.array(
         z.object({
-          medicineId: z.string().nullable().optional(),
-          brandName: z.string().min(1),
-          totalQuantity: z.number().min(0),
-        })
+          medicineId: z.union([z.string(), z.number()]).nullable().optional().transform((v) => (v !== undefined && v !== null ? String(v) : null)),
+          brandName: z.string().optional(),
+          medicineName: z.string().optional(),
+          totalQuantity: z.number().optional(),
+          quantity: z.number().optional(),
+        }).transform((item) => ({
+          medicineId: item.medicineId || null,
+          brandName: (item.brandName || item.medicineName || '').trim(),
+          totalQuantity: item.totalQuantity !== undefined ? item.totalQuantity : (item.quantity !== undefined ? item.quantity : 1),
+        }))
       ),
     });
 
     const { items } = schema.parse(req.body);
-    const resolution = await InventoryService.resolvePrescriptionStock(practiceId, items);
-    res.status(200).json(resolution);
+    const rawResolutions = await InventoryService.resolvePrescriptionStock(practiceId, items);
+
+    // Map resolutions with both frontend property names for complete interoperability
+    const resolutions = rawResolutions.map((r) => ({
+      ...r,
+      medicineName: r.brandName,
+      internalStockQuantity: r.internalQuantity,
+      batchesUsed: r.batches.map((b) => ({
+        batchId: b.batchId,
+        batchNumber: b.batchNumber,
+        quantity: b.allocatedQuantity,
+        expiryDate: b.expiryDate,
+      })),
+    }));
+
+    const hasExternalPurchases = resolutions.some((r) => r.status === 'EXTERNAL' || r.status === 'PARTIAL');
+    res.status(200).json({ resolutions, hasExternalPurchases });
   } catch (err) {
     next(err);
   }
@@ -525,22 +548,28 @@ inventoryRouter.post('/invoices/deduct', async (req: AuthenticatedRequest, res, 
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
-      invoiceId: z.string().min(1),
-      invoiceNumber: z.string().min(1),
+      invoiceId: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      invoiceNumber: z.string().optional(),
       items: z.array(
         z.object({
-          medicineId: z.string().nullable().optional(),
-          description: z.string().min(1),
+          medicineId: z.union([z.string(), z.number()]).nullable().optional().transform((v) => (v !== undefined && v !== null ? String(v) : null)),
+          description: z.string().optional(),
+          medicineName: z.string().optional(),
           quantity: z.number().positive(),
-        })
+        }).transform((item) => ({
+          medicineId: item.medicineId || null,
+          description: (item.description || item.medicineName || 'Medicine Item').trim(),
+          quantity: item.quantity,
+        }))
       ),
     });
 
     const data = schema.parse(req.body);
+    const invNum = data.invoiceNumber || `INV-${data.invoiceId}`;
     const result = await InventoryService.deductInvoiceStock(
       practiceId,
       data.invoiceId,
-      data.invoiceNumber,
+      invNum,
       data.items,
       req.user?.id || null
     );
@@ -554,15 +583,16 @@ inventoryRouter.post('/invoices/reverse', async (req: AuthenticatedRequest, res,
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
-      invoiceId: z.string().min(1),
-      invoiceNumber: z.string().min(1),
+      invoiceId: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      invoiceNumber: z.string().optional(),
     });
 
     const data = schema.parse(req.body);
+    const invNum = data.invoiceNumber || `INV-${data.invoiceId}`;
     const result = await InventoryService.reverseInvoiceStock(
       practiceId,
       data.invoiceId,
-      data.invoiceNumber,
+      invNum,
       req.user?.id || null
     );
     res.status(200).json(result);
@@ -570,3 +600,14 @@ inventoryRouter.post('/invoices/reverse', async (req: AuthenticatedRequest, res,
     next(err);
   }
 });
+
+inventoryRouter.post('/sync-catalogues', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const result = await InventoryService.syncInventoryCatalogues(practiceId);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+

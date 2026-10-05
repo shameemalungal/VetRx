@@ -48,6 +48,88 @@ export class InventoryService {
       isActive?: boolean;
     } = {}
   ): Promise<InventoryItemDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryItem) {
+      try {
+        const where: any = { practiceId };
+        if (filters.category && filters.category !== 'ALL' && filters.category !== 'All') {
+          where.category = filters.category.toUpperCase();
+        }
+        if (filters.barcode && filters.barcode.trim()) {
+          where.barcode = filters.barcode.trim();
+        }
+        if (filters.isActive !== undefined) {
+          where.isActive = filters.isActive;
+        }
+        if (filters.search && filters.search.trim()) {
+          const q = filters.search.trim();
+          where.OR = [
+            { name: { contains: q, mode: 'insensitive' } },
+            { genericName: { contains: q, mode: 'insensitive' } },
+            { manufacturer: { contains: q, mode: 'insensitive' } },
+            { barcode: { contains: q, mode: 'insensitive' } },
+          ];
+        }
+
+        const dbItems = await prisma.inventoryItem.findMany({
+          where,
+          include: {
+            batches: true,
+          },
+          orderBy: { name: 'asc' },
+        });
+
+        if (dbItems.length > 0) {
+          const today = new Date().toISOString().split('T')[0];
+          let mapped: InventoryItemDTO[] = dbItems.map((item) => {
+            const itemBatches = item.batches || [];
+            const currentStock = itemBatches.reduce((acc, b) => acc + (b.currentQuantity || 0), 0);
+            const validStock = itemBatches
+              .filter((b) => b.expiryDate.toISOString().split('T')[0] >= today)
+              .reduce((acc, b) => acc + (b.currentQuantity || 0), 0);
+
+            let stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' = 'IN_STOCK';
+            if (validStock === 0) {
+              stockStatus = 'OUT_OF_STOCK';
+            } else if (validStock <= item.minimumStockLevel) {
+              stockStatus = 'LOW_STOCK';
+            }
+
+            return {
+              id: item.id,
+              practiceId: item.practiceId,
+              category: item.category as any,
+              name: item.name,
+              genericName: item.genericName,
+              strength: item.strength,
+              dosageForm: item.dosageForm,
+              presentation: item.presentation,
+              packSize: item.packSize,
+              stockUnit: item.stockUnit,
+              manufacturer: item.manufacturer,
+              minimumStockLevel: item.minimumStockLevel,
+              targetStockLevel: item.targetStockLevel,
+              barcode: item.barcode,
+              medicineId: item.medicineId,
+              isActive: item.isActive,
+              currentStock,
+              validStock,
+              stockStatus,
+              batchesCount: itemBatches.length,
+              createdAt: item.createdAt.toISOString(),
+              updatedAt: item.updatedAt.toISOString(),
+            };
+          });
+
+          if (filters.stockStatus && filters.stockStatus !== 'ALL') {
+            mapped = mapped.filter((i) => i.stockStatus === filters.stockStatus);
+          }
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('[InventoryService.listItems] Prisma error, using fallback:', err);
+      }
+    }
+
     const items = this.getItemsStore(practiceId);
     const batches = this.getBatchesStore(practiceId);
     const today = new Date().toISOString().split('T')[0];
@@ -134,13 +216,39 @@ export class InventoryService {
       isActive?: boolean;
     }
   ): Promise<InventoryItemDTO> {
-    const items = this.getItemsStore(practiceId);
-
     const minLevel = data.minimumStockLevel !== undefined ? Number(data.minimumStockLevel) : 5;
     const targetLevel = data.targetStockLevel !== undefined ? Number(data.targetStockLevel) : 20;
 
+    let dbItem: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryItem) {
+      try {
+        dbItem = await prisma.inventoryItem.create({
+          data: {
+            practiceId,
+            category: data.category as any,
+            name: data.name.trim(),
+            genericName: data.genericName?.trim() || null,
+            strength: data.strength?.trim() || null,
+            dosageForm: data.dosageForm?.trim() || null,
+            presentation: data.presentation?.trim() || null,
+            packSize: data.packSize?.trim() || null,
+            stockUnit: data.stockUnit?.trim() || 'Unit',
+            manufacturer: data.manufacturer?.trim() || null,
+            minimumStockLevel: minLevel,
+            targetStockLevel: targetLevel,
+            barcode: data.barcode?.trim() || null,
+            medicineId: data.medicineId || null,
+            isActive: data.isActive !== undefined ? data.isActive : true,
+          },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.createItem] Prisma error:', err);
+      }
+    }
+
+    const items = this.getItemsStore(practiceId);
     const newItem: InventoryItemDTO = {
-      id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: dbItem?.id || `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       practiceId,
       category: data.category,
       name: data.name.trim(),
@@ -160,8 +268,8 @@ export class InventoryService {
       validStock: 0,
       stockStatus: 'OUT_OF_STOCK',
       batchesCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: dbItem?.createdAt ? dbItem.createdAt.toISOString() : new Date().toISOString(),
+      updatedAt: dbItem?.updatedAt ? dbItem.updatedAt.toISOString() : new Date().toISOString(),
     };
 
     items.push(newItem);
@@ -225,6 +333,70 @@ export class InventoryService {
       onlyExpired?: boolean;
     } = {}
   ): Promise<InventoryBatchDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const where: any = { practiceId };
+        if (filters.itemId) where.inventoryItemId = filters.itemId;
+        const today = new Date().toISOString().split('T')[0];
+
+        const dbBatches = await prisma.inventoryBatch.findMany({
+          where,
+          include: { inventoryItem: true },
+          orderBy: { expiryDate: 'asc' },
+        });
+
+        if (dbBatches.length > 0) {
+          let mapped: InventoryBatchDTO[] = dbBatches.map((b) => {
+            const expStr = b.expiryDate.toISOString().split('T')[0];
+            const isExpired = expStr < today;
+            const daysToExpiry = Math.ceil(
+              (new Date(b.expiryDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)
+            );
+
+            let expiryStatus: 'OK' | 'EXPIRING_SOON' | 'CRITICAL' | 'EXPIRED' = 'OK';
+            if (isExpired) {
+              expiryStatus = 'EXPIRED';
+            } else if (daysToExpiry <= 30) {
+              expiryStatus = 'CRITICAL';
+            } else if (daysToExpiry <= 90) {
+              expiryStatus = 'EXPIRING_SOON';
+            }
+
+            return {
+              id: b.id,
+              practiceId: b.practiceId,
+              inventoryItemId: b.inventoryItemId,
+              itemName: b.inventoryItem?.name || 'Unknown Item',
+              itemCategory: (b.inventoryItem?.category as any) || 'OTHER',
+              batchNumber: b.batchNumber,
+              manufacturingDate: b.manufacturingDate ? b.manufacturingDate.toISOString().split('T')[0] : null,
+              expiryDate: expStr,
+              currentQuantity: b.currentQuantity,
+              initialQuantity: b.initialQuantity,
+              purchaseRate: b.purchaseRate,
+              mrp: b.mrp,
+              locationId: b.locationId,
+              isExpired,
+              daysToExpiry,
+              expiryStatus,
+              createdAt: b.createdAt.toISOString(),
+              updatedAt: b.updatedAt.toISOString(),
+            };
+          });
+
+          if (filters.onlyValid) {
+            mapped = mapped.filter((b) => !b.isExpired && b.currentQuantity > 0);
+          }
+          if (filters.onlyExpired) {
+            mapped = mapped.filter((b) => b.isExpired);
+          }
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('[InventoryService.listBatches] Prisma error, using fallback:', err);
+      }
+    }
+
     const batches = this.getBatchesStore(practiceId);
     const items = this.getItemsStore(practiceId);
     const itemMap = new Map(items.map((i) => [i.id, i]));
@@ -308,9 +480,31 @@ export class InventoryService {
     const rate = Number(data.purchaseRate) || 0;
     const mrp = Number(data.mrp) || Math.round(rate * 1.35);
 
+    let dbBatch: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        dbBatch = await prisma.inventoryBatch.create({
+          data: {
+            practiceId,
+            inventoryItemId: item.id,
+            batchNumber: data.batchNumber.trim().toUpperCase(),
+            manufacturingDate: data.manufacturingDate ? new Date(data.manufacturingDate) : null,
+            expiryDate: new Date(data.expiryDate),
+            currentQuantity: qty,
+            initialQuantity: qty,
+            purchaseRate: rate,
+            mrp,
+            locationId: null,
+          },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.addOpeningStock] Prisma batch error:', err);
+      }
+    }
+
     // Create batch
     const newBatch: InventoryBatchDTO = {
-      id: `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: dbBatch?.id || `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       practiceId,
       inventoryItemId: item.id,
       itemName: item.name,
@@ -324,8 +518,8 @@ export class InventoryService {
       mrp,
       locationId: data.locationId || 'loc_main',
       locationName: 'Main Stock',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: dbBatch?.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: dbBatch?.updatedAt?.toISOString() || new Date().toISOString(),
     };
 
     batches.push(newBatch);
@@ -368,16 +562,46 @@ export class InventoryService {
       performedByUserId?: string | null;
     }
   ): Promise<InventoryTransactionDTO> {
+    let dbTx: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryTransaction) {
+      try {
+        let validBatchId = data.batchId;
+        if (validBatchId && validBatchId.startsWith('batch_')) {
+          validBatchId = null;
+        }
+
+        dbTx = await prisma.inventoryTransaction.create({
+          data: {
+            practiceId,
+            itemId: data.itemId,
+            batchId: validBatchId || null,
+            transactionType: data.transactionType as any,
+            quantityChange: data.quantityChange,
+            quantityBefore: data.quantityBefore,
+            quantityAfter: data.quantityAfter,
+            unitCost: data.unitCost,
+            referenceType: data.referenceType || null,
+            referenceId: data.referenceId || null,
+            reason: data.reason || null,
+            performedByUserId: data.performedByUserId || null,
+          },
+          include: { item: true },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.recordTransaction] Prisma error:', err);
+      }
+    }
+
     const transactions = this.getTransactionsStore(practiceId);
     const items = this.getItemsStore(practiceId);
     const item = items.find((i) => i.id === data.itemId);
 
     const tx: InventoryTransactionDTO = {
-      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: dbTx?.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       practiceId,
       itemId: data.itemId,
-      itemName: item?.name || 'Unknown Item',
-      itemCategory: item?.category || 'OTHER',
+      itemName: dbTx?.item?.name || item?.name || 'Unknown Item',
+      itemCategory: (dbTx?.item?.category as any) || item?.category || 'OTHER',
       batchId: data.batchId || null,
       transactionType: data.transactionType,
       quantityChange: data.quantityChange,
@@ -388,7 +612,7 @@ export class InventoryService {
       referenceId: data.referenceId || null,
       reason: data.reason || null,
       performedByUserId: data.performedByUserId || null,
-      createdAt: new Date().toISOString(),
+      createdAt: dbTx?.createdAt?.toISOString() || new Date().toISOString(),
     };
 
     transactions.push(tx);
@@ -407,6 +631,48 @@ export class InventoryService {
       endDate?: string;
     } = {}
   ): Promise<InventoryTransactionDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryTransaction) {
+      try {
+        const where: any = { practiceId };
+        if (filters.itemId) where.itemId = filters.itemId;
+        if (filters.batchId) where.batchId = filters.batchId;
+        if (filters.transactionType && filters.transactionType !== 'ALL') {
+          where.transactionType = filters.transactionType;
+        }
+        if (filters.startDate) where.createdAt = { ...(where.createdAt || {}), gte: new Date(filters.startDate) };
+        if (filters.endDate) where.createdAt = { ...(where.createdAt || {}), lte: new Date(filters.endDate) };
+
+        const dbTxs = await prisma.inventoryTransaction.findMany({
+          where,
+          include: { item: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (dbTxs.length > 0) {
+          return dbTxs.map((t) => ({
+            id: t.id,
+            practiceId: t.practiceId,
+            itemId: t.itemId,
+            itemName: t.item?.name || 'Unknown Item',
+            itemCategory: (t.item?.category as any) || 'OTHER',
+            batchId: t.batchId,
+            transactionType: t.transactionType as any,
+            quantityChange: t.quantityChange,
+            quantityBefore: t.quantityBefore,
+            quantityAfter: t.quantityAfter,
+            unitCost: t.unitCost,
+            referenceType: t.referenceType,
+            referenceId: t.referenceId,
+            reason: t.reason,
+            performedByUserId: t.performedByUserId,
+            createdAt: t.createdAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        console.warn('[InventoryService.listTransactions] Prisma error, using fallback:', err);
+      }
+    }
+
     let result = this.getTransactionsStore(practiceId);
 
     if (filters.itemId) {
@@ -444,7 +710,7 @@ export class InventoryService {
     }
   ): Promise<{ transaction: InventoryTransactionDTO }> {
     const item = await this.getItemById(data.itemId, practiceId);
-    const batches = this.getBatchesStore(practiceId);
+    const batches = await this.listBatches(practiceId);
 
     if (!data.reason || !data.reason.trim()) {
       throw new AppError(400, 'REASON_REQUIRED', 'A valid reason is required for manual stock adjustment.');
@@ -473,6 +739,17 @@ export class InventoryService {
       batch.currentQuantity = qtyAfter;
       batch.updatedAt = new Date().toISOString();
       this.mockBatches.set(practiceId, batches);
+
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch && !batch.id.startsWith('batch_')) {
+        try {
+          await prisma.inventoryBatch.update({
+            where: { id: batch.id },
+            data: { currentQuantity: qtyAfter },
+          });
+        } catch (err) {
+          console.warn('[InventoryService.adjustStock] Prisma batch update error:', err);
+        }
+      }
     }
 
     let txType: InventoryTransactionDTO['transactionType'] = 'STOCK_ADJUSTMENT';
@@ -513,7 +790,7 @@ export class InventoryService {
     performedByUserId?: string | null
   ): Promise<{ adjustmentsCount: number; transactions: InventoryTransactionDTO[] }> {
     const transactions: InventoryTransactionDTO[] = [];
-    const batches = this.getBatchesStore(practiceId);
+    const batches = await this.listBatches(practiceId);
 
     for (const item of items) {
       const batch = item.batchId ? batches.find((b) => b.id === item.batchId) : null;
@@ -526,6 +803,17 @@ export class InventoryService {
       if (difference !== 0) {
         batch.currentQuantity = physical;
         batch.updatedAt = new Date().toISOString();
+
+        if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch && !batch.id.startsWith('batch_')) {
+          try {
+            await prisma.inventoryBatch.update({
+              where: { id: batch.id },
+              data: { currentQuantity: physical },
+            });
+          } catch (err) {
+            console.warn('[InventoryService.performStocktake] Prisma batch update error:', err);
+          }
+        }
 
         const tx = await this.recordTransaction(practiceId, {
           itemId: item.itemId,
@@ -553,6 +841,44 @@ export class InventoryService {
   // --------------------------------------------------------------------------
 
   static async listSuppliers(practiceId: string, search?: string): Promise<SupplierDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.supplier) {
+      try {
+        const where: any = { practiceId };
+        if (search && search.trim()) {
+          const q = search.trim();
+          where.OR = [
+            { name: { contains: q, mode: 'insensitive' } },
+            { gstin: { contains: q, mode: 'insensitive' } },
+            { phone: { contains: q, mode: 'insensitive' } },
+          ];
+        }
+        const dbSuppliers = await prisma.supplier.findMany({
+          where,
+          include: { purchases: true },
+          orderBy: { name: 'asc' },
+        });
+        if (dbSuppliers.length > 0) {
+          return dbSuppliers.map((s) => ({
+            id: s.id,
+            practiceId: s.practiceId,
+            name: s.name,
+            gstin: s.gstin,
+            address: s.address,
+            phone: s.phone,
+            email: s.email,
+            notes: s.notes,
+            isActive: s.isActive,
+            totalPurchasesCount: s.purchases.length,
+            totalPurchasesAmount: s.purchases.reduce((sum, p) => sum + (p.totalAmount || 0), 0),
+            createdAt: s.createdAt.toISOString(),
+            updatedAt: s.updatedAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        console.warn('[InventoryService.listSuppliers] Prisma error, using fallback:', err);
+      }
+    }
+
     let result = this.getSuppliersStore(practiceId);
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
@@ -577,9 +903,29 @@ export class InventoryService {
       notes?: string | null;
     }
   ): Promise<SupplierDTO> {
+    let dbSupplier: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.supplier) {
+      try {
+        dbSupplier = await prisma.supplier.create({
+          data: {
+            practiceId,
+            name: data.name.trim(),
+            gstin: data.gstin?.trim() || null,
+            address: data.address?.trim() || null,
+            phone: data.phone?.trim() || null,
+            email: data.email?.trim() || null,
+            notes: data.notes?.trim() || null,
+            isActive: true,
+          },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.createSupplier] Prisma error:', err);
+      }
+    }
+
     const suppliers = this.getSuppliersStore(practiceId);
     const newSupplier: SupplierDTO = {
-      id: `sup_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: dbSupplier?.id || `sup_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       practiceId,
       name: data.name.trim(),
       gstin: data.gstin?.trim() || null,
@@ -590,8 +936,8 @@ export class InventoryService {
       isActive: true,
       totalPurchasesCount: 0,
       totalPurchasesAmount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: dbSupplier?.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: dbSupplier?.updatedAt?.toISOString() || new Date().toISOString(),
     };
 
     suppliers.push(newSupplier);
@@ -633,60 +979,149 @@ export class InventoryService {
       data.supplierGstin ||
       null;
 
-    let supplier = this.getSuppliersStore(practiceId).find(
-      (s) => s.name.toLowerCase() === supplierName.trim().toLowerCase()
-    );
+    let supplier: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.supplier) {
+      try {
+        supplier = await prisma.supplier.findFirst({
+          where: {
+            practiceId,
+            name: { equals: supplierName.trim(), mode: 'insensitive' },
+          },
+        });
+        if (!supplier) {
+          supplier = await prisma.supplier.create({
+            data: {
+              practiceId,
+              name: supplierName.trim(),
+              gstin: supplierGstin,
+              isActive: true,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('[InventoryService.confirmPurchaseInvoice] Prisma supplier error:', err);
+      }
+    }
+
     if (!supplier) {
-      supplier = await this.createSupplier(practiceId, {
-        name: supplierName.trim(),
-        gstin: supplierGstin,
-      });
+      supplier = this.getSuppliersStore(practiceId).find(
+        (s) => s.name.toLowerCase() === supplierName.trim().toLowerCase()
+      );
+      if (!supplier) {
+        supplier = await this.createSupplier(practiceId, {
+          name: supplierName.trim(),
+          gstin: supplierGstin,
+        });
+      }
     }
 
     const purchases = this.getPurchasesStore(practiceId);
     const batches = this.getBatchesStore(practiceId);
-    const itemsStore = this.getItemsStore(practiceId);
 
     const purchaseInvoiceId = `pur_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     let grandTotal = 0;
     const invoiceItems: PurchaseInvoiceDTO['items'] = [];
+    const dbInvoiceItemsData: any[] = [];
 
     // 2. Process each confirmed line item
     for (const itemData of data.items) {
       let inventoryItemId = itemData.matchedItemId;
 
-      // If item is a medicine and user requested creating a new Medicine Master
-      if (itemData.category === 'MEDICINE' && itemData.createNewMedicineMaster && !itemData.matchedMedicineId) {
-        if (process.env.VETRX_FAST_TEST !== '1') {
-          try {
+      // 1. If item is a medicine, ensure a linked Medicine Master always exists (Unified Catalogue)
+      let resolvedMedicineId: string | null = itemData.matchedMedicineId ? String(itemData.matchedMedicineId) : null;
+      if (itemData.category === 'MEDICINE' && !resolvedMedicineId && process.env.VETRX_FAST_TEST !== '1' && prisma?.medicine) {
+        try {
+          const trimmedMedName = itemData.name.trim();
+          const existingMed = await prisma.medicine.findFirst({
+            where: {
+              practiceId,
+              name: { equals: trimmedMedName, mode: 'insensitive' },
+            },
+          });
+          if (existingMed) {
+            resolvedMedicineId = existingMed.id;
+          } else {
             const newMed = await prisma.medicine.create({
               data: {
                 practiceId,
-                name: itemData.name.trim(),
-                genericName: itemData.genericName || null,
+                name: trimmedMedName,
+                genericName: itemData.genericName?.trim() || null,
                 category: 'Allopathy',
-                form: itemData.dosageForm || 'Tablet',
-                unitPrice: itemData.purchaseRate,
+                form: itemData.dosageForm?.trim() || itemData.presentation?.trim() || 'Tablet',
+                strength: itemData.strength?.trim() || null,
+                unitPrice: Number(itemData.purchaseRate) || 0,
+                isActive: true,
               },
             });
-            itemData.matchedMedicineId = newMed.id;
-          } catch {}
+            resolvedMedicineId = newMed.id;
+          }
+          itemData.matchedMedicineId = resolvedMedicineId;
+        } catch (err) {
+          console.warn('[InventoryService.confirmPurchaseInvoice] Medicine master error:', err);
         }
       }
 
-      // If no inventory item exists, create InventoryItem master record
+      // 2. If no inventory item ID was provided, search for existing item by name and category
+      if (!inventoryItemId && process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryItem) {
+        try {
+          const trimmedItemName = itemData.name.trim();
+          const existingInv = await prisma.inventoryItem.findFirst({
+            where: {
+              practiceId,
+              name: { equals: trimmedItemName, mode: 'insensitive' },
+              category: itemData.category as any,
+            },
+          });
+          if (existingInv) {
+            inventoryItemId = existingInv.id;
+            const invUpdates: any = {};
+            if (!existingInv.medicineId && resolvedMedicineId) {
+              invUpdates.medicineId = resolvedMedicineId;
+            }
+            if (!existingInv.manufacturer && itemData.manufacturer) {
+              invUpdates.manufacturer = itemData.manufacturer.trim();
+            }
+            if (Object.keys(invUpdates).length > 0) {
+              await prisma.inventoryItem.update({
+                where: { id: existingInv.id },
+                data: invUpdates,
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[InventoryService.confirmPurchaseInvoice] Find item error:', err);
+        }
+      }
+
+      // 2b. In-memory check fallback if inventoryItemId still empty
+      if (!inventoryItemId) {
+        const memItems = this.getItemsStore(practiceId);
+        const memExisting = memItems.find(
+          (i) => i.name.trim().toLowerCase() === itemData.name.trim().toLowerCase() && i.category === itemData.category
+        );
+        if (memExisting) {
+          inventoryItemId = memExisting.id;
+          if (!memExisting.medicineId && resolvedMedicineId) {
+            memExisting.medicineId = resolvedMedicineId;
+          }
+        }
+      }
+
+      // 3. Create persistent InventoryItem if not already existing
       if (!inventoryItemId) {
         const createdItem = await this.createItem(practiceId, {
           category: itemData.category,
           name: itemData.name.trim(),
-          genericName: itemData.genericName || null,
-          dosageForm: itemData.dosageForm || null,
-          packSize: itemData.packSize || null,
-          stockUnit: itemData.stockUnit || 'Unit',
-          presentation: itemData.presentation || null,
+          genericName: itemData.genericName?.trim() || null,
+          strength: itemData.strength?.trim() || null,
+          dosageForm: itemData.dosageForm?.trim() || null,
+          packSize: itemData.packSize?.trim() || null,
+          stockUnit: itemData.stockUnit?.trim() || (itemData.category === 'MEDICINE' ? 'Strip' : 'Unit'),
+          presentation: itemData.presentation?.trim() || null,
+          manufacturer: itemData.manufacturer?.trim() || null,
           minimumStockLevel: 5,
           targetStockLevel: 20,
-          medicineId: itemData.matchedMedicineId || null,
+          medicineId: resolvedMedicineId || null,
         });
         inventoryItemId = createdItem.id;
       }
@@ -697,24 +1132,53 @@ export class InventoryService {
       const lineTotal = Math.round(qty * rate * 100) / 100;
       grandTotal += lineTotal;
 
-      // Create Stock Batch
+      const expiryDateObj = itemData.expiryDate ? new Date(itemData.expiryDate) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
+      const validExpiry = isNaN(expiryDateObj.getTime()) ? new Date(Date.now() + 365 * 24 * 3600 * 1000) : expiryDateObj;
+      const mfgDateObj = itemData.manufacturingDate ? new Date(itemData.manufacturingDate) : null;
+      const validMfg = mfgDateObj && !isNaN(mfgDateObj.getTime()) ? mfgDateObj : null;
+
+      let dbBatch: any = null;
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+        try {
+          dbBatch = await prisma.inventoryBatch.create({
+            data: {
+              practiceId,
+              inventoryItemId,
+              batchNumber: (itemData.batchNumber || 'BATCH-001').trim().toUpperCase(),
+              manufacturingDate: validMfg,
+              expiryDate: validExpiry,
+              currentQuantity: qty,
+              initialQuantity: qty,
+              purchaseRate: rate,
+              mrp,
+              locationId: null,
+            },
+          });
+        } catch (err) {
+          console.warn('[InventoryService.confirmPurchaseInvoice] Prisma batch error:', err);
+        }
+      }
+
+      const batchId = dbBatch?.id || `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      // Create Stock Batch in memory
       const newBatch: InventoryBatchDTO = {
-        id: `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        id: batchId,
         practiceId,
         inventoryItemId,
         itemName: itemData.name,
         itemCategory: itemData.category,
         batchNumber: (itemData.batchNumber || 'BATCH-001').trim().toUpperCase(),
         manufacturingDate: itemData.manufacturingDate || null,
-        expiryDate: itemData.expiryDate,
+        expiryDate: validExpiry.toISOString().split('T')[0],
         currentQuantity: qty,
         initialQuantity: qty,
         purchaseRate: rate,
         mrp,
         locationId: 'loc_main',
         locationName: 'Main Stock',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: dbBatch?.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: dbBatch?.updatedAt?.toISOString() || new Date().toISOString(),
       };
       batches.push(newBatch);
 
@@ -729,8 +1193,8 @@ export class InventoryService {
         unitCost: rate,
         referenceType: 'PURCHASE_INVOICE',
         referenceId: purchaseInvoiceId,
-        reason: `Purchase Invoice: ${data.invoiceNumber} from ${data.supplierName}`,
-        performedByUserId: data.performedByUserId || null,
+        reason: `Purchase Invoice: ${data.invoiceNumber} from ${supplierName}`,
+        performedByUserId: actorUserId,
       });
 
       invoiceItems.push({
@@ -748,22 +1212,85 @@ export class InventoryService {
         mrp,
         lineTotal,
       });
+
+      dbInvoiceItemsData.push({
+        inventoryItemId,
+        itemName: itemData.name.trim(),
+        category: itemData.category as any,
+        presentation: itemData.presentation || null,
+        batchNumber: newBatch.batchNumber,
+        manufacturingDate: validMfg,
+        expiryDate: validExpiry,
+        quantity: qty,
+        purchaseRate: rate,
+        mrp,
+        lineTotal,
+      });
+    }
+
+    const totalAmount = Math.round(grandTotal * 100) / 100;
+    const invDateObj = data.invoiceDate ? new Date(data.invoiceDate) : new Date();
+    const validInvDate = isNaN(invDateObj.getTime()) ? new Date() : invDateObj;
+
+    let dbPurchase: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.purchaseInvoice) {
+      try {
+        const existingInv = await prisma.purchaseInvoice.findFirst({
+          where: {
+            practiceId,
+            supplierName: supplierName.trim(),
+            invoiceNumber: data.invoiceNumber.trim(),
+          },
+        });
+
+        if (existingInv) {
+          dbPurchase = await prisma.purchaseInvoice.update({
+            where: { id: existingInv.id },
+            data: {
+              totalAmount: existingInv.totalAmount + totalAmount,
+              items: {
+                create: dbInvoiceItemsData,
+              },
+            },
+            include: { items: true },
+          });
+        } else {
+          dbPurchase = await prisma.purchaseInvoice.create({
+            data: {
+              practiceId,
+              supplierId: supplier?.id && !supplier.id.startsWith('sup_') ? supplier.id : null,
+              supplierName: supplierName.trim(),
+              supplierGstin: supplierGstin,
+              invoiceNumber: data.invoiceNumber.trim(),
+              invoiceDate: validInvDate,
+              totalAmount,
+              notes: data.notes || null,
+              items: {
+                create: dbInvoiceItemsData,
+              },
+            },
+            include: { items: true },
+          });
+        }
+      } catch (err) {
+        console.warn('[InventoryService.confirmPurchaseInvoice] Prisma purchase error:', err);
+      }
     }
 
     const purchaseInvoice: PurchaseInvoiceDTO = {
-      id: purchaseInvoiceId,
+      id: dbPurchase?.id || purchaseInvoiceId,
       practiceId,
       supplierId: supplier.id,
       supplierName: supplier.name,
       supplierGstin: supplier.gstin,
       invoiceNumber: data.invoiceNumber.trim(),
       invoiceDate: data.invoiceDate,
-      totalAmount: Math.round(grandTotal * 100) / 100,
+      totalAmount,
       notes: data.notes || null,
       itemsCount: invoiceItems.length,
       items: invoiceItems,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: dbPurchase?.createdAt?.toISOString() || new Date().toISOString(),
+      updatedAt: dbPurchase?.updatedAt?.toISOString() || new Date().toISOString(),
     };
 
     purchases.push(purchaseInvoice);
@@ -778,6 +1305,59 @@ export class InventoryService {
   }
 
   static async listPurchases(practiceId: string, search?: string): Promise<PurchaseInvoiceDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.purchaseInvoice) {
+      try {
+        const where: any = { practiceId };
+        if (search && search.trim()) {
+          const q = search.trim();
+          where.OR = [
+            { invoiceNumber: { contains: q, mode: 'insensitive' } },
+            { supplierName: { contains: q, mode: 'insensitive' } },
+          ];
+        }
+
+        const dbPurchases = await prisma.purchaseInvoice.findMany({
+          where,
+          include: { items: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (dbPurchases.length > 0) {
+          return dbPurchases.map((p) => ({
+            id: p.id,
+            practiceId: p.practiceId,
+            supplierId: p.supplierId || '',
+            supplierName: p.supplierName,
+            supplierGstin: p.supplierGstin,
+            invoiceNumber: p.invoiceNumber,
+            invoiceDate: p.invoiceDate.toISOString().split('T')[0],
+            totalAmount: p.totalAmount,
+            notes: p.notes,
+            itemsCount: p.items.length,
+            items: p.items.map((i) => ({
+              id: i.id,
+              purchaseInvoiceId: i.purchaseInvoiceId,
+              inventoryItemId: i.inventoryItemId,
+              itemName: i.itemName,
+              category: i.category as any,
+              presentation: i.presentation,
+              batchNumber: i.batchNumber,
+              manufacturingDate: i.manufacturingDate ? i.manufacturingDate.toISOString().split('T')[0] : null,
+              expiryDate: i.expiryDate.toISOString().split('T')[0],
+              quantity: i.quantity,
+              purchaseRate: i.purchaseRate,
+              mrp: i.mrp,
+              lineTotal: i.lineTotal,
+            })),
+            createdAt: p.createdAt.toISOString(),
+            updatedAt: p.updatedAt.toISOString(),
+          }));
+        }
+      } catch (err) {
+        console.warn('[InventoryService.listPurchases] Prisma error, using fallback:', err);
+      }
+    }
+
     let result = this.getPurchasesStore(practiceId);
     if (search && search.trim()) {
       const q = search.trim().toLowerCase();
@@ -802,8 +1382,8 @@ export class InventoryService {
       totalQuantity: number;
     }>
   ): Promise<StockResolutionItemDTO[]> {
-    const items = this.getItemsStore(practiceId);
-    const batches = this.getBatchesStore(practiceId);
+    const items = await this.listItems(practiceId);
+    const batches = await this.listBatches(practiceId);
     const today = new Date().toISOString().split('T')[0];
 
     const resolutions: StockResolutionItemDTO[] = [];
@@ -817,8 +1397,9 @@ export class InventoryService {
         : null;
 
       if (!invItem) {
+        const brandNorm = rxItem.brandName.trim().toLowerCase();
         invItem = items.find(
-          (i) => i.name.toLowerCase() === rxItem.brandName.trim().toLowerCase()
+          (i) => i.name.trim().toLowerCase() === brandNorm
         ) || null;
       }
 
@@ -896,8 +1477,8 @@ export class InventoryService {
     }>,
     performedByUserId?: string | null
   ): Promise<{ transactions: InventoryTransactionDTO[] }> {
-    const batches = this.getBatchesStore(practiceId);
-    const itemsStore = this.getItemsStore(practiceId);
+    const batches = await this.listBatches(practiceId);
+    const itemsStore = await this.listItems(practiceId);
     const today = new Date().toISOString().split('T')[0];
     const transactions: InventoryTransactionDTO[] = [];
 
@@ -910,8 +1491,9 @@ export class InventoryService {
         : null;
 
       if (!invItem) {
+        const descNorm = it.description.trim().toLowerCase();
         invItem = itemsStore.find(
-          (i) => i.name.toLowerCase() === it.description.trim().toLowerCase()
+          (i) => i.name.trim().toLowerCase() === descNorm
         ) || null;
       }
 
@@ -935,6 +1517,17 @@ export class InventoryService {
 
         batch.currentQuantity = qtyAfter;
         batch.updatedAt = new Date().toISOString();
+
+        if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch && !batch.id.startsWith('batch_')) {
+          try {
+            await prisma.inventoryBatch.update({
+              where: { id: batch.id },
+              data: { currentQuantity: qtyAfter },
+            });
+          } catch (err) {
+            console.warn('[InventoryService.deductInvoiceStock] Prisma batch update error:', err);
+          }
+        }
 
         const tx = await this.recordTransaction(practiceId, {
           itemId: invItem.id,
@@ -965,8 +1558,8 @@ export class InventoryService {
     invoiceNumber: string,
     performedByUserId?: string | null
   ): Promise<{ reversalsCount: number; transactions: InventoryTransactionDTO[] }> {
-    const allTx = this.getTransactionsStore(practiceId);
-    const batches = this.getBatchesStore(practiceId);
+    const allTx = await this.listTransactions(practiceId);
+    const batches = await this.listBatches(practiceId);
 
     // Find original SALE_OR_INVOICE transactions for this invoice
     const originalTxs = allTx.filter(
@@ -985,6 +1578,17 @@ export class InventoryService {
       if (batch) {
         batch.currentQuantity = qtyAfter;
         batch.updatedAt = new Date().toISOString();
+
+        if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch && !batch.id.startsWith('batch_')) {
+          try {
+            await prisma.inventoryBatch.update({
+              where: { id: batch.id },
+              data: { currentQuantity: qtyAfter },
+            });
+          } catch (err) {
+            console.warn('[InventoryService.reverseInvoiceStock] Prisma batch update error:', err);
+          }
+        }
       }
 
       const revTx = await this.recordTransaction(practiceId, {
@@ -1069,8 +1673,8 @@ export class InventoryService {
     const stockValueINR = batches.reduce((sum, b) => sum + (b.currentQuantity * b.purchaseRate), 0);
 
     // Usage Today from Transactions
-    const txToday = this.getTransactionsStore(practiceId).filter(
-      (t) => t.createdAt.startsWith(today) && t.quantityChange < 0
+    const txToday = (await this.listTransactions(practiceId, { startDate: today })).filter(
+      (t) => t.quantityChange < 0
     );
     const unitsUsedToday = txToday.reduce((sum, t) => sum + Math.abs(t.quantityChange), 0);
     const valueUsedTodayINR = txToday.reduce(
@@ -1146,6 +1750,94 @@ export class InventoryService {
       stockValuation: summary.stockValueINR,
     };
   }
+
+  /**
+   * Idempotent Catalogue Synchronization & Backfill
+   * Ensures every confirmed InventoryItem classified as MEDICINE has a linked
+   * Medicine master record in PostgreSQL, and enriches clinical details.
+   * CONSUMABLE items remain strictly within Inventory & Billing.
+   */
+  static async syncInventoryCatalogues(practiceId: string): Promise<{
+    success: boolean;
+    totalInventoryItems: number;
+    medicineItemsCount: number;
+    linkedMedicinesCount: number;
+    consumableItemsCount: number;
+  }> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryItem && prisma?.medicine) {
+      try {
+        const items = await prisma.inventoryItem.findMany({
+          where: { practiceId },
+          include: { medicine: true },
+        });
+
+        let linkedCount = 0;
+        let medCount = 0;
+        let consCount = 0;
+
+        for (const item of items) {
+          if (item.category === 'MEDICINE') {
+            medCount++;
+            let medId = item.medicineId;
+            if (!medId) {
+              const trimmedName = item.name.trim();
+              const existingMed = await prisma.medicine.findFirst({
+                where: {
+                  practiceId,
+                  name: { equals: trimmedName, mode: 'insensitive' },
+                },
+              });
+
+              if (existingMed) {
+                medId = existingMed.id;
+              } else {
+                const newMed = await prisma.medicine.create({
+                  data: {
+                    practiceId,
+                    name: trimmedName,
+                    genericName: item.genericName?.trim() || null,
+                    category: 'Allopathy',
+                    form: item.dosageForm?.trim() || item.presentation?.trim() || 'Tablet',
+                    strength: item.strength?.trim() || null,
+                    unitPrice: 0,
+                    isActive: item.isActive !== false,
+                  },
+                });
+                medId = newMed.id;
+              }
+
+              await prisma.inventoryItem.update({
+                where: { id: item.id },
+                data: { medicineId: medId },
+              });
+              linkedCount++;
+            }
+          } else {
+            consCount++;
+          }
+        }
+
+        return {
+          success: true,
+          totalInventoryItems: items.length,
+          medicineItemsCount: medCount,
+          linkedMedicinesCount: linkedCount,
+          consumableItemsCount: consCount,
+        };
+      } catch (err) {
+        console.warn('[InventoryService.syncInventoryCatalogues] Error syncing:', err);
+      }
+    }
+
+    return {
+      success: true,
+      totalInventoryItems: 0,
+      medicineItemsCount: 0,
+      linkedMedicinesCount: 0,
+      consumableItemsCount: 0,
+    };
+  }
+
 
   // --------------------------------------------------------------------------
   // In-Memory Partition Helpers

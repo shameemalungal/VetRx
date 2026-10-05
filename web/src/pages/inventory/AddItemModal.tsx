@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Icon } from '../../components/ui/Icon';
 import { inventoryApi, type InventoryCategory, type InventoryItem } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -65,6 +66,12 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onS
         targetStockLevel: Number(targetStockLevel) || 0,
         barcode: barcode.trim() || undefined,
       });
+
+      if (category === 'MEDICINE') {
+        try {
+          await syncInventoryMedicinesToFormulary();
+        } catch {}
+      }
 
       onSuccess(res.item);
       onClose();

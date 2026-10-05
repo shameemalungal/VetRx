@@ -39,6 +39,7 @@ import { MedicineFormModal } from '../medicines/MedicineFormModal';
 import { MedicineFormulationSection } from '../medicines/MedicineFormulationSection';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import { inventoryApi, type PrescriptionStockResolution } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 import { ExternalPrescriptionModal } from './ExternalPrescriptionModal';
 
 function extractNumericDose(val?: string | number): string {
@@ -212,9 +213,38 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     })();
   }, [isInventoryEntitled, items]);
 
+  const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+
+  // Proactively sync inventory medicines and live stock into client formulary when entitled
+  useEffect(() => {
+    if (isInventoryEntitled) {
+      void (async () => {
+        try {
+          await syncInventoryMedicinesToFormulary();
+          const res = await inventoryApi.getItems();
+          const map = new Map<string, number>();
+          (res.items || []).forEach((item) => {
+            const qty = item.validStock ?? item.currentStock ?? 0;
+            if (item.medicineId) {
+              map.set(`id:${item.medicineId}`, qty);
+            }
+            map.set(`name:${item.name.toLowerCase().trim()}`, qty);
+          });
+          setStockMap(map);
+        } catch {}
+      })();
+    }
+  }, [isInventoryEntitled]);
+
   const getResolutionForItem = (item: DraftItem, index: number): PrescriptionStockResolution | undefined => {
     if (!isInventoryEntitled || stockResolutions.length === 0) return undefined;
-    return stockResolutions[index] || stockResolutions.find((r) => r.medicineName.toLowerCase() === item.brandName.toLowerCase());
+    return (
+      stockResolutions[index] ||
+      stockResolutions.find(
+        (r) =>
+          (r.medicineName || (r as any).brandName || '').toLowerCase() === item.brandName.toLowerCase()
+      )
+    );
   };
 
   // Package Popover state
@@ -411,13 +441,17 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const pres = (m.presentation || '').toLowerCase();
       const str = ((m.strength || m.strengthVolume) || '').toLowerCase();
       const pack = (m.packSize || '').toLowerCase();
+      const notes = (m.notes || '').toLowerCase();
+      const unit = (m.dispenseUnit || '').toLowerCase();
       return (
         brand.includes(q) ||
         generic.includes(q) ||
         cat.includes(q) ||
         pres.includes(q) ||
         str.includes(q) ||
-        pack.includes(q)
+        pack.includes(q) ||
+        notes.includes(q) ||
+        unit.includes(q)
       );
     });
   }, [availableMedicines, medModalSearch]);
@@ -3188,32 +3222,58 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         </div>
                       ) : (
                         <div className="rx-live-med-dropdown" role="listbox">
-                          {matchingMedicines.slice(0, 15).map((med, idx) => (
-                            <div
-                              key={`search-med-${med.id}-${idx}`}
-                              role="option"
-                              aria-selected={highlightedMedIndex === idx}
-                              className={`rx-live-med-item ${highlightedMedIndex === idx ? 'highlighted' : ''}`}
-                              onMouseEnter={() => setHighlightedMedIndex(idx)}
-                              onClick={() => handleSelectMedRef(med)}
-                            >
-                              <div className="rx-live-med-left">
-                                <span className="rx-live-med-brand" style={{ fontWeight: 700 }}>{med.brandName}</span>
-                                {med.genericName && (
-                                  <span className="rx-live-med-generic" style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>{med.genericName}</span>
-                                )}
+                          {matchingMedicines.slice(0, 15).map((med, idx) => {
+                            const stock = isInventoryEntitled
+                              ? (med.id ? stockMap.get(`id:${med.id}`) : undefined) ??
+                                stockMap.get(`name:${med.brandName.toLowerCase().trim()}`) ?? 0
+                              : 0;
+                            return (
+                              <div
+                                key={`search-med-${med.id}-${idx}`}
+                                role="option"
+                                aria-selected={highlightedMedIndex === idx}
+                                className={`rx-live-med-item ${highlightedMedIndex === idx ? 'highlighted' : ''}`}
+                                onMouseEnter={() => setHighlightedMedIndex(idx)}
+                                onClick={() => handleSelectMedRef(med)}
+                              >
+                                <div className="rx-live-med-left">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span className="rx-live-med-brand" style={{ fontWeight: 700 }}>{med.brandName}</span>
+                                    {isInventoryEntitled && (
+                                      <span
+                                        style={{
+                                          fontSize: '11px',
+                                          fontWeight: 700,
+                                          padding: '1px 6px',
+                                          borderRadius: '4px',
+                                          background: stock > 0 ? '#dcfce7' : '#f1f5f9',
+                                          color: stock > 0 ? '#15803d' : '#64748b',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '3px',
+                                        }}
+                                      >
+                                        <Icon name="box" size={10} />
+                                        <span>{stock > 0 ? `In Stock: ${stock}` : 'External'}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {med.genericName && (
+                                    <span className="rx-live-med-generic" style={{ fontSize: '12px', color: 'var(--color-on-surface-variant)' }}>{med.genericName}</span>
+                                  )}
+                                </div>
+                                <div className="rx-live-med-right" style={{ textAlign: 'right' }}>
+                                  {med.category && (
+                                    <span className="rx-live-med-cat">{med.category}</span>
+                                  )}
+                                  <span className="rx-live-med-specs" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
+                                    {[med.strength || med.strengthVolume, med.presentation].filter(Boolean).join(' • ')}
+                                    {med.packSize ? ` • Pack Size: ${med.packSize}` : ''}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="rx-live-med-right" style={{ textAlign: 'right' }}>
-                                {med.category && (
-                                  <span className="rx-live-med-cat">{med.category}</span>
-                                )}
-                                <span className="rx-live-med-specs" style={{ fontWeight: 600, color: 'var(--color-primary)' }}>
-                                  {[med.strength || med.strengthVolume, med.presentation].filter(Boolean).join(' • ')}
-                                  {med.packSize ? ` • Pack Size: ${med.packSize}` : ''}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )
                     )}
@@ -3250,18 +3310,35 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         <span>Quick suggestions from formulary:</span>
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {availableMedicines.slice(0, 6).map((med, idx) => (
-                          <button
-                            key={`sugg-${med.id}-${idx}`}
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            style={{ height: 26, fontSize: 11, borderRadius: 'var(--radius-full)' }}
-                            onClick={() => handleSelectMedRef(med)}
-                          >
-                            <Icon name="plus" size={11} />
-                            <span>{med.brandName}</span>
-                          </button>
-                        ))}
+                        {availableMedicines.slice(0, 6).map((med, idx) => {
+                          const stock = isInventoryEntitled
+                            ? (med.id ? stockMap.get(`id:${med.id}`) : undefined) ??
+                              stockMap.get(`name:${med.brandName.toLowerCase().trim()}`) ?? 0
+                            : 0;
+                          return (
+                            <button
+                              key={`sugg-${med.id}-${idx}`}
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                height: 26,
+                                fontSize: 11,
+                                borderRadius: 'var(--radius-full)',
+                                borderColor: stock > 0 ? '#86efac' : undefined,
+                                background: stock > 0 ? '#f0fdf4' : undefined,
+                              }}
+                              onClick={() => handleSelectMedRef(med)}
+                            >
+                              <Icon name="plus" size={11} />
+                              <span>{med.brandName}</span>
+                              {isInventoryEntitled && (
+                                <span style={{ fontSize: 10, color: stock > 0 ? '#16a34a' : '#94a3b8', fontWeight: 600 }}>
+                                  ({stock > 0 ? `${stock}` : 'ext'})
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

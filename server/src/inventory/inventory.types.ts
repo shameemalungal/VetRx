@@ -186,6 +186,8 @@ export interface ExtractedInvoiceItemDTO {
   category: InventoryCategory;
   genericName?: string;
   dosageForm?: string;
+  strength?: string;
+  manufacturer?: string;
   packSize?: string;
   packing?: string;
   hsnCode?: string;

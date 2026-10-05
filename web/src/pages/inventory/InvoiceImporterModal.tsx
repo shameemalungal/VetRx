@@ -10,6 +10,7 @@ import {
   type ParsedInvoiceData,
   type ParsedInvoiceItemData,
 } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 
 interface InvoiceImporterModalProps {
   isOpen: boolean;
@@ -391,6 +392,9 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           presentation: it.presentation || `${it.packing || 'Standard'} ${it.stockUnit || 'Unit'}`,
           packSize: it.packing || it.packSize || undefined,
           stockUnit: it.stockUnit || undefined,
+          genericName: it.genericName?.trim() || undefined,
+          strength: (it as any).strength?.trim() || undefined,
+          manufacturer: (it as any).manufacturer?.trim() || undefined,
           batchNumber: it.batchNumber?.trim() || defaultBatch,
           manufacturingDate: it.manufacturingDate || undefined,
           expiryDate: it.expiryDate?.trim() || defaultExp,
@@ -401,6 +405,15 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           createNewMedicineMaster: it.createNewMedicineMaster,
         })),
       });
+
+      // Synchronize confirmed MEDICINE InventoryItems to the local formulary (Dexie db.medicines)
+      // immediately, using the persisted server records as the single source of truth.
+      // Consumables are intentionally excluded (billing-only).
+      try {
+        await syncInventoryMedicinesToFormulary();
+      } catch (syncErr) {
+        console.warn('[InvoiceImporterModal] Formulary sync warning:', syncErr);
+      }
 
       onSuccess();
       onClose();

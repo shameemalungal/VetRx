@@ -22,7 +22,8 @@ import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
 import { formatInvoiceItemDescription } from '../../utils/documentFormat';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
-import { inventoryApi } from '../../services/inventoryApi';
+import { inventoryApi, type InventoryItem } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 import './Invoices.css';
 
 interface InvoiceBuilderProps {
@@ -122,6 +123,59 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   // Tab & search states for Quick Insert inside modal
   const [catalogCategoryTab, setCatalogCategoryTab] = useState<string>('All');
   const [catalogSearchQuery, setCatalogSearchQuery] = useState<string>('');
+
+  const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+  const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map());
+  const [modalMedicineId, setModalMedicineId] = useState<number | undefined>(undefined);
+  // Unified billing catalogue: all confirmed InventoryItems (medicines + consumables)
+  const [inventoryStockItems, setInventoryStockItems] = useState<Array<{ item: InventoryItem; price: number; qty: number }>>([]);
+
+  // Sync inventory medicines and load active stock & pricing
+  useEffect(() => {
+    if (!isInventoryEntitled) return;
+    void (async () => {
+      try {
+        await syncInventoryMedicinesToFormulary();
+        const [itemsRes, batchesRes] = await Promise.all([
+          inventoryApi.getItems(),
+          inventoryApi.getBatches(),
+        ]);
+        const sMap = new Map<string, number>();
+        const pMap = new Map<string, number>();
+
+        // Map active batch prices by inventoryItemId / itemId
+        const itemPriceMap = new Map<string, number>();
+        (batchesRes?.batches || []).forEach((b) => {
+          const itemId = b.inventoryItemId || b.itemId;
+          if (!itemId) return;
+          const rate = b.mrp && b.mrp > 0 ? b.mrp : (b.purchaseRate || b.unitCost || 0);
+          if (rate > 0 && !itemPriceMap.has(itemId)) {
+            itemPriceMap.set(itemId, rate);
+          }
+        });
+
+        const stockEntries: Array<{ item: InventoryItem; price: number; qty: number }> = [];
+        (itemsRes?.items || []).forEach((item) => {
+          const qty = item.validStock ?? item.currentStock ?? 0;
+          const price = itemPriceMap.get(item.id) || 0;
+          if (item.isActive !== false) stockEntries.push({ item, price, qty });
+          if (item.medicineId) {
+            sMap.set(`id:${item.medicineId}`, qty);
+            if (price > 0) pMap.set(`id:${item.medicineId}`, price);
+          }
+          const nameKey = `name:${item.name.toLowerCase().trim()}`;
+          sMap.set(nameKey, qty);
+          if (price > 0) pMap.set(nameKey, price);
+        });
+
+        setStockMap(sMap);
+        setPriceMap(pMap);
+        setInventoryStockItems(stockEntries);
+      } catch {
+        // Silently ignore offline
+      }
+    })();
+  }, [isInventoryEntitled]);
 
   // Initial load
   useEffect(() => {
@@ -307,6 +361,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       categoryTag: string;
       unit: string;
       priceRupees: string;
+      stock?: number;
       isGovPrescribed: boolean;
       onSelect: () => void;
     };
@@ -354,14 +409,43 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     });
 
     allMedicines.forEach((med) => {
+      const stock = isInventoryEntitled
+        ? (med.id ? stockMap.get(`id:${med.id}`) : undefined) ??
+          stockMap.get(`name:${med.brandName.toLowerCase().trim()}`)
+        : undefined;
+      const price = isInventoryEntitled
+        ? (med.id ? priceMap.get(`id:${med.id}`) : undefined) ??
+          priceMap.get(`name:${med.brandName.toLowerCase().trim()}`) ?? 0
+        : 0;
+
       entries.push({
         id: `med_${med.id}`,
         name: `${med.brandName}${med.presentation ? ' ' + med.presentation : ''}`,
         categoryTag: 'Medicines',
         unit: med.presentation || 'tablets',
-        priceRupees: '0',
+        priceRupees: price > 0 ? price.toFixed(2) : '0',
+        stock,
         isGovPrescribed: false,
-        onSelect: () => handleSelectMedicine(med),
+        onSelect: () => handleSelectMedicine(med, price),
+      });
+    });
+
+    // Non-medicine inventory items (consumables, surgical, lab, other) are billable
+    // but never part of the clinical formulary. Medicines already appear above via
+    // the formulary (synced from the same InventoryItem), so they are not duplicated.
+    const formularyNames = new Set(allMedicines.map((m) => m.brandName.toLowerCase().trim()));
+    inventoryStockItems.forEach(({ item, price, qty }) => {
+      if (item.category === 'MEDICINE' && formularyNames.has(item.name.toLowerCase().trim())) return;
+      const isMedicine = item.category === 'MEDICINE';
+      entries.push({
+        id: `inv_${item.id}`,
+        name: `${item.name}${item.packSize ? ' ' + item.packSize : ''}`,
+        categoryTag: isMedicine ? 'Medicines' : 'Consumables',
+        unit: item.stockUnit || 'Unit',
+        priceRupees: price > 0 ? price.toFixed(2) : '0',
+        stock: qty,
+        isGovPrescribed: false,
+        onSelect: () => handleSelectInventoryItem(item, price),
       });
     });
 
@@ -374,7 +458,16 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       filtered = filtered.filter((e) => e.name.toLowerCase().includes(q));
     }
     return filtered.slice(0, 30);
-  }, [masterInvoiceItems, allMedicines, catalogCategoryTab, catalogSearchQuery]);
+  }, [
+    masterInvoiceItems,
+    allMedicines,
+    inventoryStockItems,
+    catalogCategoryTab,
+    catalogSearchQuery,
+    isInventoryEntitled,
+    stockMap,
+    priceMap,
+  ]);
 
   // Import prescription medicines handler (UAT Requirement 8)
   const handleImportPrescription = async (rxIdToImport: number) => {
@@ -390,25 +483,29 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     const rxPatientSubtitle = rxPatient ? formatAnimalSubtitle(rxPatient) : undefined;
     const rxDateStr = rx.createdAt instanceof Date ? rx.createdAt.toISOString() : String(rx.createdAt || '');
 
-    const newItems: ItemDraft[] = rxItems.map((rxi, i) => ({
-      tempId: `imported_rx_${rxi.id || i}_${Date.now()}`,
-      category: 'Prescription Medicine',
-      description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
-      quantity: rxi.quantity || 1,
-      unit: rxi.dispenseUnit || rxi.unit || 'tablets',
-      unitPricePaisa: 0, // Safe default rate 0
-      discountAmtPaisa: 0,
-      rateControlled: false,
-      prescriptionId: rx.id,
-      prescriptionNumber: rx.rxNumber,
-      prescriptionDate: rxDateStr,
-      patientId: rx.patientId,
-      patientName: rxPatient?.name,
-      patientSubtitle: rxPatientSubtitle,
-      ownerId: rxPatient?.ownerId,
-      ownerName: rxOwner?.name,
-      medicineId: rxi.medicineId,
-    }));
+    const newItems: ItemDraft[] = rxItems.map((rxi, i) => {
+      const price = (rxi.medicineId ? priceMap.get(`id:${rxi.medicineId}`) : undefined) ??
+        priceMap.get(`name:${rxi.brandName.toLowerCase().trim()}`) ?? 0;
+      return {
+        tempId: `imported_rx_${rxi.id || i}_${Date.now()}`,
+        category: 'Prescription Medicine',
+        description: `${rxi.brandName}${rxi.strengthVolume ? ' ' + rxi.strengthVolume : ''}`,
+        quantity: rxi.quantity || 1,
+        unit: rxi.dispenseUnit || rxi.unit || 'tablets',
+        unitPricePaisa: price > 0 ? Math.round(price * 100) : 0,
+        discountAmtPaisa: 0,
+        rateControlled: false,
+        prescriptionId: rx.id,
+        prescriptionNumber: rx.rxNumber,
+        prescriptionDate: rxDateStr,
+        patientId: rx.patientId,
+        patientName: rxPatient?.name,
+        patientSubtitle: rxPatientSubtitle,
+        ownerId: rxPatient?.ownerId,
+        ownerName: rxOwner?.name,
+        medicineId: rxi.medicineId,
+      };
+    });
     setItems((prev) => [...prev, ...newItems]);
     if (!prescriptionId) {
       setPrescriptionId(rxIdToImport);
@@ -425,13 +522,15 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     const newDrafts: ItemDraft[] = importedList.map((imp, idx) => {
       const strVolStr = imp.strengthVolume ? ` ${imp.strengthVolume}` : '';
       const cleanDesc = formatInvoiceItemDescription(imp.description) || `${imp.brandName}${strVolStr}`.trim();
+      const price = (imp.medicineId ? priceMap.get(`id:${imp.medicineId}`) : undefined) ??
+        priceMap.get(`name:${imp.brandName.toLowerCase().trim()}`) ?? 0;
       return {
         tempId: `imported_rx_${imp.prescriptionItemId || idx}_${Date.now()}_${idx}`,
         category: 'Prescription Medicine',
         description: cleanDesc,
         quantity: Math.max(1, imp.quantity || 1),
         unit: imp.unit || 'tablets',
-        unitPricePaisa: 0, // Safe default rate of 0
+        unitPricePaisa: price > 0 ? Math.round(price * 100) : 0,
         discountAmtPaisa: 0,
         rateControlled: false,
         prescriptionId: imp.prescriptionId,
@@ -500,6 +599,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     setModalGovOrderNumber('G.O.(Rt) No.589/2023/AHD');
     setModalGovOrderDate('13-12-2023');
     setModalRateControlled(false);
+    setModalMedicineId(undefined);
     setModalError('');
     setIsItemModalOpen(true);
   };
@@ -519,6 +619,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     setModalGovOrderNumber(item.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD');
     setModalGovOrderDate(item.govOrderDate || '13-12-2023');
     setModalRateControlled(!!item.rateControlled);
+    setModalMedicineId(item.medicineId);
     setModalError('');
     setIsItemModalOpen(true);
   };
@@ -532,6 +633,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const handleSelectMasterItem = (mItem: MasterDataItem) => {
     setModalDescription(mItem.name);
     setModalUnit(mItem.unit || 'Per unit');
+    setModalMedicineId(undefined);
     if (mItem.defaultPricePaisa !== undefined) {
       setModalUnitPriceRupees((mItem.defaultPricePaisa / 100).toFixed(2));
     }
@@ -554,13 +656,33 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   };
 
   // Quick Select Medicine in Modal
-  const handleSelectMedicine = (med: any) => {
+  const handleSelectMedicine = (med: any, autoPrice?: number) => {
     setModalDescription(`${med.brandName}${med.genericName ? ' (' + med.genericName + ')' : ''} ${med.presentation || ''}`.trim());
     setModalCategory('Medicine');
     setModalUnit(med.presentation || 'tablets');
-    setModalUnitPriceRupees('0.00');
+    const effectivePrice = autoPrice ?? (
+      (med.id ? priceMap.get(`id:${med.id}`) : undefined) ??
+      priceMap.get(`name:${med.brandName.toLowerCase().trim()}`) ?? 0
+    );
+    setModalUnitPriceRupees(effectivePrice > 0 ? effectivePrice.toFixed(2) : '0.00');
     setModalIsGovPrescribed(false);
     setModalRateControlled(false);
+    setModalMedicineId(med.id);
+  };
+
+  // Quick Select any Inventory stock item (medicine or consumable) for billing.
+  // Display only — stock is deducted solely by the confirmed invoice workflow.
+  const handleSelectInventoryItem = (item: InventoryItem, price: number) => {
+    setModalDescription(`${item.name}${item.packSize ? ' ' + item.packSize : ''}`.trim());
+    setModalCategory(item.category === 'MEDICINE' ? 'Medicine' : 'Other');
+    setModalUnit(item.stockUnit || 'Unit');
+    setModalUnitPriceRupees(price > 0 ? price.toFixed(2) : '0.00');
+    setModalIsGovPrescribed(false);
+    setModalRateControlled(false);
+    const linkedLocalMed = allMedicines.find(
+      (m) => m.brandName.toLowerCase().trim() === item.name.toLowerCase().trim()
+    );
+    setModalMedicineId(linkedLocalMed?.id);
   };
 
   // Save Modal Item
@@ -607,7 +729,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       patientSubtitle: editingItemIndex !== null ? items[editingItemIndex].patientSubtitle : undefined,
       ownerId: editingItemIndex !== null ? items[editingItemIndex].ownerId : undefined,
       ownerName: editingItemIndex !== null ? items[editingItemIndex].ownerName : undefined,
-      medicineId: editingItemIndex !== null ? items[editingItemIndex].medicineId : undefined,
+      medicineId: modalMedicineId !== undefined ? modalMedicineId : (editingItemIndex !== null ? items[editingItemIndex].medicineId : undefined),
     };
 
     if (editingItemIndex !== null) {
@@ -748,10 +870,14 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
         try {
           const invItemsPayload = itemsToInsert.map((it) => ({
             medicineId: it.medicineId,
-            medicineName: it.description,
+            description: it.description,
             quantity: it.quantity,
           }));
-          await inventoryApi.deductInvoiceStock(savedInvoiceId.toString(), invItemsPayload);
+          await inventoryApi.deductInvoiceStock(
+            savedInvoiceId.toString(),
+            invItemsPayload,
+            invoiceNumber.trim() || `INV-${savedInvoiceId}`
+          );
         } catch (stockErr) {
           console.warn('Inventory deduction notice:', stockErr);
         }
@@ -1490,7 +1616,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
               {/* Category Filter Chips */}
               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                {['All', 'Statutory / Govt', 'Consultation', 'Procedures', 'Laboratory', 'Medicines'].map((tab) => (
+                {['All', 'Statutory / Govt', 'Consultation', 'Procedures', 'Laboratory', 'Medicines', 'Consumables'].map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -1531,7 +1657,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                         color: cItem.isGovPrescribed ? 'var(--color-primary)' : undefined,
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px',
+                        gap: '5px',
                       }}
                       onClick={cItem.onSelect}
                       title={`Insert ${cItem.name} (${cItem.categoryTag})`}
@@ -1539,6 +1665,20 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                       {cItem.isGovPrescribed && <Icon name="lock" size={12} />}
                       <span>{cItem.name}</span>
                       <strong style={{ opacity: 0.85 }}>₹{cItem.priceRupees}</strong>
+                      {cItem.stock !== undefined && (
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: cItem.stock > 0 ? '#dcfce7' : '#f1f5f9',
+                            color: cItem.stock > 0 ? '#15803d' : '#64748b',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {cItem.stock > 0 ? `${cItem.stock} in stock` : 'External'}
+                        </span>
+                      )}
                     </button>
                   ))
                 )}

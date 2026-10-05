@@ -9,6 +9,19 @@ import type {
 } from '../document-extraction.types.js';
 import { TextParserProvider } from './text-parser.provider.js';
 
+// Ensure Promise.withResolvers polyfill for Node < 22
+if (typeof (Promise as any).withResolvers !== 'function') {
+  (Promise as any).withResolvers = function <T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: any) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 export class PdfExtractorProvider implements IDocumentExtractionProvider {
   name = 'PDF Multi-Page Spatial Extractor';
 
@@ -24,7 +37,10 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
   }): Promise<StructuredInvoiceDocument> {
     const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const data = new Uint8Array(payload.buffer);
-    const loadingTask = pdfjs.getDocument({ data });
+    const loadingTask = pdfjs.getDocument({
+      data,
+      disableFontFace: true,
+    });
     const pdfDoc = await loadingTask.promise;
 
     const pageTexts: string[] = [];
@@ -37,22 +53,27 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
         continue;
       }
 
-      // Group text items by vertical position (Y)
-      const lineMap = new Map<number, Array<{ x: number; text: string }>>();
-      for (const item of content.items as any[]) {
-        if (!item.str || !item.str.trim()) continue;
-        const y = Math.round((item.transform?.[5] || 0) / 4) * 4;
-        const x = item.transform?.[4] || 0;
-        if (!lineMap.has(y)) {
-          lineMap.set(y, []);
+      // Filter and sort items descending by Y (PDF coordinate system Y=0 is bottom)
+      const validItems = (content.items as any[]).filter((it) => it.str && it.str.trim());
+      validItems.sort((a, b) => (b.transform?.[5] || 0) - (a.transform?.[5] || 0));
+
+      // Adaptive vertical clustering: cluster text items belonging to the same text line (within 3.0pt)
+      const lineClusters: Array<{ baseY: number; items: Array<{ x: number; text: string }> }> = [];
+      for (const item of validItems) {
+        const y = item.transform?.[5] || 0;
+        let cluster = lineClusters.find((c) => Math.abs(c.baseY - y) <= 3.0);
+        if (!cluster) {
+          cluster = { baseY: y, items: [] };
+          lineClusters.push(cluster);
         }
-        lineMap.get(y)!.push({ x, text: item.str });
+        cluster.items.push({ x: item.transform?.[4] || 0, text: item.str });
       }
 
-      // Sort descending by Y (PDF coordinate system Y=0 is bottom)
-      const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
-      const pageLines = sortedY.map((y) => {
-        const rowItems = lineMap.get(y)!.sort((a, b) => a.x - b.x);
+      // Ensure lines are ordered from top to bottom
+      lineClusters.sort((a, b) => b.baseY - a.baseY);
+
+      const pageLines = lineClusters.map((cl) => {
+        const rowItems = cl.items.sort((a, b) => a.x - b.x);
         return rowItems.map((it) => it.text).join('   ');
       });
 

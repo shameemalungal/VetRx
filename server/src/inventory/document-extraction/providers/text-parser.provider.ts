@@ -355,7 +355,8 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     let rate = numbers[1] || 0;
     let disc = 0;
     let gst = 5;
-    let taxable = Math.round(qty * rate * 100) / 100;
+    const expectedTaxable = Math.round(qty * rate * 100) / 100;
+    let taxable = expectedTaxable;
 
     if (numbers.length >= 6) {
       mrp = numbers[0];
@@ -364,11 +365,20 @@ export class TextParserProvider implements IDocumentExtractionProvider {
       const sgst = numbers[3];
       const cgst = numbers[4];
       gst = sgst + cgst > 0 ? (sgst + cgst) : 0;
-      taxable = numbers[numbers.length - 2] || taxable;
+      const candA = numbers[numbers.length - 2];
+      const candB = numbers[numbers.length - 1];
+      if (candA && Math.abs(candA - expectedTaxable) <= 1.0) {
+        taxable = candA;
+      } else if (candB && Math.abs(candB - expectedTaxable) <= 1.0) {
+        taxable = candB;
+      }
     } else if (numbers.length >= 3) {
       mrp = numbers[0];
       rate = numbers[1];
-      taxable = numbers[numbers.length - 1] || taxable;
+      const cand = numbers[numbers.length - 1];
+      if (cand && Math.abs(cand - expectedTaxable) <= 1.0) {
+        taxable = cand;
+      }
     }
 
     // Fallback batch for sales orders where batch is blank
@@ -445,8 +455,10 @@ export class TextParserProvider implements IDocumentExtractionProvider {
         if (em) email = em[1].toLowerCase();
       }
       if (!dlNo) {
-        const dlm = line.match(/DL[\s.:\w]+([A-Z0-9,\s/-]{8,50})/i);
-        if (dlm) dlNo = dlm[0].trim();
+        const dlm =
+          line.match(/D[\.\s]*L[\.\s]*(?:No)?[\s.:]+([A-Z0-9,\s/-]{8,60}?)(?=\s*(?:Invoice|Inv|Party|Date|$))/i) ||
+          line.match(/DL[\s.:\w]+([A-Z0-9,\s/-]{8,50})/i);
+        if (dlm) dlNo = (dlm[1] || dlm[0]).trim();
       }
       if (!state) {
         const sm = line.match(/State[\s.:]+([A-Za-z0-9\s-]+)/i) || line.match(/Kerala-?\d{0,2}/i);
@@ -492,7 +504,8 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     let paymentType = 'CREDIT';
     const customer: { name?: string; address?: string; phone?: string; gstin?: string } = {};
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       if (!invoiceNumber) {
         const im =
           line.match(/(?:Inv\s*No|Invoice\s*No|Bill\s*No|Invoice\s*#)[\s.:]+([A-Za-z0-9/_-]{4,30})/i) ||
@@ -519,8 +532,29 @@ export class TextParserProvider implements IDocumentExtractionProvider {
         const pm = line.match(/Pay\s*Type[\s.:]+([A-Z]+)/i);
         if (pm) paymentType = pm[1].toUpperCase();
       }
-      if (/HAPPY\s*PET|CLINIC|HOSPITAL|DR\./i.test(line) && !customer.name) {
-        customer.name = line.trim();
+      if (!customer.name) {
+        const pm = line.match(/Party\s*Name[\s.:]+([A-Za-z0-9\s.,'-]+)/i);
+        if (pm && pm[1].trim()) {
+          customer.name = pm[1].trim();
+        } else if (/^Party\s*Name/i.test(line)) {
+          for (let k = i + 1; k < Math.min(lines.length, i + 5); k++) {
+            const cand = lines[k].trim();
+            if (cand && !/^(?:JJ\s*PHARMA|PHARMA|TAX\s*INVOICE|SALES\s*ORDER|CREDIT|Page\s*\d)/i.test(cand)) {
+              customer.name = cand;
+              break;
+            }
+          }
+        } else if (/HAPPY\s*PET|CLINIC|HOSPITAL|VETERINARY\s*(?:SURGEON|DISPENSARY|CLINIC)|DR\./i.test(line)) {
+          customer.name = line.trim();
+        }
+      }
+      if (customer.name && !customer.phone) {
+        const phoneMatches = Array.from(line.matchAll(/(?:Phone|PHONE|Mob)[\s.:]+([\d,\s/-]{7,35})/gi));
+        if (phoneMatches.length > 1) {
+          customer.phone = phoneMatches[phoneMatches.length - 1][1].trim();
+        } else if (phoneMatches.length === 1 && !line.includes('04931')) {
+          customer.phone = phoneMatches[0][1].trim();
+        }
       }
     }
 
@@ -549,7 +583,8 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     let totalDiscount: number | undefined;
     let netPayable: number | undefined;
 
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       if (!totalItems) {
         const tim = line.match(/Total\s*Items[\s.:-]+(\d+)/i);
         if (tim) totalItems = parseInt(tim[1], 10);
@@ -562,14 +597,16 @@ export class TextParserProvider implements IDocumentExtractionProvider {
         const tam =
           line.match(/Taxable\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Taxable\s*value[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
-          line.match(/Total\s*Taxable[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
+          line.match(/Total\s*Taxable[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
+          line.match(/^TOTAL\s+([\d,]+(?:\.\d{2})?)/i);
         if (tam) taxableAmount = parseFloat(tam[1].replace(/,/g, ''));
       }
       if (!totalTax) {
         const ttm =
           line.match(/Tax\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Total\s*GST[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
-          line.match(/Tax\s*Tot[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
+          line.match(/Tax\s*Tot[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
+          line.match(/^TOTAL\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+[\d.]+\s+([\d.]+)/i);
         if (ttm) totalTax = parseFloat(ttm[1].replace(/,/g, ''));
       }
       if (!totalDiscount) {
@@ -584,7 +621,17 @@ export class TextParserProvider implements IDocumentExtractionProvider {
           line.match(/Net\s*Payable[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Net\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i) ||
           line.match(/Total\s*Amount[\s.:]+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)/i);
-        if (npm) netPayable = parseFloat(npm[1].replace(/,/g, ''));
+        if (npm) {
+          netPayable = parseFloat(npm[1].replace(/,/g, ''));
+        } else if (/^Grand\s*Total/i.test(line)) {
+          for (let j = i + 1; j < Math.min(lines.length, i + 6); j++) {
+            const numMatch = lines[j].match(/^([\d,]+(?:\.\d{2})?)$/);
+            if (numMatch) {
+              netPayable = parseFloat(numMatch[1].replace(/,/g, ''));
+              break;
+            }
+          }
+        }
       }
     }
 

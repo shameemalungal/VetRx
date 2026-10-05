@@ -11,6 +11,7 @@ import { MedicineFormModal } from './MedicineFormModal';
 import { Icon } from '../../components/ui/Icon';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import { inventoryApi } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 import './Medicines.css';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -86,10 +87,11 @@ export function MedicinesListPage() {
     if (!isInventoryEntitled) return;
     void (async () => {
       try {
-        const res = await inventoryApi.getItems({ category: 'MEDICINE' });
+        await syncInventoryMedicinesToFormulary();
+        const res = await inventoryApi.getItems();
         const map = new Map<string, number>();
         (res.items || []).forEach((item) => {
-          const qty = item.totalStock ?? 0;
+          const qty = item.validStock ?? item.currentStock ?? 0;
           if (item.medicineId) {
             map.set(`id:${item.medicineId}`, qty);
           }

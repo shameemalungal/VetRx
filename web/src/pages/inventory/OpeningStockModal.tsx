@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../components/ui/Icon';
 import { inventoryApi, type InventoryItem } from '../../services/inventoryApi';
+import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 
 interface OpeningStockModalProps {
   isOpen: boolean;
@@ -86,6 +87,10 @@ export const OpeningStockModal: React.FC<OpeningStockModalProps> = ({
         unitCost: Number(unitCost) || 0,
         mrp: Number(mrp) || undefined,
       });
+
+      try {
+        await syncInventoryMedicinesToFormulary();
+      } catch {}
 
       onSuccess();
       onClose();
