@@ -1035,7 +1035,7 @@ export class PaymentService {
       currency: 'INR',
       paymentMethod: payment.paymentMethod || 'Online Payment',
       status: 'PAID' as const,
-      entityName: 'Praxivon Technologies Private Limited',
+      entityName: 'Alungal Shameem, operator of VetRx',
       entityAddress: 'Melattur PO, Malappuram District, Kerala, India',
       taxNotice: 'Applicable taxes, if any, will be reflected in the applicable invoice.',
     };
@@ -1149,7 +1149,7 @@ export class PaymentService {
 
     <div class="footer">
       <p><strong>${receipt.taxNotice}</strong></p>
-      <p>Thank you for choosing VetRx by Praxivon Technologies Private Limited.</p>
+      <p>Thank you for choosing VetRx operated by Alungal Shameem.</p>
       <p>Questions? Contact support: <a href="mailto:supportvetrx@gmail.com" style="color: #00685f;">supportvetrx@gmail.com</a></p>
     </div>
     <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>

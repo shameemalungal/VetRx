@@ -216,6 +216,7 @@ export const RefundPolicyPage: React.FC = () => {
           </p>
           <div className="p-5 rounded-xl border border-clinical-border bg-white space-y-3">
             <p className="font-semibold text-content-primary">VetRx Billing &amp; Subscription Inquiries</p>
+            <p className="text-xs text-content-muted">VetRx is operated by Alungal Shameem.</p>
             <p className="text-sm text-content-secondary">
               Email: <a href="mailto:supportvetrx@gmail.com" className="text-teal font-medium hover:underline">supportvetrx@gmail.com</a>
             </p>

@@ -53,8 +53,8 @@ export const TermsPage: React.FC = () => {
         <p>
           These Terms of Service (&ldquo;Terms&rdquo;) constitute a legally binding agreement between you (whether individually as a veterinary practitioner
           or on behalf of a veterinary clinic, hospital, or organization, &ldquo;Customer&rdquo;, &ldquo;You&rdquo;, or &ldquo;User&rdquo;) and
-          Praxivon Technologies Private Limited, the business behind VetRx (&ldquo;VetRx&rdquo;, &ldquo;We&rdquo;, &ldquo;Us&rdquo;, or &ldquo;Our&rdquo;),
-          with its principal place of operations at Melattur PO, Malappuram District, Kerala, India.
+          Alungal Shameem, operator of the VetRx platform (&ldquo;VetRx&rdquo;, &ldquo;We&rdquo;, &ldquo;Us&rdquo;, or &ldquo;Our&rdquo;),
+          with principal operations at Melattur PO, Malappuram District, Kerala, India.
         </p>
         <p>
           <strong>Eligibility:</strong> VetRx is designed exclusively for authorized veterinary professionals, registered veterinary practitioners, clinic owners,
@@ -164,7 +164,7 @@ export const TermsPage: React.FC = () => {
           7. Intellectual Property &amp; Practice Data
         </h2>
         <p>
-          <strong>VetRx Ownership:</strong> VetRx, its software code, UI designs, brand marks, logos, and system architecture are the exclusive intellectual property of Praxivon Technologies Private Limited and its licensors.
+          <strong>VetRx Ownership:</strong> VetRx, its software code, UI designs, brand marks, logos, and system architecture are the exclusive intellectual property of Alungal Shameem, operator of VetRx, and his licensors.
         </p>
         <p>
           <strong>Customer Data Sovereignty:</strong> You retain complete ownership of all clinical history records, patient details, client contacts, and invoice ledgers that you enter into the platform.
@@ -244,7 +244,7 @@ export const TermsPage: React.FC = () => {
           If you have questions regarding these Terms or wish to lodge a formal contractual inquiry, please contact:
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
-          <p><strong>Business Identity:</strong> Praxivon Technologies Private Limited</p>
+          <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
           <p><strong>Address:</strong> Melattur PO, Malappuram District, Kerala, India</p>
           <p><strong>Support &amp; Inquiries:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>

@@ -334,7 +334,7 @@ describe('Phase 16: Commercial & PayU Production Readiness Master Test Suite', (
 
       // Render print HTML
       const html = PaymentService.generateReceiptHtml(receipt);
-      assert.ok(html.includes('Praxivon Technologies Private Limited'));
+      assert.ok(html.includes('Alungal Shameem'));
       assert.ok(html.includes('Melattur PO, Malappuram District, Kerala'));
       assert.ok(html.includes(receipt.receiptNumber));
       assert.ok(html.includes('₹599.00'));

@@ -49,7 +49,7 @@ export const PrivacyPage: React.FC = () => {
           1. Introduction &amp; Statutory Scope
         </h2>
         <p>
-          Praxivon Technologies Private Limited, the business behind VetRx (&ldquo;VetRx&rdquo;, &ldquo;We&rdquo;, &ldquo;Our&rdquo;, or &ldquo;Us&rdquo;), provides a veterinary practice management software platform to veterinary practitioners, clinics, and animal health organizations across India.
+          Alungal Shameem, operator of VetRx (&ldquo;VetRx&rdquo;, &ldquo;We&rdquo;, &ldquo;Our&rdquo;, or &ldquo;Us&rdquo;), provides a veterinary practice management software platform to veterinary practitioners, clinics, and animal health organizations across India.
           This Privacy Policy sets out how personal data is collected, stored, processed, and protected when you visit our public website or utilize the VetRx platform hosted at <a href="https://vetrx.brightbase.in" target="_blank" rel="noopener noreferrer" className="text-teal-dark font-medium underline">vetrx.brightbase.in</a>.
         </p>
         <p>
@@ -233,7 +233,7 @@ export const PrivacyPage: React.FC = () => {
           For privacy-related inquiries, data requests, or policy questions, please contact our team:
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
-          <p><strong>Business Identity:</strong> Praxivon Technologies Private Limited</p>
+          <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
           <p><strong>Postal Address:</strong> Melattur PO, Malappuram District, Kerala, India</p>
           <p><strong>Support &amp; Privacy Email:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>

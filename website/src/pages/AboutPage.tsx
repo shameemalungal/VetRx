@@ -48,7 +48,7 @@ export const AboutPage: React.FC = () => {
             &ldquo;Simplify your practice. Focus on better treatment.&rdquo;
           </h2>
           <p className="text-content-secondary leading-relaxed text-base">
-            VetRx was created to solve a singular, pressing problem: veterinary surgeons in India spend an unsustainable amount of time managing fragmented records, handwritten prescription slips, and disjointed client billing. We build modern, reliable software so practitioners can dedicate their focus where it truly belongs&mdash;to animal health and patient care.
+            VetRx is a veterinary practice management platform built in India for veterinary practitioners and veterinary clinics. VetRx provides software tools for managing patients, owners, prescriptions, medicines, treatment records, invoices and day-to-day veterinary practice workflows. VetRx is operated by Alungal Shameem.
           </p>
         </div>
 

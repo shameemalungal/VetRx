@@ -21,7 +21,7 @@ export const FaqPage: React.FC = () => {
       question: 'What is VetRx?',
       answer: (
         <p>
-          VetRx is a cloud-based veterinary practice management platform built specifically for Indian veterinary practitioners. It provides end-to-end clinical workflow automation, including patient registration, digital consultation notes, statutory prescription generation, diagnostic history tracking, and client billing.
+          VetRx is a cloud-based veterinary practice management platform built specifically for Indian veterinary practitioners. It provides end-to-end clinical workflow automation, including patient registration, digital consultation notes, statutory prescription generation, diagnostic history tracking, and client billing. VetRx is operated by Alungal Shameem.
         </p>
       ),
     },

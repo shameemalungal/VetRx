@@ -32,7 +32,7 @@ export const Footer: React.FC = () => {
               </a>
             </div>
             <div className="text-xs text-teal-100/75 pt-1 leading-relaxed">
-              <span className="text-white font-medium">Praxivon Technologies Private Limited</span>, the business behind VetRx.
+              VetRx is operated by Alungal Shameem.
             </div>
             <div className="text-xs text-teal-100/60 font-mono">
               Melattur PO, Malappuram District, Kerala, India
@@ -94,7 +94,7 @@ export const Footer: React.FC = () => {
         {/* Bottom Attribution */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-teal-100/60">
           <div>
-            © Praxivon Technologies Private Limited. All rights reserved.
+            © 2026 VetRx. Operated by Alungal Shameem.
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <Link to="/clinical-disclaimer" className="hover:text-white transition-colors">

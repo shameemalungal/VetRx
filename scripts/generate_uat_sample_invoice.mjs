@@ -40,7 +40,7 @@ async function main() {
     currency: 'INR',
     paymentMethod: 'UPI / Net Banking (PayU)',
     status: 'PAID',
-    entityName: 'Praxivon Technologies Private Limited',
+    entityName: 'Alungal Shameem, operator of VetRx',
     entityAddress: 'Melattur PO, Malappuram District, Kerala, India',
     taxNotice: 'Applicable taxes, if any, will be reflected in the applicable invoice.',
     logoBase64,

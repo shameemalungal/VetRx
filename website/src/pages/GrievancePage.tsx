@@ -81,8 +81,9 @@ export const GrievancePage: React.FC = () => {
               <div>
                 <p className="text-xs font-mono text-content-muted uppercase">Business Identity</p>
                 <p className="font-medium text-content-primary mt-0.5">
-                  Praxivon Technologies Private Limited
+                  VetRx Support
                 </p>
+                <p className="text-content-muted text-xs mt-0.5">VetRx is operated by Alungal Shameem.</p>
               </div>
 
               <div>

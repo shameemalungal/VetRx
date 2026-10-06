@@ -106,7 +106,7 @@ async function main() {
   assert.ok(htmlStats.size > 5000, `HTML size (${htmlStats.size} bytes) must be substantial and non-empty`);
 
   const htmlContent = fs.readFileSync(sampleHtmlPath, 'utf-8');
-  assert.ok(htmlContent.includes('Praxivon Technologies Private Limited'), 'Receipt must contain Praxivon Technologies');
+  assert.ok(htmlContent.includes('Alungal Shameem'), 'Receipt must contain Alungal Shameem');
   assert.ok(htmlContent.includes('VetRx Stitch Logo') || htmlContent.includes('data:image/png;base64,'), 'Receipt must contain embedded logo');
   assert.ok(htmlContent.includes('1,499.00'), 'Receipt must display Clinic plan ₹1,499.00 amount');
   assert.ok(htmlContent.includes('PAID'), 'Receipt must display PAID status');

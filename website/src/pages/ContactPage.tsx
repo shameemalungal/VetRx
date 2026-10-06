@@ -154,9 +154,9 @@ export const ContactPage: React.FC = () => {
               <div>
                 <p className="font-mono text-content-muted uppercase">Business Identity</p>
                 <p className="font-medium text-content-primary mt-1">
-                  Praxivon Technologies Private Limited
+                  VetRx Support
                 </p>
-                <p className="text-content-muted mt-0.5">The business behind VetRx</p>
+                <p className="text-content-muted mt-0.5">VetRx is operated by Alungal Shameem.</p>
               </div>
               <div>
                 <p className="font-mono text-content-muted uppercase">Postal Address</p>
