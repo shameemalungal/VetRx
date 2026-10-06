@@ -15,13 +15,14 @@ const deployCmd = `
   echo ">>> [3/6] Building production docker images (backend, frontend, website)..."
   docker compose -f docker-compose.prod.yml build backend
   docker compose -f docker-compose.prod.yml build frontend
-  docker compose -f docker-compose.prod.yml build website
+  docker compose -f docker-compose.prod.yml build --no-cache website
 
   echo ">>> [4/6] Applying Prisma database migrations..."
   docker compose -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy --schema=./prisma/schema.prisma
 
   echo ">>> [5/6] Updating running containers with zero downtime..."
-  docker compose -f docker-compose.prod.yml up -d --no-deps backend frontend website
+  docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate website
+  docker compose -f docker-compose.prod.yml up -d --no-deps backend frontend
 
   echo ">>> [6/6] Verifying container health and endpoints..."
   sleep 5
