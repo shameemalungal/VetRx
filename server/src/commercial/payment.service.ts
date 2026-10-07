@@ -1036,7 +1036,7 @@ export class PaymentService {
       paymentMethod: payment.paymentMethod || 'Online Payment',
       status: 'PAID' as const,
       entityName: 'Alungal Shameem, operator of VetRx',
-      entityAddress: 'Melattur PO, Malappuram District, Kerala, India',
+      entityAddress: 'Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India',
       taxNotice: 'Applicable taxes, if any, will be reflected in the applicable invoice.',
     };
 

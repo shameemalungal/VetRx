@@ -89,7 +89,7 @@ export const GrievancePage: React.FC = () => {
               <div>
                 <p className="text-xs font-mono text-content-muted uppercase">Postal Address</p>
                 <p className="font-medium text-content-primary mt-0.5">
-                  Melattur PO, Malappuram District, Kerala, India
+                  Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India
                 </p>
               </div>
 

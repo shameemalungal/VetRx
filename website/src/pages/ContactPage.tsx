@@ -161,7 +161,7 @@ export const ContactPage: React.FC = () => {
               <div>
                 <p className="font-mono text-content-muted uppercase">Postal Address</p>
                 <p className="font-medium text-content-primary mt-1">
-                  Melattur PO, Malappuram District, Kerala, India
+                  Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India
                 </p>
               </div>
               <div>

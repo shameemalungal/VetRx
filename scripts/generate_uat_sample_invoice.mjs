@@ -41,7 +41,7 @@ async function main() {
     paymentMethod: 'UPI / Net Banking (PayU)',
     status: 'PAID',
     entityName: 'Alungal Shameem, operator of VetRx',
-    entityAddress: 'Melattur PO, Malappuram District, Kerala, India',
+    entityAddress: 'Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India',
     taxNotice: 'Applicable taxes, if any, will be reflected in the applicable invoice.',
     logoBase64,
   };

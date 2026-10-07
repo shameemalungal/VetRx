@@ -35,7 +35,7 @@ export const Footer: React.FC = () => {
               VetRx is operated by Alungal Shameem.
             </div>
             <div className="text-xs text-teal-100/60 font-mono">
-              Melattur PO, Malappuram District, Kerala, India
+              Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India
             </div>
             <div className="text-xs text-teal-100/60 font-mono">
               Built in India. Designed around real veterinary practice.

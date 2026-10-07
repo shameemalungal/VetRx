@@ -54,7 +54,7 @@ export const TermsPage: React.FC = () => {
           These Terms of Service (&ldquo;Terms&rdquo;) constitute a legally binding agreement between you (whether individually as a veterinary practitioner
           or on behalf of a veterinary clinic, hospital, or organization, &ldquo;Customer&rdquo;, &ldquo;You&rdquo;, or &ldquo;User&rdquo;) and
           Alungal Shameem, operator of the VetRx platform (&ldquo;VetRx&rdquo;, &ldquo;We&rdquo;, &ldquo;Us&rdquo;, or &ldquo;Our&rdquo;),
-          with principal operations at Melattur PO, Malappuram District, Kerala, India.
+          with principal operations at Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India.
         </p>
         <p>
           <strong>Eligibility:</strong> VetRx is designed exclusively for authorized veterinary professionals, registered veterinary practitioners, clinic owners,
@@ -245,7 +245,7 @@ export const TermsPage: React.FC = () => {
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
           <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
-          <p><strong>Address:</strong> Melattur PO, Malappuram District, Kerala, India</p>
+          <p><strong>Address:</strong> Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India</p>
           <p><strong>Support &amp; Inquiries:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>
           <p><strong>Grievance Desk:</strong> <Link to="/grievance" className="text-teal-dark underline font-sans font-bold">Access Grievance Redressal Page →</Link></p>

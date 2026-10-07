@@ -234,7 +234,7 @@ export const PrivacyPage: React.FC = () => {
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
           <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
-          <p><strong>Postal Address:</strong> Melattur PO, Malappuram District, Kerala, India</p>
+          <p><strong>Postal Address:</strong> Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India</p>
           <p><strong>Support &amp; Privacy Email:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>
           <p><strong>Escalation Desk:</strong> <Link to="/grievance" className="text-teal-dark underline font-sans font-bold">Support &amp; Grievance Escalation Desk →</Link></p>

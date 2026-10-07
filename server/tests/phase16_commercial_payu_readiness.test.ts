@@ -335,7 +335,7 @@ describe('Phase 16: Commercial & PayU Production Readiness Master Test Suite', (
       // Render print HTML
       const html = PaymentService.generateReceiptHtml(receipt);
       assert.ok(html.includes('Alungal Shameem'));
-      assert.ok(html.includes('Melattur PO, Malappuram District, Kerala'));
+      assert.ok(html.includes('Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India'));
       assert.ok(html.includes(receipt.receiptNumber));
       assert.ok(html.includes('₹599.00'));
       assert.ok(html.includes('Applicable taxes, if any, will be reflected in the applicable invoice.'));
