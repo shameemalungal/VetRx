@@ -43,6 +43,8 @@ const ScrollManager: React.FC = () => {
 };
 
 export const AppContent: React.FC = () => {
+  const { pathname } = useLocation();
+
   useEffect(() => {
     // Respect prefers-reduced-motion for scroll reveal
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -53,25 +55,59 @@ export const AppContent: React.FC = () => {
       return;
     }
 
-    const reveals = document.querySelectorAll('.scroll-reveal');
-    if ('IntersectionObserver' in window) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('is-visible');
-              observer.unobserve(entry.target);
-            }
-          });
-        },
-        { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
-      );
-      reveals.forEach((el) => observer.observe(el));
-      return () => observer.disconnect();
-    } else {
-      reveals.forEach((el) => el.classList.add('is-visible'));
-    }
-  }, []);
+    let observer: IntersectionObserver | null = null;
+
+    const revealElements = () => {
+      const reveals = document.querySelectorAll('.scroll-reveal');
+      if (reveals.length === 0) return;
+
+      if (!('IntersectionObserver' in window)) {
+        reveals.forEach((el) => el.classList.add('is-visible'));
+        return;
+      }
+
+      if (!observer) {
+        observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer?.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.05, rootMargin: '50px 0px 50px 0px' }
+        );
+      }
+
+      reveals.forEach((el) => {
+        if (el.classList.contains('is-visible')) return;
+
+        // If element is already within the visible viewport or scrolled past, reveal immediately
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > -50) {
+          el.classList.add('is-visible');
+        } else {
+          observer?.observe(el);
+        }
+      });
+    };
+
+    // Run on route mount, next paint, and fallback safety timers
+    revealElements();
+    const rafId = requestAnimationFrame(revealElements);
+    const timer1 = setTimeout(revealElements, 80);
+    const timer2 = setTimeout(revealElements, 300);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [pathname]);
 
   return (
     <div className="min-h-screen bg-surface-canvas text-content-primary selection:bg-teal-100 selection:text-teal-dark overflow-x-hidden flex flex-col justify-between">
