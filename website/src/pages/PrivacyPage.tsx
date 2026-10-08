@@ -14,7 +14,7 @@ export const PrivacyPage: React.FC = () => {
     { id: 'security-retention', title: '8. Security Measures & Data Retention' },
     { id: 'data-principal-rights', title: '9. Rights of Data Principals' },
     { id: 'children-data', title: '10. Protection of Minors' },
-    { id: 'grievance-officer', title: '11. Grievance Officer & Contact' },
+    { id: 'grievance-officer', title: '11. Support & Privacy Contact' },
     { id: 'updates', title: '12. Updates to this Policy' },
   ];
 
@@ -233,7 +233,7 @@ export const PrivacyPage: React.FC = () => {
           For privacy-related inquiries, data requests, or policy questions, please contact our team:
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
-          <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
+          <p><strong>Business Identity:</strong> VetRx (Operated by Alungal Shameem)</p>
           <p><strong>Postal Address:</strong> Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India</p>
           <p><strong>Support &amp; Privacy Email:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>

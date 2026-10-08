@@ -300,6 +300,7 @@ export const BillingPage: React.FC = () => {
           <div className="p-4 rounded-xl border border-clinical-border bg-white text-sm space-y-2">
             <p className="font-semibold text-content-primary">VetRx Accounts &amp; Billing Desk</p>
             <p className="text-xs text-content-muted">VetRx is operated by Alungal Shameem.</p>
+            <p className="text-xs text-content-muted font-mono">Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India</p>
             <p className="text-content-secondary">
               Email:{' '}
               <a href="mailto:supportvetrx@gmail.com" className="text-teal font-medium hover:underline">

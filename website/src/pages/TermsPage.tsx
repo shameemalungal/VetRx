@@ -215,7 +215,7 @@ export const TermsPage: React.FC = () => {
           11. Limitation of Liability &amp; Indemnity
         </h2>
         <p>
-          TO THE EXTENT PERMITTED UNDER APPLICABLE LAW, IN NO EVENT SHALL VETRX, ITS DIRECTORS, EMPLOYEES, OR SUPPLIERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+          TO THE EXTENT PERMITTED UNDER APPLICABLE LAW, IN NO EVENT SHALL VETRX, ITS OPERATOR, EMPLOYEES, OR SERVICE PROVIDERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
           CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, LOSS OF PRACTICE REPUTATION, LOSS OF DATA, OR CLINICAL ADVERSE OUTCOMES ARISING FROM YOUR USE OF THE PLATFORM.
           OUR AGGREGATE LIABILITY ARISING UNDER THESE TERMS SHALL NOT EXCEED THE TOTAL FEES PAID BY YOU TO VETRX IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM.
         </p>
@@ -244,7 +244,7 @@ export const TermsPage: React.FC = () => {
           If you have questions regarding these Terms or wish to lodge a formal contractual inquiry, please contact:
         </p>
         <div className="p-4 bg-surface-canvas rounded-xl border border-clinical-border font-mono text-xs space-y-1">
-          <p><strong>Business Identity:</strong> VetRx is operated by Alungal Shameem</p>
+          <p><strong>Business Identity:</strong> VetRx (Operated by Alungal Shameem)</p>
           <p><strong>Address:</strong> Nasheman, Chemmaniyode PO, Malappuram DT, Kerala - 679325, India</p>
           <p><strong>Support &amp; Inquiries:</strong> supportvetrx@gmail.com</p>
           <p><strong>WhatsApp Support:</strong> +91 90746 83808</p>

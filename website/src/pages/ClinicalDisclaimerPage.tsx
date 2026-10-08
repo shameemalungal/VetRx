@@ -172,7 +172,7 @@ export const ClinicalDisclaimerPage: React.FC = () => {
             7. Limitation of Clinical Liability
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            Under no circumstances shall VetRx, its operators, directors, employees, or hosting providers be held liable for any clinical malpractice, diagnostic error, misinterpretation, adverse drug reaction, animal injury, therapeutic failure, morbidity, or mortality arising from veterinary care administered by users of the platform.
+            Under no circumstances shall VetRx, its operator, employees, or hosting providers be held liable for any clinical malpractice, diagnostic error, misinterpretation, adverse drug reaction, animal injury, therapeutic failure, morbidity, or mortality arising from veterinary care administered by users of the platform.
           </p>
         </section>
 
