@@ -14,7 +14,6 @@
     "test:browser:smoke": "node ../scripts/browser_smoke.mjs"
   },
   "dependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.2.7",
     "@types/html2canvas": "^0.5.35",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.5",
