@@ -1,0 +1,48 @@
+{
+  "name": "VetRx — Veterinary Practitioner Platform",
+  "short_name": "VetRx",
+  "description": "Veterinary prescriptions, formulary dosing, field practice and call planner.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00685f",
+  "icons": [
+    {
+      "src": "/vetrx_logo_mark.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/calls/register",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "shared_text",
+      "url": "url"
+    }
+  },
+  "shortcuts": [
+    {
+      "name": "Register Call",
+      "short_name": "New Call",
+      "description": "Log an owner call or intake",
+      "url": "/calls/register",
+      "icons": [{ "src": "/vetrx_logo_mark.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's Calls",
+      "short_name": "Calls",
+      "description": "View today's calls and visits",
+      "url": "/calls",
+      "icons": [{ "src": "/vetrx_logo_mark.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Field Bag",
+      "short_name": "Field Bag",
+      "description": "Inspect field stock and vehicle kits",
+      "url": "/inventory/bag",
+      "icons": [{ "src": "/vetrx_logo_mark.png", "sizes": "192x192" }]
+    }
+  ]
+}

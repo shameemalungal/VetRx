@@ -16,6 +16,14 @@ import type {
   StockResolutionItemDTO,
   ExtractedInvoiceItemDTO,
   InventoryCategory,
+  StockLocationDTO,
+  StockInDTO,
+  TransferStockDTO,
+  ReturnStockDTO,
+  ReconcileStockDTO,
+  DeductFieldUsageDTO,
+  FieldUsageDeductionResult,
+  CreateLocationDTO,
 } from './inventory.types.js';
 
 export class InventoryService {
@@ -25,6 +33,7 @@ export class InventoryService {
   private static mockTransactions: Map<string, InventoryTransactionDTO[]> = new Map();
   private static mockSuppliers: Map<string, SupplierDTO[]> = new Map();
   private static mockPurchases: Map<string, PurchaseInvoiceDTO[]> = new Map();
+  private static mockLocations: Map<string, StockLocationDTO[]> = new Map();
 
   static clearMockStore(): void {
     this.mockItems.clear();
@@ -32,6 +41,7 @@ export class InventoryService {
     this.mockTransactions.clear();
     this.mockSuppliers.clear();
     this.mockPurchases.clear();
+    this.mockLocations.clear();
   }
 
   // --------------------------------------------------------------------------
@@ -1684,6 +1694,32 @@ export class InventoryService {
 
     const alerts = await this.getAlerts(practiceId);
 
+    const { storeLocation, bagLocation } = await this.ensureDefaultLocations(practiceId);
+    const storeBatches = batches.filter(
+      (b) => !b.locationId || b.locationId === storeLocation.id
+    );
+    const bagBatches = batches.filter(
+      (b) => b.locationId === bagLocation.id
+    );
+    const storeItemIds = new Set(storeBatches.map((b) => b.inventoryItemId));
+    const bagItemIds = new Set(bagBatches.map((b) => b.inventoryItemId));
+
+    const storeStockSummary = {
+      totalItems: storeItemIds.size,
+      totalUnits: Math.round(storeBatches.reduce((s, b) => s + (b.currentQuantity || 0), 0) * 100) / 100,
+      lowStockCount: items.filter(
+        (it) => storeItemIds.has(it.id) && (it.validStock ?? 0) <= it.minimumStockLevel
+      ).length,
+      stockValueINR: Math.round(storeBatches.reduce((s, b) => s + (b.currentQuantity * b.purchaseRate), 0) * 100) / 100,
+    };
+
+    const practiceBagSummary = {
+      totalItems: bagItemIds.size,
+      totalUnits: Math.round(bagBatches.reduce((s, b) => s + (b.currentQuantity || 0), 0) * 100) / 100,
+      lowStockCount: bagBatches.filter((b) => b.currentQuantity > 0 && b.currentQuantity <= 2).length,
+      expiringSoonCount: bagBatches.filter((b) => b.expiryStatus === 'EXPIRING_SOON' || b.expiryStatus === 'CRITICAL').length,
+    };
+
     const recentPurchases = (await this.listPurchases(practiceId)).slice(0, 5);
     const recentMovements = (await this.listTransactions(practiceId)).slice(0, 5);
 
@@ -1702,6 +1738,8 @@ export class InventoryService {
       outOfStockCount: alerts.counts.outOfStock,
       expiringSoonCount: alerts.counts.expiringSoon,
       expiredCount: alerts.counts.expired,
+      storeStockSummary,
+      practiceBagSummary,
       alerts: {
         expiringSoon: alerts.expiringSoon.map((b) => ({
           batchId: b.id,
@@ -1840,8 +1878,1095 @@ export class InventoryService {
 
 
   // --------------------------------------------------------------------------
-  // In-Memory Partition Helpers
+  // 14. Phase 6: Stock Locations (Store Stock vs. Practice Bag)
   // --------------------------------------------------------------------------
+
+  static async ensureDefaultLocations(
+    practiceId: string
+  ): Promise<{ storeLocation: StockLocationDTO; bagLocation: StockLocationDTO }> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.stockLocation) {
+      try {
+        const locations = await prisma.stockLocation.findMany({
+          where: { practiceId },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        let store = locations.find(
+          (l) => l.name.toLowerCase() === 'store stock' || l.isDefault
+        );
+        let bag = locations.find(
+          (l) => l.name.toLowerCase() === 'practice bag'
+        );
+
+        if (!store) {
+          const created = await prisma.stockLocation.create({
+            data: {
+              practiceId,
+              name: 'Store Stock',
+              description: 'Main Practice Inventory Store',
+              isDefault: true,
+            },
+          });
+          store = created;
+        }
+
+        if (!bag) {
+          const created = await prisma.stockLocation.create({
+            data: {
+              practiceId,
+              name: 'Practice Bag',
+              description: 'Field Visit Carrying Bag',
+              isDefault: false,
+            },
+          });
+          bag = created;
+        }
+
+        const toDto = (l: any): StockLocationDTO => ({
+          id: l.id,
+          practiceId: l.practiceId,
+          name: l.name,
+          description: l.description,
+          isDefault: l.isDefault,
+          createdAt: l.createdAt.toISOString(),
+          updatedAt: l.updatedAt.toISOString(),
+        });
+
+        return {
+          storeLocation: toDto(store),
+          bagLocation: toDto(bag),
+        };
+      } catch (err) {
+        console.warn('[InventoryService.ensureDefaultLocations] Prisma error, using mock:', err);
+      }
+    }
+
+    // Mock store fallback
+    const locStore = this.getLocationsStore(practiceId);
+    let store = locStore.find((l) => l.name === 'Store Stock' || l.isDefault);
+    let bag = locStore.find((l) => l.name === 'Practice Bag');
+
+    const now = new Date().toISOString();
+    if (!store) {
+      store = {
+        id: `loc_store_${practiceId}`,
+        practiceId,
+        name: 'Store Stock',
+        description: 'Main Practice Inventory Store',
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      locStore.push(store);
+    }
+
+    if (!bag) {
+      bag = {
+        id: `loc_bag_${practiceId}`,
+        practiceId,
+        name: 'Practice Bag',
+        description: 'Field Visit Carrying Bag',
+        isDefault: false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      locStore.push(bag);
+    }
+
+    return { storeLocation: store, bagLocation: bag };
+  }
+
+  static async listLocations(practiceId: string): Promise<StockLocationDTO[]> {
+    const { storeLocation, bagLocation } = await this.ensureDefaultLocations(practiceId);
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.stockLocation) {
+      try {
+        const dbLocs = await prisma.stockLocation.findMany({
+          where: { practiceId },
+          orderBy: { name: 'asc' },
+        });
+        return dbLocs.map((l) => ({
+          id: l.id,
+          practiceId: l.practiceId,
+          name: l.name,
+          description: l.description,
+          isDefault: l.isDefault,
+          createdAt: l.createdAt.toISOString(),
+          updatedAt: l.updatedAt.toISOString(),
+        }));
+      } catch {}
+    }
+    return this.getLocationsStore(practiceId);
+  }
+
+  static async createLocation(
+    practiceId: string,
+    data: CreateLocationDTO,
+    userId?: string | null
+  ): Promise<StockLocationDTO> {
+    const trimmedName = data.name.trim();
+    if (!trimmedName) {
+      throw new AppError(400, 'INVALID_NAME', 'Location name is required.');
+    }
+    if (trimmedName.toLowerCase() === 'store stock') {
+      throw new AppError(400, 'RESERVED_NAME', 'Store Stock is a reserved location name.');
+    }
+
+    const existing = await this.listLocations(practiceId);
+    if (existing.some((l) => l.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new AppError(409, 'DUPLICATE_LOCATION', `A location named "${trimmedName}" already exists.`);
+    }
+
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.stockLocation) {
+      try {
+        const created = await prisma.stockLocation.create({
+          data: {
+            practiceId,
+            name: trimmedName,
+            description: data.description?.trim() || null,
+            isDefault: false,
+          },
+        });
+        return {
+          id: created.id,
+          practiceId: created.practiceId,
+          name: created.name,
+          description: created.description,
+          isDefault: created.isDefault,
+          assignedUserId: data.assignedUserId || null,
+          assignedUserName: data.assignedUserName || null,
+          vehicleNumber: data.vehicleNumber || null,
+          type: data.type || 'BAG',
+          createdAt: created.createdAt.toISOString(),
+          updatedAt: created.updatedAt.toISOString(),
+        };
+      } catch (err) {
+        console.warn('[InventoryService.createLocation] Prisma error, using mock:', err);
+      }
+    }
+
+    const locStore = this.getLocationsStore(practiceId);
+    const now = new Date().toISOString();
+    const newLoc: StockLocationDTO = {
+      id: `loc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      practiceId,
+      name: trimmedName,
+      description: data.description?.trim() || null,
+      isDefault: false,
+      assignedUserId: data.assignedUserId || null,
+      assignedUserName: data.assignedUserName || null,
+      vehicleNumber: data.vehicleNumber || null,
+      type: data.type || 'BAG',
+      createdAt: now,
+      updatedAt: now,
+    };
+    locStore.push(newLoc);
+    return newLoc;
+  }
+
+  // --------------------------------------------------------------------------
+  // 15. Store Stock vs. Practice Bag Queries
+  // --------------------------------------------------------------------------
+
+  static async getStoreStock(
+    practiceId: string,
+    filters: { search?: string; category?: string } = {}
+  ): Promise<{
+    storeLocation: StockLocationDTO;
+    items: InventoryItemDTO[];
+    batches: InventoryBatchDTO[];
+    summary: { totalItems: number; totalUnits: number; lowStockCount: number; stockValueINR: number };
+  }> {
+    const { storeLocation } = await this.ensureDefaultLocations(practiceId);
+    const allItems = await this.listItems(practiceId, filters);
+    const allBatches = await this.listBatches(practiceId);
+
+    // Batches in Store Stock: either explicitly assigned to storeLocation.id OR without locationId
+    const storeBatches = allBatches.filter(
+      (b) => !b.locationId || b.locationId === storeLocation.id
+    );
+
+    const storeBatchItemIds = new Set(storeBatches.map((b) => b.inventoryItemId));
+    const storeItems = allItems.filter((i) => storeBatchItemIds.has(i.id));
+
+    const totalUnits = storeBatches.reduce((s, b) => s + (b.currentQuantity || 0), 0);
+    const stockValueINR = storeBatches.reduce(
+      (s, b) => s + (b.currentQuantity || 0) * (b.purchaseRate || 0),
+      0
+    );
+    const lowStockCount = storeItems.filter(
+      (i) => (i.validStock ?? 0) <= i.minimumStockLevel
+    ).length;
+
+    return {
+      storeLocation,
+      items: storeItems,
+      batches: storeBatches,
+      summary: {
+        totalItems: storeItems.length,
+        totalUnits: Math.round(totalUnits * 100) / 100,
+        lowStockCount,
+        stockValueINR: Math.round(stockValueINR * 100) / 100,
+      },
+    };
+  }
+
+  static async getPracticeBagStock(
+    practiceId: string,
+    filters: { search?: string; category?: string } = {},
+    locationId?: string
+  ): Promise<{
+    bagLocation: StockLocationDTO;
+    items: InventoryItemDTO[];
+    batches: InventoryBatchDTO[];
+    summary: { totalItems: number; totalUnits: number; lowStockCount: number; expiringSoonCount: number };
+  }> {
+    const { bagLocation: defaultBag } = await this.ensureDefaultLocations(practiceId);
+    let targetLocation = defaultBag;
+    if (locationId) {
+      const allLocs = await this.listLocations(practiceId);
+      const found = allLocs.find((l) => l.id === locationId);
+      if (found) {
+        targetLocation = found;
+      } else {
+        throw new AppError(404, 'LOCATION_NOT_FOUND', `Stock location ${locationId} not found in this practice.`);
+      }
+    }
+
+    const allItems = await this.listItems(practiceId, filters);
+    const allBatches = await this.listBatches(practiceId);
+
+    // Batches in Selected Kit / Bag
+    const bagBatches = allBatches.filter((b) => b.locationId === targetLocation.id);
+    const bagBatchItemIds = new Set(bagBatches.map((b) => b.inventoryItemId));
+    const bagItems = allItems
+      .filter((i) => bagBatchItemIds.has(i.id))
+      .map((i) => {
+        const itemLocationBatches = bagBatches.filter((b) => b.inventoryItemId === i.id);
+        const locQty = itemLocationBatches.reduce((s, b) => s + (b.currentQuantity || 0), 0);
+        return {
+          ...i,
+          currentStock: locQty,
+          totalStock: locQty,
+          validStock: locQty,
+          batches: itemLocationBatches,
+        };
+      });
+
+    const totalUnits = bagBatches.reduce((s, b) => s + (b.currentQuantity || 0), 0);
+    const lowStockCount = bagBatches.filter(
+      (b) => b.currentQuantity > 0 && b.currentQuantity <= 2
+    ).length;
+    const expiringSoonCount = bagBatches.filter(
+      (b) => b.expiryStatus === 'EXPIRING_SOON' || b.expiryStatus === 'CRITICAL'
+    ).length;
+
+    return {
+      bagLocation: targetLocation,
+      items: bagItems,
+      batches: bagBatches,
+      summary: {
+        totalItems: bagItems.length,
+        totalUnits: Math.round(totalUnits * 100) / 100,
+        lowStockCount,
+        expiringSoonCount,
+      },
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 16. CVP-29: Stock In (Receipt into Store Stock)
+  // --------------------------------------------------------------------------
+
+  static async stockIn(
+    practiceId: string,
+    data: StockInDTO,
+    userId?: string | null
+  ): Promise<{
+    success: boolean;
+    item: InventoryItemDTO;
+    batch: InventoryBatchDTO;
+    transaction: InventoryTransactionDTO;
+  }> {
+    if (!data.quantity || data.quantity <= 0) {
+      throw new AppError(400, 'INVALID_QUANTITY', 'Stock in quantity must be greater than zero.');
+    }
+    if (!data.batchNumber || !data.batchNumber.trim()) {
+      throw new AppError(400, 'INVALID_BATCH', 'Batch number is required.');
+    }
+    if (!data.expiryDate || !data.expiryDate.trim()) {
+      throw new AppError(400, 'INVALID_EXPIRY', 'Expiry date is required.');
+    }
+
+    const { storeLocation } = await this.ensureDefaultLocations(practiceId);
+
+    // 1. Resolve or create item
+    let item: InventoryItemDTO;
+    if (data.itemId) {
+      item = await this.getItemById(data.itemId, practiceId);
+    } else {
+      const itemName = data.name?.trim();
+      if (!itemName) {
+        throw new AppError(400, 'MISSING_ITEM', 'Either itemId or name is required.');
+      }
+      const existingItems = await this.listItems(practiceId, { search: itemName });
+      const matched = existingItems.find(
+        (i) => i.name.toLowerCase() === itemName.toLowerCase()
+      );
+
+      if (matched) {
+        item = matched;
+      } else {
+        item = await this.createItem(practiceId, {
+          name: itemName,
+          category: data.category || 'MEDICINE',
+          genericName: data.genericName,
+          dosageForm: data.dosageForm,
+          presentation: data.presentation,
+          stockUnit: data.stockUnit || 'Unit',
+          minimumStockLevel: 5,
+          targetStockLevel: 20,
+        });
+      }
+    }
+
+    const batchNumber = data.batchNumber.trim();
+    const expiryDateStr = data.expiryDate.trim();
+    const purchaseRate = data.purchaseRate ?? 0;
+    const mrp = data.mrp ?? Math.round(purchaseRate * 1.35);
+
+    // 2. Database transaction if Prisma is active
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Check for existing batch in Store Stock
+          let batch = await tx.inventoryBatch.findFirst({
+            where: {
+              practiceId,
+              inventoryItemId: item.id,
+              batchNumber,
+              locationId: storeLocation.id,
+            },
+          });
+
+          const oldQty = batch ? batch.currentQuantity : 0;
+          const newQty = oldQty + data.quantity;
+
+          if (batch) {
+            batch = await tx.inventoryBatch.update({
+              where: { id: batch.id },
+              data: {
+                currentQuantity: newQty,
+                purchaseRate: purchaseRate > 0 ? purchaseRate : batch.purchaseRate,
+                mrp: mrp > 0 ? mrp : batch.mrp,
+              },
+            });
+          } else {
+            batch = await tx.inventoryBatch.create({
+              data: {
+                practiceId,
+                inventoryItemId: item.id,
+                batchNumber,
+                expiryDate: new Date(expiryDateStr),
+                manufacturingDate: data.manufacturingDate ? new Date(data.manufacturingDate) : null,
+                initialQuantity: data.quantity,
+                currentQuantity: data.quantity,
+                purchaseRate,
+                mrp,
+                locationId: storeLocation.id,
+              },
+            });
+          }
+
+          const invTx = await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: item.id,
+              batchId: batch.id,
+              transactionType: 'PURCHASE',
+              quantityChange: data.quantity,
+              quantityBefore: oldQty,
+              quantityAfter: newQty,
+              unitCost: purchaseRate,
+              referenceType: 'STOCK_IN',
+              referenceId: data.sourceReference || data.idempotencyKey || null,
+              reason: data.notes?.trim() || 'Stock In to Store Stock',
+              performedByUserId: userId || null,
+            },
+          });
+
+          return { batch, invTx };
+        });
+
+        const updatedItem = await this.getItemById(item.id, practiceId);
+        const allBatches = await this.listBatches(practiceId, { itemId: item.id });
+        const resBatch = allBatches.find((b) => b.id === result.batch.id)!;
+
+        const resTx: InventoryTransactionDTO = {
+          id: result.invTx.id,
+          practiceId,
+          itemId: item.id,
+          itemName: item.name,
+          itemCategory: item.category,
+          batchId: result.batch.id,
+          batchNumber,
+          transactionType: 'PURCHASE',
+          quantityChange: data.quantity,
+          quantityBefore: result.invTx.quantityBefore,
+          quantityAfter: result.invTx.quantityAfter,
+          unitCost: purchaseRate,
+          referenceType: 'STOCK_IN',
+          referenceId: data.sourceReference || data.idempotencyKey || null,
+          reason: data.notes?.trim() || 'Stock In to Store Stock',
+          performedByUserId: userId || null,
+          createdAt: result.invTx.createdAt.toISOString(),
+        };
+
+        return {
+          success: true,
+          item: updatedItem,
+          batch: resBatch,
+          transaction: resTx,
+        };
+      } catch (err) {
+        console.warn('[InventoryService.stockIn] Prisma error, using fallback:', err);
+      }
+    }
+
+    // Mock store execution
+    const batches = this.getBatchesStore(practiceId);
+    let batch = batches.find(
+      (b) =>
+        b.inventoryItemId === item.id &&
+        b.batchNumber === batchNumber &&
+        (!b.locationId || b.locationId === storeLocation.id)
+    );
+
+    const oldQty = batch ? batch.currentQuantity : 0;
+    const newQty = oldQty + data.quantity;
+    const now = new Date().toISOString();
+
+    if (batch) {
+      batch.currentQuantity = newQty;
+      if (purchaseRate > 0) batch.purchaseRate = purchaseRate;
+      if (mrp > 0) batch.mrp = mrp;
+      batch.updatedAt = now;
+    } else {
+      batch = {
+        id: `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        practiceId,
+        inventoryItemId: item.id,
+        itemName: item.name,
+        itemCategory: item.category,
+        batchNumber,
+        manufacturingDate: data.manufacturingDate || null,
+        expiryDate: expiryDateStr,
+        initialQuantity: data.quantity,
+        currentQuantity: data.quantity,
+        purchaseRate,
+        mrp,
+        locationId: storeLocation.id,
+        isExpired: expiryDateStr < now.split('T')[0],
+        daysToExpiry: 180,
+        expiryStatus: 'OK',
+        createdAt: now,
+        updatedAt: now,
+      };
+      batches.push(batch);
+    }
+
+    const txs = this.getTransactionsStore(practiceId);
+    const invTx: InventoryTransactionDTO = {
+      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      practiceId,
+      itemId: item.id,
+      itemName: item.name,
+      itemCategory: item.category,
+      batchId: batch.id,
+      batchNumber,
+      transactionType: 'PURCHASE',
+      quantityChange: data.quantity,
+      quantityBefore: oldQty,
+      quantityAfter: newQty,
+      unitCost: purchaseRate,
+      referenceType: 'STOCK_IN',
+      referenceId: data.sourceReference || data.idempotencyKey || null,
+      reason: data.notes?.trim() || 'Stock In to Store Stock',
+      performedByUserId: userId || null,
+      createdAt: now,
+    };
+    txs.push(invTx);
+
+    const updatedItem = await this.getItemById(item.id, practiceId);
+    return {
+      success: true,
+      item: updatedItem,
+      batch,
+      transaction: invTx,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 17. Store Stock to Practice Bag Transfer
+  // --------------------------------------------------------------------------
+
+  static async transferStock(
+    practiceId: string,
+    data: TransferStockDTO,
+    userId?: string | null
+  ): Promise<{
+    success: boolean;
+    transferId: string;
+    sourceBatch: InventoryBatchDTO;
+    destinationBatch: InventoryBatchDTO;
+    quantity: number;
+  }> {
+    if (!data.quantity || data.quantity <= 0) {
+      throw new AppError(400, 'INVALID_QUANTITY', 'Transfer quantity must be greater than zero.');
+    }
+
+    const { storeLocation, bagLocation } = await this.ensureDefaultLocations(practiceId);
+    const fromLocId = data.fromLocationId || data.sourceLocationId || storeLocation.id;
+    const toLocId = data.toLocationId || data.targetLocationId || bagLocation.id;
+
+    if (fromLocId === toLocId) {
+      throw new AppError(400, 'INVALID_TRANSFER', 'Source and destination locations must be different.');
+    }
+
+    const allLocations = await this.listLocations(practiceId);
+    const srcLoc = allLocations.find((l) => l.id === fromLocId);
+    const dstLoc = allLocations.find((l) => l.id === toLocId);
+    const srcLocName = srcLoc?.name || 'Store Stock';
+    const dstLocName = dstLoc?.name || 'Practice Bag';
+
+    let defaultRefType = 'TRANSFER_TO_BAG';
+    if (fromLocId !== storeLocation.id && toLocId !== storeLocation.id) {
+      defaultRefType = 'TRANSFER_BETWEEN_KITS';
+    } else if (toLocId === storeLocation.id) {
+      defaultRefType = 'RETURN_TO_STORE';
+    }
+
+    // Idempotency check
+    if (data.idempotencyKey) {
+      const txs = await this.listTransactions(practiceId);
+      const existing = txs.find(
+        (t) =>
+          (t.referenceType === 'TRANSFER_TO_BAG' ||
+            t.referenceType === 'TRANSFER_BETWEEN_KITS' ||
+            t.referenceType === 'RETURN_TO_STORE') &&
+          t.referenceId === data.idempotencyKey &&
+          t.quantityChange < 0
+      );
+      if (existing) {
+        const allBatches = await this.listBatches(practiceId, { itemId: data.itemId });
+        const srcB = allBatches.find((b) => b.id === existing.batchId) || allBatches[0];
+        return {
+          success: true,
+          transferId: existing.referenceId!,
+          sourceBatch: srcB,
+          destinationBatch: srcB,
+          quantity: Math.abs(existing.quantityChange),
+        };
+      }
+    }
+
+    const item = await this.getItemById(data.itemId, practiceId);
+    const allBatches = await this.listBatches(practiceId, { itemId: data.itemId });
+
+    // Find source batch in source location
+    let sourceBatch = allBatches.find(
+      (b) =>
+        (!b.locationId || b.locationId === fromLocId) &&
+        (data.batchNumber ? b.batchNumber === data.batchNumber : true) &&
+        b.currentQuantity >= data.quantity
+    );
+
+    if (!sourceBatch) {
+      // Find total available in source
+      const totalAvailable = allBatches
+        .filter((b) => !b.locationId || b.locationId === fromLocId)
+        .reduce((sum, b) => sum + (b.currentQuantity || 0), 0);
+
+      throw new AppError(
+        400,
+        'INSUFFICIENT_STOCK',
+        `Insufficient stock in source location. Requested: ${data.quantity}, Available: ${totalAvailable}`
+      );
+    }
+
+    const transferId = data.idempotencyKey || `trf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // Database atomic transaction
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Decrement source batch
+          const updatedSrc = await tx.inventoryBatch.update({
+            where: { id: sourceBatch!.id },
+            data: { currentQuantity: { decrement: data.quantity } },
+          });
+
+          // Debit transaction on source
+          await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: item.id,
+              batchId: sourceBatch!.id,
+              transactionType: 'STOCK_ADJUSTMENT',
+              quantityChange: -data.quantity,
+              quantityBefore: sourceBatch!.currentQuantity,
+              quantityAfter: updatedSrc.currentQuantity,
+              unitCost: sourceBatch!.purchaseRate,
+              referenceType: defaultRefType,
+              referenceId: transferId,
+              reason: data.reason?.trim() || `Transfer from ${srcLocName} to ${dstLocName}`,
+              performedByUserId: userId || null,
+            },
+          });
+
+          // Find or create destination batch in toLocId
+          let destBatch = await tx.inventoryBatch.findFirst({
+            where: {
+              practiceId,
+              inventoryItemId: item.id,
+              batchNumber: sourceBatch!.batchNumber,
+              locationId: toLocId,
+            },
+          });
+
+          const destBefore = destBatch ? destBatch.currentQuantity : 0;
+          const destAfter = destBefore + data.quantity;
+
+          if (destBatch) {
+            destBatch = await tx.inventoryBatch.update({
+              where: { id: destBatch.id },
+              data: { currentQuantity: destAfter },
+            });
+          } else {
+            destBatch = await tx.inventoryBatch.create({
+              data: {
+                practiceId,
+                inventoryItemId: item.id,
+                batchNumber: sourceBatch!.batchNumber,
+                expiryDate: new Date(sourceBatch!.expiryDate),
+                manufacturingDate: sourceBatch!.manufacturingDate
+                  ? new Date(sourceBatch!.manufacturingDate)
+                  : null,
+                initialQuantity: data.quantity,
+                currentQuantity: data.quantity,
+                purchaseRate: sourceBatch!.purchaseRate,
+                mrp: sourceBatch!.mrp,
+                locationId: toLocId,
+              },
+            });
+          }
+
+          // Credit transaction on destination
+          await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: item.id,
+              batchId: destBatch.id,
+              transactionType: 'STOCK_ADJUSTMENT',
+              quantityChange: data.quantity,
+              quantityBefore: destBefore,
+              quantityAfter: destAfter,
+              unitCost: sourceBatch!.purchaseRate,
+              referenceType: defaultRefType,
+              referenceId: transferId,
+              reason: data.reason?.trim() || `Received from ${srcLocName} into ${dstLocName}`,
+              performedByUserId: userId || null,
+            },
+          });
+
+          return { updatedSrc, destBatch };
+        });
+
+        const refreshed = await this.listBatches(practiceId, { itemId: item.id });
+        const srcB = refreshed.find((b) => b.id === result.updatedSrc.id)!;
+        const dstB = refreshed.find((b) => b.id === result.destBatch.id)!;
+
+        return {
+          success: true,
+          transferId,
+          sourceBatch: srcB,
+          destinationBatch: dstB,
+          quantity: data.quantity,
+        };
+      } catch (err) {
+        console.warn('[InventoryService.transferStock] Prisma error, using fallback:', err);
+      }
+    }
+
+    // Mock store execution
+    const batches = this.getBatchesStore(practiceId);
+    const src = batches.find((b) => b.id === sourceBatch!.id)!;
+    const srcBefore = src.currentQuantity;
+    src.currentQuantity -= data.quantity;
+    const srcAfter = src.currentQuantity;
+
+    let dst = batches.find(
+      (b) =>
+        b.inventoryItemId === item.id &&
+        b.batchNumber === src.batchNumber &&
+        b.locationId === toLocId
+    );
+
+    const now = new Date().toISOString();
+    const dstBefore = dst ? dst.currentQuantity : 0;
+    if (dst) {
+      dst.currentQuantity += data.quantity;
+      dst.updatedAt = now;
+    } else {
+      dst = {
+        id: `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        practiceId,
+        inventoryItemId: item.id,
+        itemName: item.name,
+        itemCategory: item.category,
+        batchNumber: src.batchNumber,
+        manufacturingDate: src.manufacturingDate,
+        expiryDate: src.expiryDate,
+        initialQuantity: data.quantity,
+        currentQuantity: data.quantity,
+        purchaseRate: src.purchaseRate,
+        mrp: src.mrp,
+        locationId: toLocId,
+        isExpired: src.isExpired,
+        daysToExpiry: src.daysToExpiry,
+        expiryStatus: src.expiryStatus,
+        createdAt: now,
+        updatedAt: now,
+      };
+      batches.push(dst);
+    }
+    const dstAfter = dst.currentQuantity;
+
+    const txs = this.getTransactionsStore(practiceId);
+    txs.push({
+      id: `tx_${Date.now()}_1`,
+      practiceId,
+      itemId: item.id,
+      itemName: item.name,
+      itemCategory: item.category,
+      batchId: src.id,
+      batchNumber: src.batchNumber,
+      transactionType: 'STOCK_ADJUSTMENT',
+      quantityChange: -data.quantity,
+      quantityBefore: srcBefore,
+      quantityAfter: srcAfter,
+      unitCost: src.purchaseRate,
+      referenceType: defaultRefType,
+      referenceId: transferId,
+      reason: data.reason?.trim() || `Transfer from ${srcLocName} to ${dstLocName}`,
+      performedByUserId: userId || null,
+      createdAt: now,
+    });
+    txs.push({
+      id: `tx_${Date.now()}_2`,
+      practiceId,
+      itemId: item.id,
+      itemName: item.name,
+      itemCategory: item.category,
+      batchId: dst.id,
+      batchNumber: dst.batchNumber,
+      transactionType: 'STOCK_ADJUSTMENT',
+      quantityChange: data.quantity,
+      quantityBefore: dstBefore,
+      quantityAfter: dstAfter,
+      unitCost: dst.purchaseRate,
+      referenceType: defaultRefType,
+      referenceId: transferId,
+      reason: data.reason?.trim() || `Received from ${srcLocName} into ${dstLocName}`,
+      performedByUserId: userId || null,
+      createdAt: now,
+    });
+
+    return {
+      success: true,
+      transferId,
+      sourceBatch: src,
+      destinationBatch: dst,
+      quantity: data.quantity,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 18. Return Unused Stock (Practice Bag / Kit to Store Stock)
+  // --------------------------------------------------------------------------
+
+  static async returnUnusedStock(
+    practiceId: string,
+    data: ReturnStockDTO,
+    userId?: string | null
+  ): Promise<{
+    success: boolean;
+    returnId: string;
+    sourceBatch: InventoryBatchDTO;
+    destinationBatch: InventoryBatchDTO;
+    quantity: number;
+  }> {
+    const { storeLocation, bagLocation } = await this.ensureDefaultLocations(practiceId);
+    const fromLocId = data.fromLocationId || bagLocation.id;
+
+    // Call transferStock with designated from location to storeLocation
+    const res = await this.transferStock(
+      practiceId,
+      {
+        fromLocationId: fromLocId,
+        toLocationId: storeLocation.id,
+        itemId: data.itemId,
+        batchNumber: data.batchNumber,
+        quantity: data.quantity,
+        reason: data.reason?.trim() || 'Returned unused stock to Store',
+        idempotencyKey: data.idempotencyKey,
+      },
+      userId
+    );
+
+    return {
+      success: true,
+      returnId: res.transferId,
+      sourceBatch: res.sourceBatch,
+      destinationBatch: res.destinationBatch,
+      quantity: res.quantity,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 19. Deduct Field Usage (CVP-24 Integration)
+  // --------------------------------------------------------------------------
+
+  static async deductFieldUsage(
+    practiceId: string,
+    data: DeductFieldUsageDTO,
+    userId?: string | null
+  ): Promise<FieldUsageDeductionResult> {
+    const reqQty = Number(data.quantity ?? (data as any).quantityUsed) || 0;
+    if (reqQty <= 0) {
+      return {
+        success: false,
+        reason: 'INVALID_QUANTITY',
+        deductedQuantity: 0,
+        requestedQuantity: reqQty,
+      };
+    }
+
+    // 1. Idempotency Check
+    if (data.idempotencyKey) {
+      const txs = await this.listTransactions(practiceId);
+      const existing = txs.find(
+        (t) =>
+          t.referenceType === 'FIELD_USAGE' &&
+          (t.referenceId === data.idempotencyKey || t.referenceId === data.visitId) &&
+          t.quantityChange < 0
+      );
+      if (existing) {
+        const refreshed = await this.listBatches(practiceId);
+        const b = refreshed.find((x) => x.id === existing.batchId);
+        return {
+          success: true,
+          deductedQuantity: Math.abs(existing.quantityChange),
+          remainingBagStock: b ? b.currentQuantity : undefined,
+          batchNumber: existing.batchNumber || undefined,
+          batchId: existing.batchId || undefined,
+          transactionId: existing.id,
+          requestedQuantity: data.quantity,
+        };
+      }
+    }
+
+    const { bagLocation } = await this.ensureDefaultLocations(practiceId);
+    const targetLocId = data.locationId || bagLocation.id;
+
+    // 2. Find medicine item in catalogue
+    const items = await this.listItems(practiceId);
+    let matchedItem = items.find(
+      (i) =>
+        (data.medicineId && (i.id === data.medicineId || i.medicineId === String(data.medicineId))) ||
+        i.name.toLowerCase() === data.medicineName.toLowerCase()
+    );
+
+    if (!matchedItem) {
+      return {
+        success: false,
+        reason: 'ITEM_NOT_IN_CATALOGUE',
+        deductedQuantity: 0,
+        availableQuantity: 0,
+        requestedQuantity: data.quantity,
+      };
+    }
+
+    // 3. Find available batch in designated Kit (or default Practice Bag)
+    const batches = await this.listBatches(practiceId, { itemId: matchedItem.id });
+    const bagBatches = batches.filter(
+      (b) => b.locationId === targetLocId && b.currentQuantity > 0
+    );
+
+    // Filter by batchNumber if specified, otherwise FEFO
+    let candidateBatch = bagBatches.find(
+      (b) => (data.batchNumber ? b.batchNumber === data.batchNumber : true) && b.currentQuantity >= reqQty
+    );
+
+    const totalBagAvailable = bagBatches.reduce((sum, b) => sum + (b.currentQuantity || 0), 0);
+
+    if (!candidateBatch) {
+      return {
+        success: false,
+        reason: 'INSUFFICIENT_BAG_STOCK',
+        deductedQuantity: 0,
+        availableQuantity: totalBagAvailable,
+        requestedQuantity: reqQty,
+      };
+    }
+
+    // 4. Atomic deduction from Practice Bag
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const txResult = await prisma.$transaction(async (tx) => {
+          const updatedBatch = await tx.inventoryBatch.update({
+            where: { id: candidateBatch!.id },
+            data: { currentQuantity: { decrement: reqQty } },
+          });
+
+          const invTx = await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: matchedItem!.id,
+              batchId: candidateBatch!.id,
+              transactionType: 'SALE_OR_INVOICE',
+              quantityChange: -reqQty,
+              quantityBefore: candidateBatch!.currentQuantity,
+              quantityAfter: updatedBatch.currentQuantity,
+              unitCost: candidateBatch!.purchaseRate,
+              referenceType: 'FIELD_USAGE',
+              referenceId: data.idempotencyKey || data.visitId,
+              reason: `Administered to ${data.patientName || 'patient'} (Visit: ${data.visitId})`,
+              performedByUserId: userId || null,
+            },
+          });
+
+          return { updatedBatch, invTx };
+        });
+
+        return {
+          success: true,
+          deductedQuantity: reqQty,
+          remainingBagStock: txResult.updatedBatch.currentQuantity,
+          batchNumber: candidateBatch.batchNumber,
+          batchId: candidateBatch.id,
+          transactionId: txResult.invTx.id,
+          requestedQuantity: reqQty,
+        };
+      } catch (err) {
+        console.warn('[InventoryService.deductFieldUsage] Prisma error, using fallback:', err);
+      }
+    }
+
+    // Mock store execution
+    const batchesStore = this.getBatchesStore(practiceId);
+    const b = batchesStore.find((x) => x.id === candidateBatch.id)!;
+    const oldQty = b.currentQuantity;
+    b.currentQuantity -= reqQty;
+    b.updatedAt = new Date().toISOString();
+
+    const txs = this.getTransactionsStore(practiceId);
+    const newTx: InventoryTransactionDTO = {
+      id: `tx_${Date.now()}_field_use`,
+      practiceId,
+      itemId: matchedItem.id,
+      itemName: matchedItem.name,
+      itemCategory: matchedItem.category,
+      batchId: b.id,
+      batchNumber: b.batchNumber,
+      transactionType: 'SALE_OR_INVOICE',
+      quantityChange: -reqQty,
+      quantityBefore: oldQty,
+      quantityAfter: b.currentQuantity,
+      unitCost: b.purchaseRate,
+      referenceType: 'FIELD_USAGE',
+      referenceId: data.idempotencyKey || data.visitId,
+      reason: `Administered to ${data.patientName || 'patient'} (Visit: ${data.visitId})`,
+      performedByUserId: userId || null,
+      createdAt: new Date().toISOString(),
+    };
+    txs.push(newTx);
+
+    return {
+      success: true,
+      deductedQuantity: reqQty,
+      remainingBagStock: b.currentQuantity,
+      batchNumber: b.batchNumber,
+      batchId: b.id,
+      transactionId: newTx.id,
+      requestedQuantity: reqQty,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 20. Reconciliation & Adjustments (Physical Count vs System)
+  // --------------------------------------------------------------------------
+
+  static async reconcileLocationStock(
+    practiceId: string,
+    data: ReconcileStockDTO,
+    userId?: string | null
+  ): Promise<{
+    success: boolean;
+    adjustmentsCount: number;
+    reconciledItems: Array<{ itemId: string; variance: number; countedQuantity: number }>;
+  }> {
+    const { storeLocation, bagLocation } = await this.ensureDefaultLocations(practiceId);
+    let targetLocId = storeLocation.id;
+    if (data.locationId) {
+      targetLocId = data.locationId;
+    } else if (data.locationName?.toLowerCase().includes('bag')) {
+      targetLocId = bagLocation.id;
+    }
+
+    const reconciledItems: Array<{ itemId: string; variance: number; countedQuantity: number }> = [];
+
+    for (const item of data.items) {
+      const variance = item.countedQuantity - item.recordedQuantity;
+      if (variance !== 0) {
+        if (!item.reason && !data.reason) {
+          throw new AppError(
+            400,
+            'REASON_REQUIRED',
+            `Variance reason required for item ${item.itemId} (variance: ${variance}).`
+          );
+        }
+        if (item.countedQuantity < 0) {
+          throw new AppError(400, 'NEGATIVE_STOCK', 'Counted physical quantity cannot be negative.');
+        }
+
+        // Apply adjustment
+        await this.adjustStock(
+          practiceId,
+          {
+            itemId: item.itemId,
+            batchId: item.batchId || null,
+            quantityChange: variance,
+            reason: item.reason || data.reason || 'Physical Stock Reconciliation',
+            notes: `Counted: ${item.countedQuantity}, Recorded: ${item.recordedQuantity}, Location: ${targetLocId}`,
+            performedByUserId: userId || null,
+          }
+        );
+
+        reconciledItems.push({
+          itemId: item.itemId,
+          variance,
+          countedQuantity: item.countedQuantity,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      adjustmentsCount: reconciledItems.length,
+      reconciledItems,
+    };
+  }
+
 
   private static getItemsStore(practiceId: string): InventoryItemDTO[] {
     if (!this.mockItems.has(practiceId)) {
@@ -1876,5 +3001,12 @@ export class InventoryService {
       this.mockPurchases.set(practiceId, []);
     }
     return this.mockPurchases.get(practiceId)!;
+  }
+
+  private static getLocationsStore(practiceId: string): StockLocationDTO[] {
+    if (!this.mockLocations.has(practiceId)) {
+      this.mockLocations.set(practiceId, []);
+    }
+    return this.mockLocations.get(practiceId)!;
   }
 }

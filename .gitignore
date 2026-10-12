@@ -61,3 +61,5 @@ edge_*
 uat_*
 *.traineddata
 test_assets/
+*.dump
+scripts/pending_cvp_migration.sql

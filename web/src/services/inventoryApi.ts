@@ -230,7 +230,95 @@ export interface InventoryDashboardData {
       minimumStockLevel: number;
     }>;
   };
+  storeStockSummary?: {
+    totalItems: number;
+    totalUnits: number;
+    lowStockCount: number;
+    stockValueINR: number;
+  };
+  practiceBagSummary?: {
+    totalItems: number;
+    totalUnits: number;
+    lowStockCount: number;
+    expiringSoonCount: number;
+  };
 }
+
+export interface StockLocation {
+  id: string;
+  practiceId: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+  vehicleNumber?: string | null;
+  type?: 'STORE' | 'BAG' | 'VEHICLE' | 'FIELD_KIT';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLocationPayload {
+  name: string;
+  description?: string | null;
+  type?: 'BAG' | 'VEHICLE' | 'FIELD_KIT';
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+  vehicleNumber?: string | null;
+}
+
+export interface StockInPayload {
+  itemId?: string;
+  name?: string;
+  category?: InventoryCategory;
+  genericName?: string | null;
+  dosageForm?: string | null;
+  presentation?: string | null;
+  stockUnit?: string;
+  batchNumber: string;
+  manufacturingDate?: string | null;
+  expiryDate: string;
+  quantity: number;
+  purchaseRate?: number;
+  mrp?: number;
+  sourceReference?: string | null;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+}
+
+export interface TransferStockPayload {
+  fromLocationId?: string;
+  toLocationId?: string;
+  itemId: string;
+  batchNumber?: string;
+  quantity: number;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface ReturnStockPayload {
+  fromLocationId?: string;
+  itemId: string;
+  batchNumber?: string;
+  quantity: number;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface ReconcileStockPayload {
+  locationId?: string;
+  locationName?: string;
+  items: Array<{
+    itemId: string;
+    batchId?: string;
+    batchNumber?: string;
+    recordedQuantity: number;
+    countedQuantity: number;
+    reason?: string;
+  }>;
+  reason?: string;
+}
+
 
 export interface ParsedInvoiceItemData {
   lineNumber?: number;
@@ -616,4 +704,87 @@ export const inventoryApi = {
         body: JSON.stringify({ invoiceId, reason }),
       }
     ),
+
+  // Phase 6 & 7: Locations, Multiple Field Kits/Vehicles, Store Stock, Practice Bag & Stock Control
+  getLocations: () =>
+    inventoryRequest<StockLocation[]>('/api/inventory/locations'),
+
+  createLocation: (data: CreateLocationPayload) =>
+    inventoryRequest<StockLocation>('/api/inventory/locations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getStoreStock: (params?: { search?: string; category?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.category && params.category !== 'ALL') q.set('category', params.category);
+    if (params?.search) q.set('search', params.search);
+    const qs = q.toString();
+    return inventoryRequest<{
+      storeLocation: StockLocation;
+      items: InventoryItem[];
+      batches: InventoryBatch[];
+      summary: { totalItems: number; totalUnits: number; lowStockCount: number; stockValueINR: number };
+    }>(`/api/inventory/store-stock${qs ? `?${qs}` : ''}`);
+  },
+
+  getPracticeBagStock: (params?: { locationId?: string; search?: string; category?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.locationId) q.set('locationId', params.locationId);
+    if (params?.category && params.category !== 'ALL') q.set('category', params.category);
+    if (params?.search) q.set('search', params.search);
+    const qs = q.toString();
+    return inventoryRequest<{
+      bagLocation: StockLocation;
+      items: InventoryItem[];
+      batches: InventoryBatch[];
+      summary: { totalItems: number; totalUnits: number; lowStockCount: number; expiringSoonCount: number };
+    }>(`/api/inventory/practice-bag${qs ? `?${qs}` : ''}`);
+  },
+
+  stockIn: (data: StockInPayload) =>
+    inventoryRequest<{
+      success: boolean;
+      item: InventoryItem;
+      batch: InventoryBatch;
+      transaction: InventoryTransaction;
+    }>('/api/inventory/stock-in', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  transferStock: (data: TransferStockPayload) =>
+    inventoryRequest<{
+      success: boolean;
+      transferId: string;
+      sourceBatch: InventoryBatch;
+      destinationBatch: InventoryBatch;
+      quantity: number;
+    }>('/api/inventory/transfer', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  returnStock: (data: ReturnStockPayload) =>
+    inventoryRequest<{
+      success: boolean;
+      returnId: string;
+      sourceBatch: InventoryBatch;
+      destinationBatch: InventoryBatch;
+      quantity: number;
+    }>('/api/inventory/return', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  reconcileStock: (data: ReconcileStockPayload) =>
+    inventoryRequest<{
+      success: boolean;
+      adjustmentsCount: number;
+      reconciledItems: Array<{ itemId: string; variance: number; countedQuantity: number }>;
+    }>('/api/inventory/reconcile', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
+

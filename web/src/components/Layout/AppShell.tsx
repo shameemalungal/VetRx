@@ -19,14 +19,12 @@ import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../type
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './AppShell.css';
 
-// ── Bottom nav shows the 4 most-used items (matches Stitch mobile) ──────────
-
-// Bottom nav shows the 4 most-used items (matches Stitch mobile)
-const BOTTOM_NAV_ITEMS = [
+// ── Bottom nav shows the 4 core mobile tabs plus dynamic 'More' menu ──────────
+const PRIMARY_BOTTOM_NAV_ITEMS = [
   { label: 'Home',     path: '/dashboard',     icon: 'home',         ariaLabel: 'Home' },
+  { label: 'Calls',    path: '/calls',         icon: 'phone',        ariaLabel: 'Calls & Visits' },
   { label: 'Patients', path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
   { label: 'Rx',       path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
-  { label: 'Invoices', path: '/invoices',      icon: 'invoices',     ariaLabel: 'Invoices & Receipts' },
 ] as const;
 
 function initials(name: string): string {
@@ -229,11 +227,36 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const pendingApprovalsCount = pendingRx?.length || 0;
   const totalNotifications = pendingApprovalsCount + (draftRx?.length || 0) + (draftInvs?.length || 0);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayCalls = useLiveQuery(
+    () => db.calls.where('preferredDate').equals(todayStr).filter(c => c.status !== 'CANCELLED').toArray(),
+    []
+  );
+  const todayCallsCount = todayCalls?.length || 0;
+
   const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+
+  // Close more menu on route change
+  useEffect(() => {
+    setIsMoreMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close more menu on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const navItems = React.useMemo(() => {
     const items = [
       { label: 'Home',               path: '/dashboard',       icon: 'home'        },
+      { label: 'Calls & Visits',     path: '/calls',           icon: 'phone'       },
       { label: 'Patients',           path: '/patients',        icon: 'patients'    },
       { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
       { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
@@ -246,9 +269,69 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     return items;
   }, [isInventoryEntitled]);
 
+  // Secondary destinations rendered inside the mobile "More" menu
+  const secondaryNavItems = React.useMemo(() => {
+    const items = [
+      {
+        label: 'Invoices & Receipts',
+        path: '/invoices',
+        icon: 'invoices',
+        subtitle: 'Document billing & receipts',
+      },
+      {
+        label: 'Treatment Packages',
+        path: '/packages',
+        icon: 'packages',
+        subtitle: 'Prescribing templates & protocols',
+      },
+      {
+        label: 'Medicines',
+        path: '/medicines',
+        icon: 'pill',
+        subtitle: 'Clinical formulary & master list',
+      },
+    ];
+    if (isInventoryEntitled) {
+      items.push({
+        label: 'Inventory',
+        path: '/inventory',
+        icon: 'inventory',
+        subtitle: 'Stock balances, batches & suppliers',
+      });
+      items.push({
+        label: 'Practice Bag',
+        path: '/inventory/bag',
+        icon: 'bag',
+        subtitle: 'Field visit carrying bag & replenishment',
+      });
+    }
+    return items;
+  }, [isInventoryEntitled]);
+
+  const isMoreActive = React.useMemo(() => {
+    const morePaths = [
+      '/invoices',
+      '/packages',
+      '/medicines',
+      '/inventory',
+      '/settings',
+      '/platform',
+    ];
+    return morePaths.some((p) => location.pathname.startsWith(p));
+  }, [location.pathname]);
+
   // ── Derive current page label for mobile header ──────────────
+  const allPermittedNavItems = React.useMemo(() => {
+    const list = [...navItems];
+    list.push({ label: 'Settings', path: '/settings', icon: 'settings' });
+    if (isPlatformAdmin?.()) {
+      list.push({ label: 'Platform Console', path: '/platform', icon: 'swap-horiz' });
+    }
+    return list;
+  }, [navItems, isPlatformAdmin]);
+
   const currentNav =
-    [...navItems].reverse().find((n) =>
+    [...allPermittedNavItems].reverse().find((n) =>
       n.path === '/dashboard'
         ? location.pathname === '/' || location.pathname === '/dashboard'
         : location.pathname.startsWith(n.path)
@@ -262,6 +345,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const handleLogout = async () => {
     setIsProfileMenuOpen(false);
+    setIsMoreMenuOpen(false);
     sessionStorage.clear();
     await logout();
   };
@@ -296,6 +380,22 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             >
               <Icon name={icon} size={18} />
               <span style={{ flex: 1 }}>{label}</span>
+              {path === '/calls' && todayCallsCount > 0 && (
+                <span
+                  style={{
+                    background: '#ccfbf1',
+                    color: '#0f766e',
+                    border: '1px solid #99f6e4',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: '10px',
+                  }}
+                  title={`${todayCallsCount} calls scheduled today`}
+                >
+                  {todayCallsCount}
+                </span>
+              )}
               {path === '/prescriptions' && pendingApprovalsCount > 0 && (
                 <span
                   style={{
@@ -826,7 +926,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* ── Mobile Bottom Navigation ───────────────────────────── */}
       <nav className="bottom-nav" aria-label="Bottom navigation">
         <div className="bottom-nav-inner">
-          {BOTTOM_NAV_ITEMS.map(({ label, path, icon, ariaLabel }) => (
+          {PRIMARY_BOTTOM_NAV_ITEMS.map(({ label, path, icon, ariaLabel }) => (
             <NavLink
               key={path}
               to={path}
@@ -836,15 +936,198 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               }
               aria-label={ariaLabel || label}
             >
-              <div className="bottom-nav-icon-wrapper">
+              <div className="bottom-nav-icon-wrapper" style={{ position: 'relative' }}>
                 <Icon name={icon} size={20} aria-hidden />
+                {path === '/calls' && todayCallsCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-8px',
+                      background: '#0f766e',
+                      color: '#ffffff',
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      borderRadius: '8px',
+                      padding: '0 4px',
+                      lineHeight: '13px',
+                      minWidth: '13px',
+                      textAlign: 'center',
+                    }}
+                    aria-label={`${todayCallsCount} calls today`}
+                  >
+                    {todayCallsCount}
+                  </span>
+                )}
+                {path === '/prescriptions' && pendingApprovalsCount > 0 && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-8px',
+                      background: '#b45309',
+                      color: '#ffffff',
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      borderRadius: '8px',
+                      padding: '0 4px',
+                      lineHeight: '13px',
+                      minWidth: '13px',
+                      textAlign: 'center',
+                    }}
+                    aria-label={`${pendingApprovalsCount} pending approvals`}
+                  >
+                    {pendingApprovalsCount}
+                  </span>
+                )}
               </div>
               <span className="bottom-nav-label">{label}</span>
               <span className="bottom-nav-indicator" aria-hidden="true" />
             </NavLink>
           ))}
+
+          {/* 5th destination: Polished More button */}
+          <button
+            type="button"
+            className={`bottom-nav-item${isMoreActive || isMoreMenuOpen ? ' active' : ''}`}
+            onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+            aria-label="More navigation destinations"
+            aria-expanded={isMoreMenuOpen}
+            aria-controls="mobile-more-menu-sheet"
+            id="mobile-nav-more-btn"
+          >
+            <div className="bottom-nav-icon-wrapper">
+              <Icon name="more-horizontal" size={20} aria-hidden />
+            </div>
+            <span className="bottom-nav-label">More</span>
+            <span className="bottom-nav-indicator" aria-hidden="true" />
+          </button>
         </div>
       </nav>
+
+      {/* ── Mobile Navigation More Sheet & Backdrop ──────────────── */}
+      <div
+        className={`mobile-nav-backdrop ${isMoreMenuOpen ? 'open' : ''}`}
+        onClick={() => setIsMoreMenuOpen(false)}
+        aria-hidden="true"
+      />
+
+      <aside
+        id="mobile-more-menu-sheet"
+        className={`more-menu-sheet ${isMoreMenuOpen ? 'open' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="More navigation destinations"
+      >
+        <div className="more-menu-drag-handle" aria-hidden="true" />
+
+        <div className="more-menu-header">
+          <div className="more-menu-title-group">
+            <h2>More Destinations</h2>
+            <p className="truncate">
+              {(isClinicActive && organisation?.name?.trim()) || displayName}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="more-menu-close-btn"
+            onClick={() => setIsMoreMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
+        <div className="more-menu-content">
+          <div>
+            <div className="more-menu-section-label">Clinical &amp; Financial</div>
+            <div className="more-menu-grid">
+              {secondaryNavItems.map(({ label, path, icon, subtitle }) => {
+                const isActive = location.pathname.startsWith(path);
+                return (
+                  <NavLink
+                    key={path}
+                    to={path}
+                    className={`more-menu-item${isActive ? ' active' : ''}`}
+                    onClick={() => setIsMoreMenuOpen(false)}
+                  >
+                    <div className="more-menu-item-icon">
+                      <Icon name={icon} size={20} />
+                    </div>
+                    <div className="more-menu-item-text">
+                      <span className="more-menu-item-title">{label}</span>
+                      <span className="more-menu-item-sub">{subtitle}</span>
+                    </div>
+                    {isActive && (
+                      <span className="more-menu-badge">Active</span>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="more-menu-section-label">Workspace &amp; Account</div>
+            <div className="more-menu-grid">
+              {isPlatformAdmin?.() && (
+                <button
+                  type="button"
+                  className="more-menu-item"
+                  id="mobile-switch-to-platform-btn"
+                  onClick={() => {
+                    setIsMoreMenuOpen(false);
+                    navigate('/platform/dashboard');
+                  }}
+                >
+                  <div className="more-menu-item-icon">
+                    <Icon name="swap-horiz" size={20} />
+                  </div>
+                  <div className="more-menu-item-text">
+                    <span className="more-menu-item-title">Switch to Platform</span>
+                    <span className="more-menu-item-sub">Super Admin Management Console</span>
+                  </div>
+                  <span className="more-menu-badge" style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                    Admin
+                  </span>
+                </button>
+              )}
+
+              <NavLink
+                to="/settings"
+                className={({ isActive }) => `more-menu-item${isActive ? ' active' : ''}`}
+                onClick={() => setIsMoreMenuOpen(false)}
+              >
+                <div className="more-menu-item-icon">
+                  <Icon name="settings" size={20} />
+                </div>
+                <div className="more-menu-item-text">
+                  <span className="more-menu-item-title">Settings</span>
+                  <span className="more-menu-item-sub">Practitioner, clinic, &amp; printer setup</span>
+                </div>
+                {location.pathname.startsWith('/settings') && (
+                  <span className="more-menu-badge">Active</span>
+                )}
+              </NavLink>
+
+              <button
+                type="button"
+                className="more-menu-item"
+                style={{ color: 'var(--color-error, #b91c1c)' }}
+                onClick={handleLogout}
+              >
+                <div className="more-menu-item-icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+                  <Icon name="logout" size={20} />
+                </div>
+                <div className="more-menu-item-text">
+                  <span className="more-menu-item-title">Sign Out / Lock Workspace</span>
+                  <span className="more-menu-item-sub">End practitioner session</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 };

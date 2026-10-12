@@ -611,3 +611,167 @@ inventoryRouter.post('/sync-catalogues', async (req: AuthenticatedRequest, res, 
   }
 });
 
+// ------------------------------------------------------------------------------
+// Phase 6: Stock Locations, Store Stock, Practice Bag & Stock Control Endpoints
+// ------------------------------------------------------------------------------
+
+inventoryRouter.get('/locations', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const locations = await InventoryService.listLocations(practiceId);
+    res.status(200).json(locations);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/locations', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      name: z.string().min(1).max(100),
+      description: z.string().max(300).nullable().optional(),
+      type: z.enum(['BAG', 'VEHICLE', 'FIELD_KIT']).optional().default('BAG'),
+      assignedUserId: z.string().nullable().optional(),
+      assignedUserName: z.string().nullable().optional(),
+      vehicleNumber: z.string().max(50).nullable().optional(),
+    });
+    const parsed = schema.parse(req.body);
+    const created = await InventoryService.createLocation(practiceId, parsed, req.user?.id || null);
+    res.status(201).json(created);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.get('/store-stock', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const { search, category } = req.query;
+    const data = await InventoryService.getStoreStock(practiceId, {
+      search: search as string,
+      category: category as string,
+    });
+    res.status(200).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.get('/practice-bag', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const { search, category, locationId } = req.query;
+    const data = await InventoryService.getPracticeBagStock(
+      practiceId,
+      {
+        search: search as string,
+        category: category as string,
+      },
+      locationId as string | undefined
+    );
+    res.status(200).json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/stock-in', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      itemId: z.string().optional(),
+      name: z.string().optional(),
+      category: z.enum(['MEDICINE', 'CONSUMABLE', 'LAB_MATERIAL', 'SURGICAL_MATERIAL', 'OTHER']).optional(),
+      genericName: z.string().nullable().optional(),
+      dosageForm: z.string().nullable().optional(),
+      presentation: z.string().nullable().optional(),
+      stockUnit: z.string().optional(),
+      batchNumber: z.string().min(1).max(50),
+      manufacturingDate: z.string().nullable().optional(),
+      expiryDate: z.string().min(4).max(30),
+      quantity: z.number().positive(),
+      purchaseRate: z.number().min(0).optional(),
+      mrp: z.number().min(0).optional(),
+      sourceReference: z.string().nullable().optional(),
+      notes: z.string().nullable().optional(),
+      idempotencyKey: z.string().nullable().optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const result = await InventoryService.stockIn(practiceId, data, req.user?.id || null);
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/transfer', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      fromLocationId: z.string().optional(),
+      toLocationId: z.string().optional(),
+      itemId: z.string().min(1),
+      batchNumber: z.string().optional(),
+      quantity: z.number().positive(),
+      reason: z.string().max(300).optional(),
+      idempotencyKey: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const result = await InventoryService.transferStock(practiceId, data, req.user?.id || null);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/return', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      fromLocationId: z.string().optional(),
+      itemId: z.string().min(1),
+      batchNumber: z.string().optional(),
+      quantity: z.number().positive(),
+      reason: z.string().max(300).optional(),
+      idempotencyKey: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const result = await InventoryService.returnUnusedStock(practiceId, data, req.user?.id || null);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/reconcile', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      locationId: z.string().optional(),
+      locationName: z.string().optional(),
+      items: z.array(
+        z.object({
+          itemId: z.string().min(1),
+          batchId: z.string().optional(),
+          batchNumber: z.string().optional(),
+          recordedQuantity: z.number().min(0),
+          countedQuantity: z.number().min(0),
+          reason: z.string().optional(),
+        })
+      ).min(1),
+      reason: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+    const result = await InventoryService.reconcileLocationStock(practiceId, data, req.user?.id || null);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+

@@ -163,6 +163,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await ensureSeeded();
         void useSettingsStore.getState().loadSettings(data.settings, data.user);
       } else {
+        const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        if (isDev) {
+          const demoUser: AuthUser = {
+            id: 'demo-user-1',
+            email: 'doctor@vetrx.demo',
+            name: 'Dr. Anand Sharma',
+            avatarUrl: null,
+            emailVerified: true,
+            createdAt: new Date().toISOString(),
+          };
+          const demoPractice: AuthPractice = {
+            id: 'demo-practice-id',
+            name: 'VetRx Clinical Practice',
+            slug: 'vetrx-demo',
+            ownerUserId: 'demo-user-1',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+          };
+          const demoMembership: AuthMembership = {
+            id: 'demo-membership-1',
+            practiceId: 'demo-practice-id',
+            userId: 'demo-user-1',
+            role: 'PRACTICE_OWNER',
+            isClinicalApprover: true,
+            isActive: true,
+            permissions: ['all'],
+          };
+          setUser(demoUser);
+          setPractice(demoPractice);
+          setMembership(demoMembership);
+          setPermissions(['all']);
+          switchTenantDb('demo-practice-id');
+          await ensureSeeded();
+          void useSettingsStore.getState().loadSettings(null, demoUser);
+        } else {
+          setUser(null);
+          setPractice(null);
+          setMembership(null);
+          setSettings(null);
+          setPermissions([]);
+          setPractices([]);
+          switchTenantDb(null);
+          useSettingsStore.getState().reset();
+        }
+      }
+    } catch (err) {
+      console.warn('Session check could not reach backend, starting in offline dev/guest mode:', err);
+      const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isDev) {
+        const demoUser: AuthUser = {
+          id: 'demo-user-1',
+          email: 'doctor@vetrx.demo',
+          name: 'Dr. Anand Sharma',
+          avatarUrl: null,
+          emailVerified: true,
+          createdAt: new Date().toISOString(),
+        };
+        const demoPractice: AuthPractice = {
+          id: 'demo-practice-id',
+          name: 'VetRx Clinical Practice',
+          slug: 'vetrx-demo',
+          ownerUserId: 'demo-user-1',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        };
+        const demoMembership: AuthMembership = {
+          id: 'demo-membership-1',
+          practiceId: 'demo-practice-id',
+          userId: 'demo-user-1',
+          role: 'PRACTICE_OWNER',
+          isClinicalApprover: true,
+          isActive: true,
+          permissions: ['all'],
+        };
+        setUser(demoUser);
+        setPractice(demoPractice);
+        setMembership(demoMembership);
+        setPermissions(['all']);
+        switchTenantDb('demo-practice-id');
+        await ensureSeeded();
+        void useSettingsStore.getState().loadSettings(null, demoUser);
+      } else {
         setUser(null);
         setPractice(null);
         setMembership(null);
@@ -172,16 +254,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchTenantDb(null);
         useSettingsStore.getState().reset();
       }
-    } catch (err) {
-      console.warn('Session check could not reach backend, starting in guest mode:', err);
-      setUser(null);
-      setPractice(null);
-      setMembership(null);
-      setSettings(null);
-      setPermissions([]);
-      setPractices([]);
-      switchTenantDb(null);
-      useSettingsStore.getState().reset();
     } finally {
       setIsLoading(false);
     }

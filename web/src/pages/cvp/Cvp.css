@@ -1,0 +1,1291 @@
+/* ==============================================================================
+   VetRx Call & Visit Planner (CVP) — Stylesheet
+   Grounded in the Stitch VetRx Design System:
+   Primary: #00685f / #0d9488 (Teal), Secondary: #006398 / #0284c7 (Cyan)
+   Surfaces: #faf8ff, #ffffff, #f2f3ff, #eaedff
+   Typography: Plus Jakarta Sans, Inter, JetBrains Mono
+   ============================================================================== */
+
+/* ── Container Layout ────────────────────────────────────────── */
+.cvp-container {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 16px 90px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .cvp-container {
+    padding: 24px 24px 40px;
+  }
+}
+
+/* ── Header Bar ─────────────────────────────────────────────── */
+.cvp-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 640px) {
+  .cvp-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.cvp-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cvp-title-wrap h1 {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-on-surface, #131b2e);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.cvp-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-on-surface-variant, #64748b);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cvp-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.cvp-status-pill.offline {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.cvp-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.cvp-status-pill.offline .cvp-status-dot {
+  background: #ef4444;
+}
+
+/* ── Primary Action Bar ──────────────────────────────────────── */
+.cvp-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cvp-header-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 640px) {
+  .cvp-header-section {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.cvp-btn-icon {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cvp-btn-icon:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.btn-cvp-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #00685f 0%, #0d9488 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(13, 148, 136, 0.25);
+  transition: all 0.2s ease;
+  min-height: 44px;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.btn-cvp-primary:hover {
+  background: linear-gradient(135deg, #005049 0%, #0f766e 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(13, 148, 136, 0.35);
+}
+
+.btn-cvp-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.btn-cvp-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* ── Android Call Capture Strip ──────────────────────────────── */
+.cvp-android-strip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .cvp-android-strip {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.cvp-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-height: 38px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.cvp-chip-btn.during {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.cvp-chip-btn.during:hover {
+  background: #ccfbf1;
+  border-color: #5eead4;
+}
+
+.cvp-chip-btn.after {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.cvp-chip-btn.after:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+/* ── Search & Filter Controls ────────────────────────────────── */
+.cvp-filter-controls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 640px) {
+  .cvp-filter-controls-row {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.cvp-search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.cvp-search-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 38px 10px 38px !important;
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.cvp-search-input:focus {
+  border-color: #0d9488 !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15) !important;
+  outline: none !important;
+}
+
+.cvp-search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cvp-search-clear:hover {
+  color: #334155;
+}
+
+.cvp-priority-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cvp-filter-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cvp-filter-chip {
+  min-height: 38px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cvp-filter-chip:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.cvp-filter-chip.active {
+  background: #00685f;
+  color: #ffffff;
+  border-color: #00685f;
+  box-shadow: 0 2px 6px rgba(0, 104, 95, 0.25);
+}
+
+.cvp-filter-chip.emergency.active {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+
+.cvp-filter-chip.urgent.active {
+  background: #d97706;
+  border-color: #d97706;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+
+.cvp-filter-chip.could_not_assess.active {
+  background: #9333ea;
+  border-color: #9333ea;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(147, 51, 234, 0.25);
+}
+
+.cvp-badge-phase {
+  padding: 2px 6px;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 800;
+  background: #4f46e5;
+  color: #ffffff;
+  margin-left: 6px;
+}
+
+/* ── Capacity & Metric Cards (CVP-01) ────────────────────────── */
+.cvp-capacity-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.cvp-capacity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.cvp-capacity-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cvp-capacity-metric {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.cvp-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.cvp-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #0d9488 70%, #0284c7 100%);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+.cvp-progress-fill.over-capacity {
+  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%);
+}
+
+.cvp-capacity-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* ── KPI Grid ────────────────────────────────────────────────── */
+.cvp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (min-width: 640px) {
+  .cvp-kpi-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.cvp-kpi-tile {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cvp-kpi-tile.emergency {
+  border-left: 4px solid #ef4444;
+  background: linear-gradient(to right, #fef2f2 0%, #ffffff 40%);
+}
+
+.cvp-kpi-tile.urgent {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(to right, #fffbeb 0%, #ffffff 40%);
+}
+
+.cvp-kpi-tile.could-not-assess {
+  border-left: 4px solid #8b5cf6;
+  background: linear-gradient(to right, #f5f3ff 0%, #ffffff 40%);
+}
+
+.cvp-kpi-tile.planned {
+  border-left: 4px solid #0d9488;
+  background: linear-gradient(to right, #f0fdfa 0%, #ffffff 40%);
+}
+
+.cvp-kpi-count {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.cvp-kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Alert Banners ───────────────────────────────────────────── */
+.cvp-emergency-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cvp-emergency-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cvp-emergency-badge {
+  background: #ef4444;
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cvp-emergency-text {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+/* ── Tabs Navigation (CVP-02) ────────────────────────────────── */
+.cvp-tabs-bar {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cvp-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.cvp-tab-btn {
+  flex: 1 0 auto;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cvp-tab-btn.active {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  font-weight: 700;
+}
+
+.cvp-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cvp-tab-btn.active .cvp-tab-count {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+/* ── Call Card (CVP-02 / CVP-01) ─────────────────────────────── */
+.cvp-call-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+
+.cvp-call-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06);
+}
+
+.cvp-call-card.priority-emergency {
+  border-left: 5px solid #ef4444;
+}
+
+.cvp-call-card.priority-urgent {
+  border-left: 5px solid #f59e0b;
+}
+
+.cvp-call-card.priority-could_not_assess {
+  border-left: 5px solid #8b5cf6;
+}
+
+.cvp-call-card.priority-planned {
+  border-left: 5px solid #0d9488;
+}
+
+.cvp-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cvp-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cvp-priority-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cvp-priority-tag.emergency {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.cvp-priority-tag.urgent {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.cvp-priority-tag.could_not_assess {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+.cvp-priority-tag.planned {
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+
+.cvp-species-tag {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.cvp-time-stamp {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.cvp-owner-name {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.cvp-location-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.cvp-symptoms-box {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.cvp-assessment-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.cvp-procedure-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* Card Action Strip */
+.cvp-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.btn-card-action {
+  flex: 1;
+  min-width: 80px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  text-decoration: none;
+  min-height: 44px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.btn-card-action:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.btn-card-action.phone {
+  color: #0284c7;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.btn-card-action.whatsapp {
+  color: #15803d;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.btn-card-action.postpone {
+  color: #b45309;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+/* ── Section Dividers ────────────────────────────────────────── */
+.cvp-section-heading {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 24px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Empty States ────────────────────────────────────────────── */
+.cvp-empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  margin: 16px 0;
+}
+
+.cvp-empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.cvp-empty-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px;
+}
+
+.cvp-empty-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0 auto 16px;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ── Quick Action Launcher (CVP-42) ──────────────────────────── */
+.cvp-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: cvpFadeIn 0.2s ease;
+}
+
+@media (min-width: 640px) {
+  .cvp-modal-backdrop {
+    align-items: center;
+  }
+}
+
+.cvp-sheet {
+  background: #ffffff;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 20px 20px 0 0;
+  padding: 20px 20px 28px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+  animation: cvpSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+  .cvp-sheet {
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.1);
+  }
+}
+
+.cvp-sheet-drag-handle {
+  width: 36px;
+  height: 4px;
+  background: #cbd5e1;
+  border-radius: 9999px;
+  margin: 0 auto 16px;
+}
+
+@media (min-width: 640px) {
+  .cvp-sheet-drag-handle {
+    display: none;
+  }
+}
+
+.cvp-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.cvp-sheet-title {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.cvp-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.cvp-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.cvp-action-tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.cvp-action-tile {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cvp-action-tile:hover {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+  transform: translateY(-2px);
+}
+
+.cvp-tile-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.cvp-tile-icon-box.teal {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.cvp-tile-icon-box.blue {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.cvp-tile-icon-box.emerald {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.cvp-tile-icon-box.amber {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.cvp-tile-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.cvp-tile-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* ── Global Search Modal (CVP-43) ────────────────────────────── */
+.cvp-search-modal {
+  background: #ffffff;
+  width: 100%;
+  max-width: 580px;
+  border-radius: 18px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  animation: cvpFadeIn 0.15s ease;
+}
+
+.cvp-search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.cvp-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  color: #0f172a;
+  outline: none;
+}
+
+.cvp-search-results-list {
+  padding: 12px 16px;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.cvp-search-category-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  margin: 12px 8px 6px;
+}
+
+.cvp-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cvp-search-item:hover {
+  background: #f1f5f9;
+}
+
+.cvp-search-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cvp-search-item-text h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.cvp-search-item-text p {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+/* ── Keyframe Animations ─────────────────────────────────────── */
+@keyframes cvpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cvpSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ── Call Registration Stepper & Form Cards (CVP-03 - CVP-11) ── */
+.cvp-stepper-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  gap: 6px;
+}
+
+.cvp-step-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cvp-step-btn.active {
+  background: #00685f;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 104, 95, 0.25);
+}
+
+.cvp-step-btn.completed {
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.cvp-step-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cvp-step-btn.active .cvp-step-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.cvp-step-btn.completed .cvp-step-badge {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.cvp-card-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  margin-bottom: 20px;
+}
+
+.cvp-card-header {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.cvp-card-step-tag {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #00685f;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.cvp-card-title {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+}
+
+.cvp-card-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Animal / Caseload Selection (CVP-07) ─────────────────────── */
+.cvp-animal-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (min-width: 640px) {
+  .cvp-animal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.cvp-animal-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.cvp-animal-card:hover {
+  border-color: #5eead4;
+  background: #f8fafc;
+}
+
+.cvp-animal-card.selected {
+  border-color: #00685f;
+  background: #f0fdfa;
+  box-shadow: 0 2px 8px rgba(0, 104, 95, 0.12);
+}
+
+.cvp-animal-name {
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.cvp-animal-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.cvp-animal-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.cvp-animal-card.selected .cvp-animal-check {
+  background: #00685f;
+  border-color: #00685f;
+  color: #ffffff;
+}
+
+/* ── Sticky Action Bar for Mobile ────────────────────────────── */
+.cvp-sticky-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  z-index: 45;
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
+}
+
+.cvp-sticky-footer-inner {
+  max-width: 768px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+

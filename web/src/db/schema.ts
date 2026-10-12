@@ -18,23 +18,45 @@ import type {
   InvoiceItem,
   AuditEvent,
   MasterDataItem,
+  Call,
+  Visit,
+  VisitCase,
+  VisitProcedure,
+  VisitMedicineUsage,
+  VisitTimelineEvent,
+  OwnerLocation,
+  DailyPlan,
+  FollowUp,
+  RecurringSchedule,
+  ProcedureDurationEstimate,
 } from '../types';
 import { ensureMasterDataSeeded } from './masterData';
 
 export class VetRxDatabase extends Dexie {
-  practitioners!:         Table<Practitioner, number>;
-  organisations!:         Table<Organisation, number>;
-  owners!:                Table<Owner, number>;
-  patients!:              Table<Patient, number>;
-  medicines!:             Table<Medicine, number>;
-  prescriptions!:         Table<Prescription, number>;
-  prescriptionItems!:     Table<PrescriptionItem, number>;
-  treatmentPackages!:     Table<TreatmentPackage, number>;
-  treatmentPackageItems!: Table<TreatmentPackageItem, number>;
-  invoices!:              Table<Invoice, number>;
-  invoiceItems!:          Table<InvoiceItem, number>;
-  auditEvents!:           Table<AuditEvent, number>;
-  masterDataItems!:       Table<MasterDataItem, number>;
+  practitioners!:              Table<Practitioner, number>;
+  organisations!:              Table<Organisation, number>;
+  owners!:                     Table<Owner, number>;
+  patients!:                   Table<Patient, number>;
+  medicines!:                  Table<Medicine, number>;
+  prescriptions!:              Table<Prescription, number>;
+  prescriptionItems!:          Table<PrescriptionItem, number>;
+  treatmentPackages!:          Table<TreatmentPackage, number>;
+  treatmentPackageItems!:      Table<TreatmentPackageItem, number>;
+  invoices!:                   Table<Invoice, number>;
+  invoiceItems!:               Table<InvoiceItem, number>;
+  auditEvents!:                Table<AuditEvent, number>;
+  masterDataItems!:            Table<MasterDataItem, number>;
+  calls!:                      Table<Call, number>;
+  visits!:                     Table<Visit, number>;
+  visitCases!:                 Table<VisitCase, number>;
+  visitProcedures!:            Table<VisitProcedure, number>;
+  visitMedicineUsages!:        Table<VisitMedicineUsage, number>;
+  visitTimelineEvents!:        Table<VisitTimelineEvent, number>;
+  ownerLocations!:             Table<OwnerLocation, number>;
+  dailyPlans!:                 Table<DailyPlan, number>;
+  followUps!:                  Table<FollowUp, number>;
+  recurringSchedules!:         Table<RecurringSchedule, number>;
+  procedureDurationEstimates!: Table<ProcedureDurationEstimate, number>;
 
   constructor(dbName: string = 'VetRxDB_guest') {
     super(dbName);
@@ -73,6 +95,31 @@ export class VetRxDatabase extends Dexie {
     this.version(6).stores({
       invoices:              '++id, invoiceNumber, patientId, ownerId, practitionerId, prescriptionId, *prescriptionIds, status, invoiceDate',
       invoiceItems:          '++id, invoiceId, category, sortOrder, prescriptionId, patientId',
+    });
+
+    this.version(7).stores({
+      calls:                 '++id, callerPhone, ownerId, priority, flexibility, status, preferredDate, createdAt',
+      visits:                '++id, callId, ownerId, locationId, status, priority, scheduledDate, sequenceOrder, createdAt',
+      ownerLocations:        '++id, ownerId, label, isDefault, createdAt',
+      dailyPlans:            '++id, planDate, doctorUserId, status, createdAt',
+    });
+
+    this.version(8).stores({
+      visits:                '++id, callId, ownerId, locationId, status, priority, scheduledDate, sequenceOrder, arrivedAt, visitStartedAt, visitCompletedAt, createdAt',
+      visitCases:            '++id, visitId, patientId, practiceId, createdAt',
+      visitProcedures:       '++id, visitId, patientId, procedureCategory, performedAt',
+      visitMedicineUsages:   '++id, visitId, patientId, medicineId, administeredAt, idempotencyKey',
+      visitTimelineEvents:   '++id, visitId, eventType, occurredAt',
+    });
+
+    this.version(9).stores({
+      visitMedicineUsages:   '++id, visitId, patientId, medicineId, administeredAt, idempotencyKey',
+    });
+
+    this.version(10).stores({
+      followUps:                  '++id, practiceId, ownerId, patientId, originVisitId, recurrenceRuleId, status, priority, recommendedDate, createdAt',
+      recurringSchedules:         '++id, practiceId, ownerId, patientId, status, frequency, startDate, createdAt',
+      procedureDurationEstimates: '++id, practiceId, procedureCategory, source, updatedAt',
     });
   }
 }

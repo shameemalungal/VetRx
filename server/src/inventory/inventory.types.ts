@@ -144,8 +144,21 @@ export interface StockLocationDTO {
   name: string;
   description?: string | null;
   isDefault: boolean;
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+  vehicleNumber?: string | null;
+  type?: 'STORE' | 'BAG' | 'VEHICLE' | 'FIELD_KIT';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateLocationDTO {
+  name: string;
+  description?: string | null;
+  type?: 'BAG' | 'VEHICLE' | 'FIELD_KIT';
+  assignedUserId?: string | null;
+  assignedUserName?: string | null;
+  vehicleNumber?: string | null;
 }
 
 export interface InventoryDashboardDTO {
@@ -160,6 +173,18 @@ export interface InventoryDashboardDTO {
   expiredCount: number;
   recentPurchases: PurchaseInvoiceDTO[];
   recentMovements: InventoryTransactionDTO[];
+  storeStockSummary?: {
+    totalItems: number;
+    totalUnits: number;
+    lowStockCount: number;
+    stockValueINR: number;
+  };
+  practiceBagSummary?: {
+    totalItems: number;
+    totalUnits: number;
+    lowStockCount: number;
+    expiringSoonCount: number;
+  };
 }
 
 export interface StockResolutionItemDTO {
@@ -256,5 +281,92 @@ export interface InvoiceExtractionResultDTO {
   detectedCount?: number;
   rawExtractedText?: string;
   confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+// ------------------------------------------------------------------------------
+// Phase 6: Store Stock, Practice Bag & Field Usage DTOs
+// ------------------------------------------------------------------------------
+
+export interface StockInDTO {
+  itemId?: string;
+  name?: string;
+  category?: InventoryCategory;
+  genericName?: string | null;
+  dosageForm?: string | null;
+  presentation?: string | null;
+  stockUnit?: string;
+  batchNumber: string;
+  manufacturingDate?: string | null;
+  expiryDate: string; // YYYY-MM-DD
+  quantity: number;
+  purchaseRate?: number;
+  mrp?: number;
+  sourceReference?: string | null;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+}
+
+export interface TransferStockDTO {
+  fromLocationId?: string;
+  toLocationId?: string;
+  sourceLocationId?: string;
+  targetLocationId?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  itemId: string;
+  batchNumber?: string;
+  quantity: number;
+  reason?: string;
+  notes?: string;
+  idempotencyKey?: string;
+}
+
+export interface ReturnStockDTO {
+  fromLocationId?: string;
+  itemId: string;
+  batchNumber?: string;
+  quantity: number;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface ReconcileStockDTO {
+  locationId?: string;
+  locationName?: string;
+  items: Array<{
+    itemId: string;
+    batchId?: string;
+    batchNumber?: string;
+    recordedQuantity: number;
+    countedQuantity: number;
+    reason?: string;
+  }>;
+  reason?: string;
+}
+
+export interface DeductFieldUsageDTO {
+  visitId: string;
+  patientId?: string | null;
+  patientName?: string | null;
+  medicineId?: string | null;
+  medicineName: string;
+  batchNumber?: string | null;
+  quantity: number;
+  unit?: string | null;
+  route?: string | null;
+  idempotencyKey?: string | null;
+  locationId?: string | null;
+}
+
+export interface FieldUsageDeductionResult {
+  success: boolean;
+  deductedQuantity: number;
+  remainingBagStock?: number;
+  batchNumber?: string;
+  batchId?: string;
+  transactionId?: string;
+  reason?: string;
+  availableQuantity?: number;
+  requestedQuantity?: number;
 }
 

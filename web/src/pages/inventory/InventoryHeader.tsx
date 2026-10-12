@@ -13,6 +13,10 @@ interface InventoryHeaderProps {
   alertCount?: number;
   onOpenAddItem?: () => void;
   onOpenOpeningStock?: () => void;
+  onOpenStockIn?: () => void;
+  onOpenTransfer?: () => void;
+  onOpenReturn?: () => void;
+  onOpenReconcile?: () => void;
   onOpenStocktake?: () => void;
   onOpenAdjustment?: () => void;
   onOpenInvoiceImporter?: () => void;
@@ -24,6 +28,10 @@ export const InventoryHeader: React.FC<InventoryHeaderProps> = ({
   alertCount = 0,
   onOpenAddItem,
   onOpenOpeningStock,
+  onOpenStockIn,
+  onOpenTransfer,
+  onOpenReturn,
+  onOpenReconcile,
   onOpenStocktake,
   onOpenAdjustment,
   onOpenInvoiceImporter,
@@ -79,6 +87,54 @@ export const InventoryHeader: React.FC<InventoryHeaderProps> = ({
           >
             <Icon name="upload" size={16} />
             <span>Upload Invoice</span>
+          </button>
+        )}
+        {onOpenStockIn && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onOpenStockIn}
+            id="inv-btn-stock-in"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Icon name="plus" size={16} />
+            <span>Stock In</span>
+          </button>
+        )}
+        {onOpenTransfer && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onOpenTransfer}
+            id="inv-btn-transfer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Icon name="swap-horiz" size={16} />
+            <span>Transfer to Bag</span>
+          </button>
+        )}
+        {onOpenReturn && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onOpenReturn}
+            id="inv-btn-return"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Icon name="arrow-back" size={16} />
+            <span>Return Stock</span>
+          </button>
+        )}
+        {onOpenReconcile && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onOpenReconcile}
+            id="inv-btn-reconcile"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Icon name="check-circle" size={16} />
+            <span>Reconcile</span>
           </button>
         )}
         {onOpenAddItem && (
@@ -153,6 +209,14 @@ export const InventorySubnav: React.FC<{ alertCount?: number }> = ({ alertCount 
       >
         <Icon name="box" size={16} />
         <span>Stock</span>
+      </NavLink>
+      <NavLink
+        to="/inventory/bag"
+        className={({ isActive }) => `inventory-subnav-btn${isActive ? ' active' : ''}`}
+        id="subnav-inventory-bag"
+      >
+        <Icon name="bag" size={16} />
+        <span>Practice Bag</span>
       </NavLink>
       <NavLink
         to="/inventory/purchases"

@@ -947,6 +947,205 @@
   }
 }
 
+/* ── Mobile Navigation More Sheet ────────────────────────────── */
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 110;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-out;
+}
+
+.mobile-nav-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.more-menu-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 120;
+  background: var(--color-surface-container-lowest, #ffffff);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s ease;
+  box-sizing: border-box;
+}
+
+.more-menu-sheet.open {
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.more-menu-drag-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-outline-variant, #cbd5e1);
+  margin: 10px auto 4px;
+  flex-shrink: 0;
+}
+
+.more-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px 12px;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  flex-shrink: 0;
+}
+
+.more-menu-title-group h2 {
+  font-family: var(--font-heading, 'Plus Jakarta Sans', sans-serif);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text, #0f172a);
+  margin: 0;
+}
+
+.more-menu-title-group p {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+  margin: 2px 0 0;
+}
+
+.more-menu-close-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low, #f1f5f9);
+  border: none;
+  color: var(--color-text-muted, #64748b);
+  cursor: pointer;
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.more-menu-close-btn:hover {
+  background: var(--color-surface-container-high, #e2e8f0);
+  color: var(--color-text, #0f172a);
+}
+
+.more-menu-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.more-menu-section-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #64748b);
+  padding: 0 8px 4px;
+}
+
+.more-menu-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  min-height: 52px;
+  border-radius: 14px;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text, #1e293b);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.more-menu-item:hover,
+.more-menu-item:focus-visible {
+  background: var(--color-surface-container-high, #f8fafc);
+  text-decoration: none;
+}
+
+.more-menu-item.active {
+  background: rgba(0, 104, 95, 0.08);
+  border-color: rgba(0, 104, 95, 0.25);
+  color: var(--color-primary, #00685f);
+}
+
+.more-menu-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-container-low, #f1f5f9);
+  color: var(--color-text, #334155);
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.more-menu-item.active .more-menu-item-icon {
+  background: var(--color-primary, #00685f);
+  color: #ffffff;
+}
+
+.more-menu-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.more-menu-item-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: inherit;
+  line-height: 1.25;
+}
+
+.more-menu-item-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 2px;
+}
+
+.more-menu-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
 /* ── Print Media Rules ───────────────────────────────────────── */
 @media print {
   .sidebar,

@@ -199,6 +199,15 @@ model Practice {
   documentSequences DocumentSequence[]
   auditLogs         AuditLog[]
 
+  // Call & Visit Planner (CVP) Tenant Scoping
+  calls                       Call[]
+  ownerLocations              OwnerLocation[]
+  visits                      Visit[]
+  dailyPlans                  DailyPlan[]
+  followUps                   FollowUp[]
+  recurringSchedules          RecurringSchedule[]
+  procedureDurationEstimates  ProcedureDurationEstimate[]
+
   // Commercial Relations (Phase 10 Foundation)
   subscriptions     Subscription[]
   payments          Payment[]
@@ -313,32 +322,40 @@ model Owner {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  patients   Patient[]
+  patients           Patient[]
+  locations          OwnerLocation[]
+  calls              Call[]
+  visits             Visit[]
+  followUps          FollowUp[]
+  recurringSchedules RecurringSchedule[]
 
   @@index([practiceId])
   @@index([practiceId, phone])
 }
 
 model Patient {
-  id             String         @id @default(uuid())
-  practiceId     String
-  practice       Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  ownerId        String
-  owner          Owner          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  name           String
-  species        String
-  breed          String?
-  sex            String?
-  ageYears       Int?
-  ageMonths      Int?
-  weightKg       Float?
-  identification String?
-  notes          String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                 String              @id @default(uuid())
+  practiceId         String
+  practice           Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  ownerId            String
+  owner              Owner               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name               String
+  species            String
+  breed              String?
+  sex                String?
+  ageYears           Int?
+  ageMonths          Int?
+  weightKg           Float?
+  identification     String?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  prescriptions  Prescription[]
-  invoices       Invoice[]
+  prescriptions      Prescription[]
+  invoices           Invoice[]
+  visitCases         VisitCase[]
+  followUps          FollowUp[]
+  recurringSchedules RecurringSchedule[]
 
   @@index([practiceId])
   @@index([ownerId])
@@ -420,6 +437,7 @@ model Prescription {
   items                 PrescriptionItem[]
   invoiceItems          InvoiceItem[]
   workflowHistory       PrescriptionWorkflowHistory[]
+  visitCases            VisitCase[]
 
   @@unique([practiceId, rxNumber])
   @@index([practiceId])
@@ -483,6 +501,7 @@ model Invoice {
 
   items         InvoiceItem[]
   receipts      Receipt[]
+  visitCases    VisitCase[]
 
   @@unique([practiceId, invoiceNumber])
   @@index([practiceId])
@@ -920,4 +939,409 @@ model PurchaseInvoiceItem {
   @@index([purchaseInvoiceId])
   @@index([inventoryItemId])
 }
+
+// ------------------------------------------------------------------------------
+// Call & Visit Planner (CVP) Domain Models
+// Strictly scoped to Practice boundary.
+// ------------------------------------------------------------------------------
+
+enum CallPriority {
+  EMERGENCY
+  URGENT
+  COULD_NOT_ASSESS
+  PLANNED
+}
+
+enum VisitFlexibility {
+  MUST_ATTEND_TODAY
+  CAN_POSTPONE_TODAY
+  PREFERRED_TODAY
+  SPECIFIC_DATE
+}
+
+enum CallStatus {
+  LOGGED
+  SCHEDULED
+  CANCELLED
+}
+
+enum VisitStatus {
+  REGISTERED
+  PLANNED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+  CANCELLED
+}
+
+enum LocationSource {
+  MANUAL
+  GPS
+  MAP
+  SAVED
+}
+
+model Call {
+  id                  String           @id @default(uuid())
+  practiceId          String
+  practice            Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  callerPhone         String
+  ownerId             String?
+  owner               Owner?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  tempOwnerName       String?
+  tempPatientName     String?
+  species             String?
+  animalCount         Int              @default(1)
+  symptoms            String
+  tentativeAssessment String?
+  priority            CallPriority     @default(PLANNED)
+  flexibility         VisitFlexibility @default(MUST_ATTEND_TODAY)
+  preferredDate       DateTime?
+  locationAddress     String?
+  latitude            Float?
+  longitude           Float?
+  status              CallStatus       @default(LOGGED)
+  plannedProcedure    String?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  visits              Visit[]
+
+  @@index([practiceId])
+  @@index([callerPhone])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model OwnerLocation {
+  id             String         @id @default(uuid())
+  practiceId     String
+  practice       Practice       @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          Owner          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  label          String         @default("Farm")
+  address        String
+  latitude       Float?
+  longitude      Float?
+  locationSource LocationSource @default(MANUAL)
+  accuracy       Float?
+  isDefault      Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  visits         Visit[]
+
+  @@index([practiceId])
+  @@index([ownerId])
+}
+
+model Visit {
+  id                       String           @id @default(uuid())
+  practiceId               String
+  practice                 Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  callId                   String?
+  call                     Call?            @relation(fields: [callId], references: [id], onDelete: SetNull)
+  ownerId                  String
+  owner                    Owner            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  locationId               String?
+  location                 OwnerLocation?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  address                  String
+  latitude                 Float?
+  longitude                Float?
+  status                   VisitStatus      @default(REGISTERED)
+  priority                 CallPriority     @default(PLANNED)
+  flexibility              VisitFlexibility @default(MUST_ATTEND_TODAY)
+  scheduledDate            DateTime
+  sequenceOrder            Int              @default(0)
+  estimatedDurationMinutes Int              @default(30)
+  actualDurationMinutes    Int?
+  callRegisteredAt         DateTime         @default(now())
+  scheduledAt              DateTime?
+  routeStartedAt           DateTime?
+  arrivedAt                DateTime?
+  arrivalLatitude          Float?
+  arrivalLongitude         Float?
+  arrivalAccuracy          Float?
+  visitStartedAt           DateTime?
+  visitCompletedAt         DateTime?
+  completionNotes          String?
+  postponedReason          String?
+  notes                    String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  cases                    VisitCase[]
+  routeStops               RouteStop[]
+  procedures               VisitProcedure[]
+  medicineUsages           VisitMedicineUsage[]
+  timelineEvents           VisitTimelineEvent[]
+  originFollowUps          FollowUp[]       @relation("VisitOriginFollowUps")
+  scheduledFollowUps       FollowUp[]       @relation("FollowUpScheduledVisit")
+
+  @@index([practiceId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+model VisitCase {
+  id                 String        @id @default(uuid())
+  practiceId         String
+  visitId            String
+  visit              Visit         @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  patientId          String?
+  patient            Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  chiefComplaint     String
+  tentativeDiagnosis String?
+  procedureCategory  String?
+  notes              String?
+  prescriptionId     String?
+  prescription       Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  invoiceId          String?
+  invoice            Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([practiceId])
+  @@index([visitId])
+  @@index([patientId])
+}
+
+model VisitProcedure {
+  id                String    @id @default(uuid())
+  practiceId        String
+  visitId           String
+  visit             Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  patientId         String?
+  patientName       String?
+  procedureCategory String
+  procedureName     String
+  notes             String?
+  standardFee       Float?    @default(0)
+  performedAt       DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+
+  @@index([practiceId])
+  @@index([visitId])
+  @@index([patientId])
+}
+
+model VisitMedicineUsage {
+  id               String    @id @default(uuid())
+  practiceId       String
+  visitId          String
+  visit            Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  patientId        String?
+  patientName      String?
+  medicineId       String?
+  medicineName     String
+  batchNumber      String?
+  quantityUsed     Float
+  unit             String?
+  route            String?
+  instructions     String?
+  isStockDeducted  Boolean   @default(false)
+  stockDeductionId String?
+  administeredAt   DateTime  @default(now())
+  idempotencyKey   String?   @unique
+  createdAt        DateTime  @default(now())
+
+  @@index([practiceId])
+  @@index([visitId])
+  @@index([patientId])
+}
+
+model VisitTimelineEvent {
+  id          String   @id @default(uuid())
+  practiceId  String
+  visitId     String
+  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  eventType   String
+  title       String
+  description String?
+  metadata    Json?
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([practiceId])
+  @@index([visitId])
+  @@index([eventType])
+}
+
+model DailyPlan {
+  id                          String      @id @default(uuid())
+  practiceId                  String
+  practice                    Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  planDate                    DateTime
+  doctorUserId                String?
+  startLocationAddress        String?
+  startLatitude               Float?
+  startLongitude              Float?
+  endLocationAddress          String?
+  totalEstimatedKm            Float       @default(0)
+  totalEstimatedTravelMinutes Int         @default(0)
+  totalEstimatedVisitMinutes  Int         @default(0)
+  workingMinutesAvailable     Int         @default(480)
+  isLocked                    Boolean     @default(false)
+  status                      String      @default("DRAFT")
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
+
+  routeStops                  RouteStop[]
+
+  @@unique([practiceId, planDate])
+  @@index([practiceId])
+  @@index([planDate])
+}
+
+model RouteStop {
+  id                 String    @id @default(uuid())
+  dailyPlanId        String
+  dailyPlan          DailyPlan @relation(fields: [dailyPlanId], references: [id], onDelete: Cascade)
+  visitId            String
+  visit              Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  stopOrder          Int       @default(0)
+  estimatedArrival   DateTime?
+  estimatedDeparture DateTime?
+  isLocked           Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+
+  @@index([dailyPlanId])
+  @@index([visitId])
+}
+
+// ------------------------------------------------------------------------------
+// Phase 8: Follow-ups, Recurring Visits & Procedure Duration Estimates
+// ------------------------------------------------------------------------------
+
+enum FollowUpReason {
+  POST_TREATMENT_REVIEW
+  RECHECK
+  VACCINATION
+  DEWORMING
+  PREGNANCY_DIAGNOSIS
+  ARTIFICIAL_INSEMINATION
+  POST_OPERATIVE_REVIEW
+  OTHER
+}
+
+enum FollowUpStatus {
+  UPCOMING
+  DUE
+  SCHEDULED
+  COMPLETED
+  POSTPONED
+  CANCELLED
+  OVERDUE
+}
+
+enum RecurrenceFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM_INTERVAL
+}
+
+enum DurationEstimateSource {
+  DEFAULT
+  PRACTICE_LEARNED
+  MANUAL_OVERRIDE
+}
+
+model FollowUp {
+  id                   String           @id @default(uuid())
+  practiceId           String
+  practice             Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  ownerId              String
+  owner                Owner            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  patientId            String?
+  patient              Patient?         @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  species              String?
+  animalCount          Int              @default(1)
+  originVisitId        String?
+  originVisit          Visit?           @relation("VisitOriginFollowUps", fields: [originVisitId], references: [id], onDelete: SetNull)
+  recurrenceRuleId     String?
+  recurrenceSchedule   RecurringSchedule? @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
+  reason               FollowUpReason   @default(POST_TREATMENT_REVIEW)
+  procedureCategory    String?
+  recommendedDate      DateTime
+  priority             CallPriority     @default(PLANNED)
+  flexibility          VisitFlexibility @default(MUST_ATTEND_TODAY)
+  preferredTimeWindow  String?
+  notes                String?
+  status               FollowUpStatus   @default(UPCOMING)
+  scheduledVisitId     String?
+  scheduledVisit       Visit?           @relation("FollowUpScheduledVisit", fields: [scheduledVisitId], references: [id], onDelete: SetNull)
+  scheduledCallId      String?
+  reminderSentAt       DateTime?
+  acknowledgedAt       DateTime?
+  acknowledgedBy       String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([practiceId])
+  @@index([ownerId])
+  @@index([patientId])
+  @@index([status])
+  @@index([recommendedDate])
+  @@index([recurrenceRuleId])
+}
+
+model RecurringSchedule {
+  id                         String              @id @default(uuid())
+  practiceId                 String
+  practice                   Practice            @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  ownerId                    String
+  owner                      Owner               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  patientId                  String?
+  patient                    Patient?            @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  species                    String?
+  reason                     FollowUpReason      @default(POST_TREATMENT_REVIEW)
+  procedureCategory          String?
+  frequency                  RecurrenceFrequency @default(WEEKLY)
+  intervalDays               Int?
+  startDate                  DateTime
+  endDate                    DateTime?
+  maxOccurrences             Int?
+  generatedOccurrencesCount  Int                 @default(0)
+  priority                   CallPriority        @default(PLANNED)
+  flexibility                VisitFlexibility    @default(MUST_ATTEND_TODAY)
+  preferredTimeWindow        String?
+  notes                      String?
+  status                     String              @default("ACTIVE")
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+
+  followUps                  FollowUp[]
+
+  @@index([practiceId])
+  @@index([ownerId])
+  @@index([status])
+}
+
+model ProcedureDurationEstimate {
+  id                          String                 @id @default(uuid())
+  practiceId                  String
+  practice                    Practice               @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  procedureCategory           String
+  defaultDurationMinutes      Int                    @default(30)
+  learnedDurationMinutes      Int?
+  manualOverrideMinutes       Int?
+  sampleCount                 Int                    @default(0)
+  source                      DurationEstimateSource @default(DEFAULT)
+  effectiveDurationMinutes    Int                    @default(30)
+  incrementalPerAnimalMinutes Int                    @default(10)
+  lastCalculatedAt            DateTime?
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+
+  @@unique([practiceId, procedureCategory])
+  @@index([practiceId])
+}
+
 

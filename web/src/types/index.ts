@@ -466,3 +466,6 @@ export interface NavItem {
   path: string;
   icon: string; // SVG path or icon name
 }
+
+// ── Call & Visit Planner (CVP) Domain Models ──────────────────
+export * from './cvp';

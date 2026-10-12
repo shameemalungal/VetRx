@@ -22,6 +22,8 @@ export async function seed(): Promise<void> {
       db.invoices,
       db.invoiceItems,
       db.auditEvents,
+      db.calls,
+      db.ownerLocations,
     ],
     async () => {
       const now = new Date();
@@ -644,5 +646,156 @@ export async function ensureMedicineDosingRulesSeeded(): Promise<void> {
       defaultDurationDays: 7,
       defaultDirections: 'Give with food.',
     });
+  }
+
+  // ── Call & Visit Planner (CVP) Demo Records ────────────────
+  if ((await db.calls.count()) === 0) {
+    const now = new Date();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+    const owners = await db.owners.toArray();
+    const ahmedId = owners[0]?.id;
+    const priyaId = owners[1]?.id;
+    const rahulId = owners[2]?.id;
+
+    // Locations
+    await db.ownerLocations.bulkAdd([
+      {
+        ownerId: ahmedId || 1,
+        label: 'Main Dairy Shed',
+        address: '42, Park Street Farm, Bengaluru Rural',
+        latitude: 12.9716,
+        longitude: 77.5946,
+        locationSource: 'GPS',
+        accuracy: 10,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        ownerId: priyaId || 2,
+        label: 'Homestead Pasture',
+        address: 'Plot 14, Green Meadows, Whitefield, Bengaluru',
+        latitude: 12.9698,
+        longitude: 77.7500,
+        locationSource: 'MAP',
+        accuracy: 15,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        ownerId: rahulId || 3,
+        label: 'North Farm',
+        address: 'Sunshine Cattle Farm, Devanahalli',
+        latitude: 13.2483,
+        longitude: 77.7126,
+        locationSource: 'MANUAL',
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
+    // Calls
+    await db.calls.bulkAdd([
+      {
+        callerPhone: '+1 555-019-2831',
+        ownerId: ahmedId,
+        ownerName: 'Ahmed Kumar',
+        species: 'Bovine',
+        animalCount: 1,
+        symptoms: 'Second-stage labor stalled for over 4 hours. Cow recumbent and in distress.',
+        tentativeAssessment: 'Dystocia / Uterine torsion suspected',
+        priority: 'EMERGENCY',
+        flexibility: 'MUST_ATTEND_TODAY',
+        preferredDate: todayStr,
+        plannedProcedure: 'Emergency Obstetrical Intervention / Calving Assistance',
+        locationAddress: '42, Park Street Farm, Bengaluru Rural',
+        latitude: 12.9716,
+        longitude: 77.5946,
+        status: 'LOGGED',
+        notes: 'Priority: Immediate departure required.',
+        createdAt: new Date(Date.now() - 45 * 60 * 1000), // 45 mins ago
+        updatedAt: now,
+      },
+      {
+        callerPhone: '+91 99887 76655',
+        ownerId: priyaId,
+        ownerName: 'Priya Nair',
+        species: 'Bovine',
+        animalCount: 2,
+        symptoms: 'Right rear quarter severely swollen, hot, clots and watery secretion in milk. High fever 104°F.',
+        tentativeAssessment: 'Acute Clinical Mastitis',
+        priority: 'URGENT',
+        flexibility: 'MUST_ATTEND_TODAY',
+        preferredDate: todayStr,
+        plannedProcedure: 'Clinical Consultation, Intramammary Infusion & Anti-inflammatory',
+        locationAddress: 'Plot 14, Green Meadows, Whitefield, Bengaluru',
+        latitude: 12.9698,
+        longitude: 77.7500,
+        status: 'LOGGED',
+        notes: 'Owner requested visit before afternoon milking.',
+        createdAt: new Date(Date.now() - 90 * 60 * 1000), // 1.5 hrs ago
+        updatedAt: now,
+      },
+      {
+        callerPhone: '+91 98450 11223',
+        ownerId: rahulId,
+        ownerName: 'Rahul Menon',
+        species: 'Bovine',
+        animalCount: 1,
+        symptoms: 'Jersey heifer showing standing estrus since 6:00 AM. Clear mucous discharge.',
+        tentativeAssessment: 'Estrus / Timing optimal for Artificial Insemination',
+        priority: 'PLANNED',
+        flexibility: 'MUST_ATTEND_TODAY',
+        preferredDate: todayStr,
+        plannedProcedure: 'Artificial Insemination (AI - HF Straw)',
+        locationAddress: 'Sunshine Cattle Farm, Devanahalli',
+        latitude: 13.2483,
+        longitude: 77.7126,
+        status: 'LOGGED',
+        notes: 'High priority procedure due to narrow estrus fertility window.',
+        createdAt: new Date(Date.now() - 120 * 60 * 1000), // 2 hrs ago
+        updatedAt: now,
+      },
+      {
+        callerPhone: '+91 98765 12345',
+        tempOwnerName: 'Kavitha Devi',
+        species: 'Caprine',
+        animalCount: 3,
+        symptoms: 'Goats off feed and lethargic. Farmer uncertain if bloat or toxic plant ingestion.',
+        tentativeAssessment: 'Uncertain acute abdominal disorder',
+        priority: 'COULD_NOT_ASSESS',
+        flexibility: 'MUST_ATTEND_TODAY',
+        preferredDate: todayStr,
+        plannedProcedure: 'On-site Clinical Assessment & Triage',
+        locationAddress: 'Survey 88, Nelamangala Road',
+        status: 'LOGGED',
+        notes: 'Advised owner to separate affected animals from pasture.',
+        createdAt: new Date(Date.now() - 30 * 60 * 1000), // 30 mins ago
+        updatedAt: now,
+      },
+      {
+        callerPhone: '+91 94470 55443',
+        tempOwnerName: 'Lakshmi Dairy Farms',
+        species: 'Bovine',
+        animalCount: 5,
+        symptoms: 'Routine herd deworming & booster FMD vaccination scheduled.',
+        tentativeAssessment: 'Routine Preventive Herd Health',
+        priority: 'PLANNED',
+        flexibility: 'CAN_POSTPONE_TODAY',
+        preferredDate: tomorrowStr,
+        plannedProcedure: 'Herd Deworming & Vaccination',
+        locationAddress: 'Near Milk Cooperative, Doddaballapura',
+        status: 'LOGGED',
+        notes: 'Postponed to tomorrow due to morning emergency caseload.',
+        createdAt: new Date(Date.now() - 180 * 60 * 1000),
+        updatedAt: now,
+      },
+    ]);
   }
 }

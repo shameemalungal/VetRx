@@ -16,6 +16,7 @@ import { clinicalRouter } from './clinical/clinical.controller.js';
 import { commercialRouter } from './commercial/commercial.controller.js';
 import { webhookRouter, publicPaymentsRouter } from './commercial/webhook.controller.js';
 import { inventoryRouter } from './inventory/inventory.controller.js';
+import { cvpRouter } from './cvp/cvp.controller.js';
 import { EmailService } from './email/email.service.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
@@ -111,6 +112,7 @@ export function createApp() {
   app.use('/api/commercial', commercialRouter);
   app.use('/api/inventory', inventoryRouter);
   app.use('/api', clinicalRouter);
+  app.use('/api', cvpRouter);
 
   // 404 Catch-All
   app.use((req, res, next) => {

@@ -1,0 +1,1080 @@
+// ==============================================================================
+// VetRx Call & Visit Planner (CVP) — Core Service
+// Multi-tenant, offline-first execution backed by Dexie IndexedDB
+// ==============================================================================
+
+import { db } from '../db/schema';
+import type {
+  Call,
+  OwnerLocation,
+  CallPriority,
+  CapacitySummary,
+  Owner,
+  Visit,
+  DailyPlan,
+  VisitProcedure,
+  VisitMedicineUsage,
+  VisitTimelineEvent,
+} from '../types';
+import { normalizePhoneNumber, arePhonesMatching } from '../utils/phoneUtils';
+import { durationLearningService } from './durationLearningService';
+
+export class CvpService {
+  // ── Capacity & Summary ──────────────────────────────────────────────
+  static async getTodayCapacitySummary(workingHoursTotal: number = 480): Promise<CapacitySummary> {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const allCalls = await db.calls.toArray();
+
+    // Filter calls for today
+    const todayCalls = allCalls.filter((c) => {
+      if (c.status === 'CANCELLED') return false;
+      if (c.flexibility === 'MUST_ATTEND_TODAY' || c.priority === 'EMERGENCY') return true;
+      if (c.preferredDate) {
+        const dStr = typeof c.preferredDate === 'string'
+          ? c.preferredDate.split('T')[0]
+          : c.preferredDate.toISOString().split('T')[0];
+        return dStr === todayStr;
+      }
+      return false;
+    });
+
+    let emergencyCount = 0;
+    let urgentCount = 0;
+    let couldNotAssessCount = 0;
+    let plannedCount = 0;
+    let allocatedVisitMinutes = 0;
+
+    for (const call of todayCalls) {
+      if (call.priority === 'EMERGENCY') emergencyCount++;
+      else if (call.priority === 'URGENT') urgentCount++;
+      else if (call.priority === 'COULD_NOT_ASSESS') couldNotAssessCount++;
+      else plannedCount++;
+
+      // Estimate ~30 mins per visit (or ~45 mins for Emergency)
+      const duration = call.priority === 'EMERGENCY' ? 45 : 30;
+      allocatedVisitMinutes += duration;
+    }
+
+    // Estimate ~20 mins transit between stops
+    const transitEstimatePerStop = 20;
+    const allocatedTravelMinutes = todayCalls.length > 0 ? (todayCalls.length * transitEstimatePerStop) : 0;
+    const totalAllocatedMinutes = allocatedVisitMinutes + allocatedTravelMinutes;
+    const remainingMinutes = Math.max(0, workingHoursTotal - totalAllocatedMinutes);
+    const isOverCapacity = totalAllocatedMinutes > workingHoursTotal;
+    const overCapacityMinutes = isOverCapacity ? (totalAllocatedMinutes - workingHoursTotal) : 0;
+
+    return {
+      workingMinutesAvailable: workingHoursTotal,
+      allocatedVisitMinutes,
+      allocatedTravelMinutes,
+      totalAllocatedMinutes,
+      remainingMinutes,
+      isOverCapacity,
+      overCapacityMinutes,
+      totalCallsCount: todayCalls.length,
+      emergencyCount,
+      urgentCount,
+      couldNotAssessCount,
+      plannedCount,
+    };
+  }
+
+  // ── Calls List Queries ──────────────────────────────────────────────
+  static async getCallsByTab(tab: 'today' | 'upcoming' | 'postponed' | 'all'): Promise<Call[]> {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const allCalls = await db.calls.toArray();
+
+    // Enrich with owner information if missing
+    const owners = await db.owners.toArray();
+    const ownerMap = new Map<number | string, Owner>(owners.map((o) => [o.id!, o]));
+
+    const enrichedCalls = allCalls.map((c) => {
+      if (c.ownerId && ownerMap.has(c.ownerId)) {
+        const o = ownerMap.get(c.ownerId)!;
+        return {
+          ...c,
+          ownerName: c.ownerName || o.name,
+          callerPhone: c.callerPhone || o.phone,
+          locationAddress: c.locationAddress || o.address,
+        };
+      }
+      return c;
+    });
+
+    if (tab === 'all') {
+      return enrichedCalls.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
+    if (tab === 'today') {
+      return enrichedCalls.filter((c) => {
+        if (c.status === 'CANCELLED') return false;
+        if (c.priority === 'EMERGENCY' || c.flexibility === 'MUST_ATTEND_TODAY') return true;
+        if (c.preferredDate) {
+          const dStr = typeof c.preferredDate === 'string'
+            ? c.preferredDate.split('T')[0]
+            : c.preferredDate.toISOString().split('T')[0];
+          return dStr === todayStr;
+        }
+        return false;
+      }).sort((a, b) => {
+        // Sort: EMERGENCY (0) -> URGENT (1) -> COULD_NOT_ASSESS (2) -> PLANNED (3)
+        const priorityOrder: Record<CallPriority, number> = {
+          EMERGENCY: 0,
+          URGENT: 1,
+          COULD_NOT_ASSESS: 2,
+          PLANNED: 3,
+        };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      });
+    }
+
+    if (tab === 'upcoming') {
+      return enrichedCalls.filter((c) => {
+        if (c.status === 'CANCELLED') return false;
+        if (!c.preferredDate) return false;
+        const dStr = typeof c.preferredDate === 'string'
+          ? c.preferredDate.split('T')[0]
+          : c.preferredDate.toISOString().split('T')[0];
+        return dStr > todayStr && c.flexibility !== 'CAN_POSTPONE_TODAY';
+      }).sort((a, b) => new Date(a.preferredDate!).getTime() - new Date(b.preferredDate!).getTime());
+    }
+
+    if (tab === 'postponed') {
+      return enrichedCalls.filter((c) => {
+        if (c.status === 'CANCELLED') return false;
+        return c.flexibility === 'CAN_POSTPONE_TODAY' || (c.notes && c.notes.toLowerCase().includes('postponed'));
+      }).sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+    }
+
+    return enrichedCalls;
+  }
+
+  // ── Call CRUD ───────────────────────────────────────────────────────
+  static async createCall(data: Omit<Call, 'id' | 'createdAt' | 'updatedAt'>): Promise<Call> {
+    const now = new Date();
+    const newCall: Call = {
+      ...data,
+      animalCount: data.animalCount || (data.patientIds && data.patientIds.length > 0 ? data.patientIds.length : 1),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // 1. Local Dexie persistence (offline-first foundation)
+    const id = await db.calls.add(newCall as any);
+    newCall.id = id;
+
+    // 2. Auto-save location if address provided and ownerId known
+    if (data.ownerId && data.locationAddress) {
+      const existingLoc = await db.ownerLocations
+        .where('ownerId')
+        .equals(data.ownerId as any)
+        .and((l) => l.address.toLowerCase() === (data.locationAddress || '').toLowerCase())
+        .first();
+
+      if (!existingLoc) {
+        await db.ownerLocations.add({
+          ownerId: data.ownerId,
+          label: 'Farm',
+          address: data.locationAddress,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          locationSource: data.latitude && data.longitude ? 'GPS' : 'MANUAL',
+          isDefault: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // 3. Online sync attempt if network available
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const res = await fetch('/api/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            callerPhone: data.callerPhone,
+            ownerId: typeof data.ownerId === 'string' && data.ownerId.includes('-') ? data.ownerId : null,
+            tempOwnerName: data.tempOwnerName || data.ownerName || null,
+            tempPatientName: data.tempPatientName || null,
+            species: data.species || null,
+            animalCount: newCall.animalCount,
+            symptoms: data.symptoms,
+            tentativeAssessment: data.tentativeAssessment || null,
+            priority: data.priority,
+            flexibility: data.flexibility,
+            preferredDate: data.preferredDate ? new Date(data.preferredDate).toISOString() : null,
+            locationAddress: data.locationAddress || null,
+            latitude: data.latitude || null,
+            longitude: data.longitude || null,
+            plannedProcedure: data.plannedProcedure || null,
+            notes: data.notes || null,
+          }),
+        });
+        if (res.ok) {
+          const serverCall = await res.json();
+          if (serverCall?.id) {
+            await db.calls.update(id, { updatedAt: new Date() });
+          }
+        }
+      } catch (err) {
+        console.warn('Backend sync failed, call saved offline in Dexie:', err);
+      }
+    }
+
+    return newCall;
+  }
+
+  static async updateCall(id: number | string, updates: Partial<Call>): Promise<void> {
+    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+    if (isNaN(numId)) return;
+    await db.calls.update(numId, {
+      ...updates,
+      updatedAt: new Date(),
+    });
+  }
+
+  static async postponeCall(
+    id: number | string,
+    targetDate: Date | string,
+    reason: string = 'Postponed by Doctor'
+  ): Promise<void> {
+    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+    if (isNaN(numId)) return;
+
+    const existing = await db.calls.get(numId);
+    const existingNotes = existing?.notes || '';
+    const newNotes = existingNotes
+      ? `${existingNotes} | Postponed to ${typeof targetDate === 'string' ? targetDate : targetDate.toISOString().split('T')[0]}: ${reason}`
+      : `Postponed: ${reason}`;
+
+    await db.calls.update(numId, {
+      flexibility: 'CAN_POSTPONE_TODAY',
+      preferredDate: targetDate,
+      notes: newNotes,
+      updatedAt: new Date(),
+    });
+
+    // Try backend sync if online
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const dateIso = typeof targetDate === 'string' ? new Date(targetDate).toISOString() : targetDate.toISOString();
+        await fetch(`/api/calls/${id}/postpone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ targetDate: dateIso, reason }),
+        });
+      } catch (err) {
+        console.warn('Backend postpone sync failed, updated locally in Dexie:', err);
+      }
+    }
+  }
+
+  // ── Owner & Patient Matching (CVP-46, CVP-05, CVP-07) ─────────────────
+  static async findMatchingOwners(phoneOrQuery: string): Promise<Array<{
+    owner: any;
+    patients: any[];
+    locations: OwnerLocation[];
+  }>> {
+    const raw = phoneOrQuery.trim();
+    if (!raw) return [];
+
+    const digitsOnly = raw.replace(/\D/g, '');
+    const searchLower = raw.toLowerCase();
+
+    const allOwners = await db.owners.toArray();
+    const matchedOwners = allOwners.filter((o) => {
+      // 1. Match phone using robust normalization and matching (with/without spaces, +91, 0, local prefix)
+      if (o.phone && arePhonesMatching(o.phone, raw)) {
+        return true;
+      }
+      if (digitsOnly.length >= 4 && o.phone) {
+        const ownerDigits = o.phone.replace(/\D/g, '');
+        if (ownerDigits.includes(digitsOnly) || digitsOnly.includes(ownerDigits)) {
+          return true;
+        }
+      }
+      // 2. Match name or address
+      if (o.name && o.name.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+      if (o.address && o.address.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+      return false;
+    }).slice(0, 8);
+
+    // Enrich each matched owner with their associated patients and saved locations
+    const enriched = await Promise.all(
+      matchedOwners.map(async (owner) => {
+        const patients = await db.patients.where('ownerId').equals(owner.id!).toArray();
+        const locations = await db.ownerLocations.where('ownerId').equals(owner.id!).toArray();
+        return {
+          owner,
+          patients,
+          locations,
+        };
+      })
+    );
+
+    return enriched;
+  }
+
+  static async getOwnerPatients(ownerId: number | string): Promise<any[]> {
+    const numId = typeof ownerId === 'string' ? parseInt(ownerId, 10) : ownerId;
+    if (isNaN(numId)) return [];
+    return db.patients.where('ownerId').equals(numId).toArray();
+  }
+
+  static async quickCreateOwner(data: {
+    name: string;
+    phone: string;
+    address?: string;
+    email?: string;
+    notes?: string;
+  }): Promise<any> {
+    const cleanPhone = normalizePhoneNumber(data.phone.trim());
+    const digitsOnly = cleanPhone.replace(/\D/g, '');
+
+    // Prevent duplicate owner creation if phone match already exists (supporting country code / local prefix)
+    if (digitsOnly.length >= 7) {
+      const allOwners = await db.owners.toArray();
+      const existing = allOwners.find((o) => {
+        if (!o.phone) return false;
+        return arePhonesMatching(o.phone, cleanPhone);
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
+    const now = new Date();
+    const ownerId = await db.owners.add({
+      name: data.name.trim(),
+      phone: cleanPhone,
+      address: data.address?.trim() || '',
+      email: data.email?.trim() || '',
+      notes: data.notes?.trim() || '',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const newOwner = await db.owners.get(ownerId);
+
+    // Save default location if address provided
+    if (data.address?.trim()) {
+      await db.ownerLocations.add({
+        ownerId,
+        label: 'Farm',
+        address: data.address.trim(),
+        locationSource: 'MANUAL',
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return newOwner;
+  }
+
+  static async quickCreatePatient(data: {
+    ownerId: number;
+    name: string;
+    species: string;
+    breed?: string;
+    sex?: string;
+    ageNote?: string;
+  }): Promise<any> {
+    // Prevent duplicate patient under same owner
+    const existing = await db.patients
+      .where('ownerId')
+      .equals(data.ownerId)
+      .and((p) => p.name.trim().toLowerCase() === data.name.trim().toLowerCase())
+      .first();
+
+    if (existing) {
+      return existing;
+    }
+
+    const now = new Date();
+    const patientId = await db.patients.add({
+      ownerId: data.ownerId,
+      name: data.name.trim(),
+      species: data.species as any,
+      breed: data.breed?.trim() || '',
+      sex: (data.sex || 'Unknown') as any,
+      ageNote: data.ageNote?.trim() || '',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return db.patients.get(patientId);
+  }
+
+  // ── Global Search ───────────────────────────────────────────────────
+  static async searchAll(query: string) {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+
+    // 1. Owners
+    const allOwners = await db.owners.toArray();
+    const matchingOwners = allOwners.filter((o) =>
+      o.name.toLowerCase().includes(q) ||
+      (o.phone && o.phone.toLowerCase().includes(q)) ||
+      (o.address && o.address.toLowerCase().includes(q))
+    ).slice(0, 5);
+
+    // 2. Patients
+    const allPatients = await db.patients.toArray();
+    const matchingPatients = allPatients.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      (p.species && p.species.toLowerCase().includes(q)) ||
+      (p.breed && p.breed.toLowerCase().includes(q))
+    ).slice(0, 5);
+
+    // 3. Calls
+    const allCalls = await db.calls.toArray();
+    const matchingCalls = allCalls.filter((c) =>
+      (c.callerPhone && c.callerPhone.toLowerCase().includes(q)) ||
+      (c.ownerName && c.ownerName.toLowerCase().includes(q)) ||
+      (c.tempOwnerName && c.tempOwnerName.toLowerCase().includes(q)) ||
+      (c.symptoms && c.symptoms.toLowerCase().includes(q)) ||
+      (c.locationAddress && c.locationAddress.toLowerCase().includes(q))
+    ).slice(0, 5);
+
+    // 4. Locations
+    const allLocations = await db.ownerLocations.toArray();
+    const matchingLocations = allLocations.filter((l) =>
+      l.address.toLowerCase().includes(q) ||
+      (l.label && l.label.toLowerCase().includes(q))
+    ).slice(0, 5);
+
+    return {
+      owners: matchingOwners,
+      patients: matchingPatients,
+      calls: matchingCalls,
+      locations: matchingLocations,
+    };
+  }
+
+  // ── Owner Locations ─────────────────────────────────────────────────
+  static async getOwnerLocations(ownerId: number | string): Promise<OwnerLocation[]> {
+    const numId = typeof ownerId === 'string' ? parseInt(ownerId, 10) : ownerId;
+    return db.ownerLocations.where('ownerId').equals(numId as any).toArray();
+  }
+
+  static async saveOwnerLocation(location: Omit<OwnerLocation, 'id' | 'createdAt' | 'updatedAt'>): Promise<OwnerLocation> {
+    const now = new Date();
+    const newLoc: OwnerLocation = {
+      ...location,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const id = await db.ownerLocations.add(newLoc as any);
+    newLoc.id = id;
+    return newLoc;
+  }
+
+  // ── Daily Plan & Visit Preparation (Phase 4) ──────────────────────
+  static async getTodayVisits(): Promise<Visit[]> {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 1. Fetch existing visits
+    const allVisits = await db.visits.toArray();
+    const existingVisits = allVisits.filter((v) => {
+      if (v.status === 'CANCELLED' || v.status === 'POSTPONED') return false;
+      const dStr = typeof v.scheduledDate === 'string'
+        ? v.scheduledDate.split('T')[0]
+        : new Date(v.scheduledDate).toISOString().split('T')[0];
+      return dStr === todayStr;
+    });
+
+    // 2. Fetch today's calls to check for calls that need visits generated
+    const allCalls = await db.calls.toArray();
+    const todayCalls = allCalls.filter((c) => {
+      if (c.status === 'CANCELLED') return false;
+      if (c.flexibility === 'MUST_ATTEND_TODAY' || c.priority === 'EMERGENCY') return true;
+      if (c.preferredDate) {
+        const dStr = typeof c.preferredDate === 'string'
+          ? c.preferredDate.split('T')[0]
+          : new Date(c.preferredDate).toISOString().split('T')[0];
+        return dStr === todayStr;
+      }
+      return false;
+    });
+
+    const existingCallIds = new Set(existingVisits.map((v) => v.callId).filter(Boolean));
+
+    // 3. For any call without a visit, synthesize or save a visit
+    for (const call of todayCalls) {
+      if (!existingCallIds.has(call.id)) {
+        const newVisit: Visit = {
+          callId: call.id,
+          ownerId: call.ownerId || 0,
+          ownerName: call.ownerName || call.tempOwnerName || 'Unknown Owner',
+          ownerPhone: call.callerPhone,
+          address: call.locationAddress || 'Client Location',
+          latitude: call.latitude,
+          longitude: call.longitude,
+          status: 'REGISTERED',
+          priority: call.priority,
+          flexibility: call.flexibility,
+          scheduledDate: new Date(),
+          estimatedDurationMinutes: call.priority === 'EMERGENCY' ? 45 : 30,
+          createdAt: new Date(),
+          cases: [
+            {
+              chiefComplaint: call.symptoms,
+              procedureCategory: call.plannedProcedure || (call.priority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+              species: call.species || 'Bovine',
+            },
+          ],
+        };
+
+        const vId = await db.visits.add(newVisit as any);
+        newVisit.id = vId;
+        existingVisits.push(newVisit);
+      }
+    }
+
+    return existingVisits;
+  }
+
+  static async getDailyPlan(planDate: string): Promise<DailyPlan | null> {
+    const dStr = planDate.split('T')[0];
+    const allPlans = await db.dailyPlans.toArray();
+    const plan = allPlans.find((p) => {
+      const pDateStr = typeof p.planDate === 'string'
+        ? p.planDate.split('T')[0]
+        : new Date(p.planDate).toISOString().split('T')[0];
+      return pDateStr === dStr;
+    });
+
+    return plan || null;
+  }
+
+  static async saveDraftDailyPlan(plan: DailyPlan): Promise<DailyPlan> {
+    const now = new Date();
+    const dStr = plan.planDate.split('T')[0];
+    const existing = await this.getDailyPlan(dStr);
+
+    const planToSave: DailyPlan = {
+      ...plan,
+      planDate: dStr,
+      status: plan.status || 'DRAFT',
+      updatedAt: now,
+    };
+
+    if (existing?.id) {
+      planToSave.id = existing.id;
+      await db.dailyPlans.update(existing.id as any, planToSave as any);
+    } else {
+      planToSave.createdAt = now;
+      const id = await db.dailyPlans.add(planToSave as any);
+      planToSave.id = id;
+    }
+
+    // Try backend sync if online
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch('/api/daily-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(planToSave),
+        });
+      } catch (err) {
+        console.warn('Backend draft plan sync failed, saved locally in Dexie:', err);
+      }
+    }
+
+    return planToSave;
+  }
+
+  static async confirmDailyPlan(plan: DailyPlan): Promise<DailyPlan> {
+    const now = new Date();
+    const confirmedPlan: DailyPlan = {
+      ...plan,
+      status: 'CONFIRMED',
+      confirmedAt: now,
+      updatedAt: now,
+    };
+
+    const saved = await this.saveDraftDailyPlan(confirmedPlan);
+
+    // Update visits with assigned sequence order and PLANNED status
+    if (plan.stops && plan.stops.length > 0) {
+      for (const stop of plan.stops) {
+        if (stop.visitId) {
+          await db.visits.update(stop.visitId as any, {
+            status: 'PLANNED',
+            sequenceOrder: stop.stopOrder,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    // Try backend confirmation sync if online
+    if (typeof window !== 'undefined' && navigator.onLine && saved.id) {
+      try {
+        await fetch(`/api/daily-plans/${saved.id}/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(saved),
+        });
+      } catch (err) {
+        console.warn('Backend plan confirm sync failed, confirmed locally in Dexie:', err);
+      }
+    }
+
+    return saved;
+  }
+
+  static async postponeVisit(
+    visitId: number | string,
+    targetDate: Date | string,
+    reason: string = 'Postponed by Doctor'
+  ): Promise<void> {
+    const numId = typeof visitId === 'string' ? parseInt(visitId, 10) : visitId;
+    const now = new Date();
+    const visit = await db.visits.get(numId as any);
+
+    if (visit) {
+      await db.visits.update(numId as any, {
+        status: 'POSTPONED',
+        flexibility: 'CAN_POSTPONE_TODAY',
+        scheduledDate: targetDate,
+        postponedReason: reason,
+        updatedAt: now,
+      });
+
+      // Also update linked call if present
+      if (visit.callId) {
+        await this.postponeCall(visit.callId, targetDate, reason);
+      }
+    }
+
+    // Try backend sync if online
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const dateIso = typeof targetDate === 'string' ? new Date(targetDate).toISOString() : targetDate.toISOString();
+        await fetch(`/api/visits/${visitId}/postpone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ targetDate: dateIso, reason }),
+        });
+      } catch (err) {
+        console.warn('Backend visit postpone sync failed, postponed locally:', err);
+      }
+    }
+  }
+
+  // ── Phase 5 Field Execution & Active Visit ─────────────────────────────────
+
+  // 1. Get Visit by ID with cases, procedures, medicine usage, and timeline
+  static async getVisitById(visitId: number | string): Promise<Visit | null> {
+    const numId = typeof visitId === 'string' ? parseInt(visitId, 10) : visitId;
+    let visit: Visit | null = (await db.visits.get(numId as any)) || null;
+
+    if (!visit) {
+      // If not in Dexie, try string match or query all
+      const allVisits = await db.visits.toArray();
+      visit = allVisits.find((v) => String(v.id) === String(visitId)) || null;
+    }
+
+    if (!visit) return null;
+
+    // Load child collections from Dexie safely matching both string and number IDs
+    const allCases = await db.visitCases.toArray();
+    const cases = allCases.filter((c) => String(c.visitId) === String(visit!.id));
+
+    const allProcs = await db.visitProcedures.toArray();
+    const procedures = allProcs.filter((p) => String(p.visitId) === String(visit!.id));
+
+    const allUsages = await db.visitMedicineUsages.toArray();
+    const medicineUsages = allUsages.filter((m) => String(m.visitId) === String(visit!.id));
+
+    const allEvents = await db.visitTimelineEvents.toArray();
+    const timelineEvents = allEvents.filter((e) => String(e.visitId) === String(visit!.id));
+
+    // Sort timeline chronologically
+    timelineEvents.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+
+    return {
+      ...visit,
+      cases: cases.length > 0 ? cases : (visit.cases || []),
+      procedures,
+      medicineUsages,
+      timelineEvents,
+    };
+  }
+
+  // 2. Record Arrival (CVP-20)
+  static async recordArrival(
+    visitId: number | string,
+    locationData?: {
+      latitude?: number | null;
+      longitude?: number | null;
+      accuracy?: number | null;
+    }
+  ): Promise<Visit> {
+    const now = new Date();
+
+    const visit = await this.getVisitById(visitId);
+    if (!visit) {
+      throw new Error(`Visit ${visitId} not found.`);
+    }
+
+    // Idempotent: If already arrived or in-progress/completed, return
+    if (['ARRIVED', 'IN_PROGRESS', 'COMPLETED'].includes(visit.status)) {
+      return visit;
+    }
+
+    const updates: Partial<Visit> = {
+      status: 'ARRIVED',
+      arrivedAt: visit.arrivedAt || now,
+      updatedAt: now,
+    };
+
+    if (locationData?.latitude != null && locationData?.longitude != null) {
+      updates.arrivalLatitude = locationData.latitude;
+      updates.arrivalLongitude = locationData.longitude;
+      updates.arrivalAccuracy = locationData.accuracy || undefined;
+    }
+
+    await db.visits.update(visit.id as any, updates as any);
+
+    // Record timeline event
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'ARRIVAL_RECORDED',
+      title: 'Arrived at Location',
+      description: locationData?.latitude
+        ? `Arrived with GPS: (${locationData.latitude.toFixed(5)}, ${locationData.longitude?.toFixed(5)})`
+        : 'Arrived at client location.',
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    // Online background sync
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch(`/api/visits/${visit.id}/arrive`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(locationData || {}),
+        });
+      } catch (err) {
+        console.warn('Backend arrival sync failed, saved locally in Dexie:', err);
+      }
+    }
+
+    return (await this.getVisitById(visit.id!))!;
+  }
+
+  // 3. Start Visit (CVP-22)
+  static async startVisit(visitId: number | string): Promise<Visit> {
+    const now = new Date();
+
+    const visit = await this.getVisitById(visitId);
+    if (!visit) {
+      throw new Error(`Visit ${visitId} not found.`);
+    }
+
+    if (visit.status === 'COMPLETED' || visit.status === 'CANCELLED') {
+      throw new Error(`Cannot start visit in ${visit.status} state.`);
+    }
+
+    // Idempotent: If already in-progress, return current visit
+    if (visit.status === 'IN_PROGRESS') {
+      return visit;
+    }
+
+    await db.visits.update(visit.id as any, {
+      status: 'IN_PROGRESS',
+      visitStartedAt: visit.visitStartedAt || now,
+      updatedAt: now,
+    });
+
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'VISIT_STARTED',
+      title: 'Active Visit Started',
+      description: 'Veterinarian began clinical examination & procedures.',
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch(`/api/visits/${visit.id}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+      } catch (err) {
+        console.warn('Backend start visit sync failed, saved locally:', err);
+      }
+    }
+
+    return (await this.getVisitById(visit.id!))!;
+  }
+
+  // 4. Record Procedure Actually Performed (CVP-23)
+  static async recordProcedure(
+    visitId: number | string,
+    procedureData: Partial<VisitProcedure>
+  ): Promise<VisitProcedure> {
+    const visit = await this.getVisitById(visitId);
+    if (!visit) throw new Error(`Visit ${visitId} not found.`);
+
+    const now = new Date();
+    const newProc: VisitProcedure = {
+      visitId: visit.id!,
+      patientId: procedureData.patientId,
+      patientName: procedureData.patientName,
+      procedureCategory: procedureData.procedureCategory || 'GENERAL',
+      procedureName: procedureData.procedureName || 'Clinical Examination',
+      notes: procedureData.notes,
+      standardFee: procedureData.standardFee ?? 0,
+      performedAt: now,
+      isPlanned: false,
+    };
+
+    const procId = await db.visitProcedures.add(newProc as any);
+    newProc.id = procId;
+
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'PROCEDURE_RECORDED',
+      title: `Procedure Performed: ${newProc.procedureName}`,
+      description: newProc.notes || `Category: ${newProc.procedureCategory}`,
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch(`/api/visits/${visit.id}/procedures`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(newProc),
+        });
+      } catch (err) {
+        console.warn('Backend procedure record sync failed, saved locally:', err);
+      }
+    }
+
+    return newProc;
+  }
+
+  // 5. Record Actual Medicine Usage (CVP-24)
+  static async recordMedicineUsage(
+    visitId: number | string,
+    usageData: Partial<VisitMedicineUsage>
+  ): Promise<VisitMedicineUsage> {
+    const visit = await this.getVisitById(visitId);
+    if (!visit) throw new Error(`Visit ${visitId} not found.`);
+
+    const now = new Date();
+    const idempotencyKey = usageData.idempotencyKey || `use_${visit.id}_${usageData.medicineName}_${Date.now()}`;
+
+    // Check existing usage by idempotencyKey to prevent duplicate entry
+    if (usageData.idempotencyKey) {
+      const allUsages = await db.visitMedicineUsages.toArray();
+      const existing = allUsages.find((m) => m.idempotencyKey === usageData.idempotencyKey);
+      if (existing) {
+        return existing;
+      }
+    }
+
+    const newUsage: VisitMedicineUsage = {
+      visitId: visit.id!,
+      visitCaseId: usageData.visitCaseId,
+      patientId: usageData.patientId,
+      patientName: usageData.patientName,
+      medicineId: usageData.medicineId || 0,
+      medicineName: usageData.medicineName || 'Medicine',
+      batchNumber: usageData.batchNumber,
+      quantityUsed: usageData.quantityUsed || 1,
+      unit: usageData.unit || 'dose',
+      route: usageData.route || 'Oral',
+      instructions: usageData.instructions,
+      isStockDeducted: false,
+      administeredAt: now,
+      idempotencyKey,
+    };
+
+    const usageId = await db.visitMedicineUsages.add(newUsage as any);
+    newUsage.id = usageId;
+
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'MEDICINE_USAGE_RECORDED',
+      title: `Medicine Administered: ${newUsage.medicineName}`,
+      description: `Quantity: ${newUsage.quantityUsed} ${newUsage.unit} | Route: ${newUsage.route}${newUsage.batchNumber ? ` | Batch: ${newUsage.batchNumber}` : ''}`,
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const res = await fetch(`/api/visits/${visit.id}/medicine-usage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(newUsage),
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData?.usage?.isStockDeducted) {
+            newUsage.isStockDeducted = true;
+            (newUsage as any).stockDeductionId = resData.usage.stockDeductionId;
+            await db.visitMedicineUsages.update(usageId as any, {
+              isStockDeducted: true,
+              stockDeductionId: resData.usage.stockDeductionId,
+            } as any);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend medicine usage sync failed, saved locally:', err);
+      }
+    }
+
+    return newUsage;
+  }
+
+  // 6. Complete Visit (CVP-25)
+  static async completeVisit(
+    visitId: number | string,
+    summary: {
+      actualDurationMinutes?: number;
+      completionNotes?: string;
+    }
+  ): Promise<Visit> {
+    const visit = await this.getVisitById(visitId);
+    if (!visit) throw new Error(`Visit ${visitId} not found.`);
+
+    if (visit.status === 'COMPLETED') {
+      return visit;
+    }
+
+    const now = new Date();
+    let duration = summary.actualDurationMinutes;
+    if (!duration && visit.visitStartedAt) {
+      const startMs = new Date(visit.visitStartedAt).getTime();
+      duration = Math.max(1, Math.round((now.getTime() - startMs) / 60000));
+    }
+
+    await db.visits.update(visit.id as any, {
+      status: 'COMPLETED',
+      visitCompletedAt: now,
+      actualDurationMinutes: duration || visit.estimatedDurationMinutes,
+      completionNotes: summary.completionNotes,
+      updatedAt: now,
+    });
+
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'VISIT_COMPLETED',
+      title: 'Visit Successfully Finalized',
+      description: summary.completionNotes || `Visit concluded in ${duration || visit.estimatedDurationMinutes} minutes.`,
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    // Auto-complete linked follow-up if present
+    try {
+      const allFollowUps = await db.followUps.toArray();
+      for (const f of allFollowUps) {
+        if (String(f.scheduledVisitId) === String(visit.id)) {
+          await db.followUps.update(f.id as any, {
+            status: 'COMPLETED',
+            updatedAt: now,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to auto-complete linked follow-up:', err);
+    }
+
+    // Refresh practice duration estimates in background
+    try {
+      const practiceId = visit.practiceId || 'default-practice';
+      await durationLearningService.calculateEstimatesForPractice(practiceId);
+    } catch (err) {
+      console.warn('Background duration estimate update failed:', err);
+    }
+
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch(`/api/visits/${visit.id}/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(summary),
+        });
+      } catch (err) {
+        console.warn('Backend complete visit sync failed, saved locally:', err);
+      }
+    }
+
+    return (await this.getVisitById(visit.id!))!;
+  }
+
+  // 7. Resume Visit
+  static async resumeVisit(visitId: number | string): Promise<Visit> {
+    const visit = await this.getVisitById(visitId);
+    if (!visit) throw new Error(`Visit ${visitId} not found.`);
+
+    if (visit.status === 'IN_PROGRESS') {
+      return visit;
+    }
+
+    const now = new Date();
+    await db.visits.update(visit.id as any, {
+      status: 'IN_PROGRESS',
+      updatedAt: now,
+    });
+
+    await db.visitTimelineEvents.add({
+      visitId: visit.id!,
+      eventType: 'VISIT_RESUMED',
+      title: 'Visit Resumed',
+      description: 'Doctor resumed active visit mode.',
+      occurredAt: now,
+      syncStatus: 'LOCAL_PENDING',
+    } as any);
+
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        await fetch(`/api/visits/${visit.id}/resume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+      } catch (err) {
+        console.warn('Backend resume visit sync failed, saved locally:', err);
+      }
+    }
+
+    return (await this.getVisitById(visit.id!))!;
+  }
+
+  // 8. Get Visit Timeline (CVP-45)
+  static async getVisitTimeline(visitId: number | string): Promise<VisitTimelineEvent[]> {
+    const allEvents = await db.visitTimelineEvents.toArray();
+    const events = allEvents.filter((e) => String(e.visitId) === String(visitId));
+    events.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+    return events;
+  }
+}
+
+export const cvpService = CvpService;

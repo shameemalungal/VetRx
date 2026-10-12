@@ -12,6 +12,10 @@ import { OpeningStockModal } from './OpeningStockModal';
 import { StockAdjustmentModal } from './StockAdjustmentModal';
 import { StocktakeModal } from './StocktakeModal';
 import { InvoiceImporterModal } from './InvoiceImporterModal';
+import { StockInModal } from './StockInModal';
+import { TransferStockModal } from './TransferStockModal';
+import { ReturnStockModal } from './ReturnStockModal';
+import { ReconciliationModal } from './ReconciliationModal';
 import { inventoryApi, type InventoryDashboardData } from '../../services/inventoryApi';
 import './Inventory.css';
 
@@ -26,6 +30,10 @@ export const InventoryDashboardPage: React.FC = () => {
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
   const [isStocktakeOpen, setIsStocktakeOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [isStockInOpen, setIsStockInOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
+  const [isReconcileOpen, setIsReconcileOpen] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -62,6 +70,10 @@ export const InventoryDashboardPage: React.FC = () => {
         alertCount={alertCount}
         onOpenAddItem={() => setIsAddItemOpen(true)}
         onOpenOpeningStock={() => setIsOpeningStockOpen(true)}
+        onOpenStockIn={() => setIsStockInOpen(true)}
+        onOpenTransfer={() => setIsTransferOpen(true)}
+        onOpenReturn={() => setIsReturnOpen(true)}
+        onOpenReconcile={() => setIsReconcileOpen(true)}
         onOpenStocktake={() => setIsStocktakeOpen(true)}
         onOpenAdjustment={() => setIsAdjustmentOpen(true)}
         onOpenInvoiceImporter={() => setIsImporterOpen(true)}
@@ -127,6 +139,247 @@ export const InventoryDashboardPage: React.FC = () => {
         </div>
       ) : (
         <>
+          {/* Quick Actions Deck (CVP-27) */}
+          <div
+            className="inventory-quick-actions-bar"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+              padding: '12px 14px',
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              marginBottom: '16px',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Quick Actions:
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setIsStockInOpen(true)}
+              id="btn-quick-stock-in"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="plus" size={14} />
+              <span>Stock In</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsTransferOpen(true)}
+              id="btn-quick-transfer"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="swap-horiz" size={14} />
+              <span>Transfer to Bag</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsReturnOpen(true)}
+              id="btn-quick-return"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="arrow-back" size={14} />
+              <span>Return Stock</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setIsReconcileOpen(true)}
+              id="btn-quick-reconcile"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="check-circle" size={14} />
+              <span>Reconcile Count</span>
+            </button>
+            <Link
+              to="/inventory/stock"
+              className="btn btn-ghost"
+              id="btn-quick-view-stock"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+            >
+              <Icon name="box" size={14} />
+              <span>View Store Stock</span>
+            </Link>
+            <Link
+              to="/inventory/bag"
+              className="btn btn-ghost"
+              id="btn-quick-view-bag"
+              style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: '#0284c7' }}
+            >
+              <Icon name="bag" size={14} />
+              <span>View Practice Bag</span>
+            </Link>
+          </div>
+
+          {/* Store Stock vs Practice Bag Location Control Cards */}
+          <div
+            className="location-summary-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '16px',
+              marginBottom: '20px',
+            }}
+          >
+            {/* Store Stock Card */}
+            <div
+              className="location-card"
+              id="card-store-stock"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '12px',
+                padding: '16px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: '#00685f',
+                      color: '#ffffff',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon name="database" size={18} />
+                  </span>
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Store Stock</h3>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Central Clinic Inventory</span>
+                  </div>
+                </div>
+                <Link
+                  to="/inventory/stock"
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#00685f', textDecoration: 'none' }}
+                >
+                  Manage →
+                </Link>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px' }}>
+                <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Store Units</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
+                    {dashboard?.storeStockSummary?.totalUnits ?? dashboard?.totalUnits ?? 0}
+                  </div>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b' }}>Store Items</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>
+                    {dashboard?.storeStockSummary?.totalItems ?? dashboard?.totalItems ?? 0}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsStockInOpen(true)}
+                  style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
+                >
+                  + Stock In
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsTransferOpen(true)}
+                  style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
+                >
+                  Transfer to Bag →
+                </button>
+              </div>
+            </div>
+
+            {/* Practice Bag Card */}
+            <div
+              className="location-card"
+              id="card-practice-bag"
+              style={{
+                background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)',
+                border: '1px solid #86efac',
+                borderRadius: '12px',
+                padding: '16px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: '#16a34a',
+                      color: '#ffffff',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon name="bag" size={18} />
+                  </span>
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Practice Bag</h3>
+                    <span style={{ fontSize: '11px', color: '#166534' }}>Field Visit Carrying Kit</span>
+                  </div>
+                </div>
+                <Link
+                  to="/inventory/bag"
+                  id="link-open-practice-bag"
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#15803d', textDecoration: 'none' }}
+                >
+                  Inspect Bag →
+                </Link>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '12px' }}>
+                <div style={{ background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '11px', color: '#166534' }}>Bag Units Carried</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#14532d' }} id="metric-bag-units">
+                    {dashboard?.practiceBagSummary?.totalUnits ?? 0}
+                  </div>
+                </div>
+                <div style={{ background: '#ffffff', padding: '8px 10px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: '11px', color: '#166534' }}>Bag Items Carried</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color: '#14532d' }} id="metric-bag-items">
+                    {dashboard?.practiceBagSummary?.totalItems ?? 0}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <Link
+                  to="/inventory/bag"
+                  className="btn btn-primary"
+                  style={{ flex: 1, fontSize: '12px', padding: '5px 8px', textAlign: 'center', textDecoration: 'none' }}
+                >
+                  Prepare Bag
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsReturnOpen(true)}
+                  style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
+                >
+                  Return Unused
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Metrics Grid */}
           <div className="inventory-metrics-grid">
             {/* Total Stock */}
@@ -387,6 +640,31 @@ export const InventoryDashboardPage: React.FC = () => {
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
         onSuccess={() => void fetchDashboard()}
+      />
+
+      <StockInModal
+        isOpen={isStockInOpen}
+        onClose={() => setIsStockInOpen(false)}
+        onSuccess={() => void fetchDashboard()}
+      />
+
+      <TransferStockModal
+        isOpen={isTransferOpen}
+        onClose={() => setIsTransferOpen(false)}
+        onSuccess={() => void fetchDashboard()}
+      />
+
+      <ReturnStockModal
+        isOpen={isReturnOpen}
+        onClose={() => setIsReturnOpen(false)}
+        onSuccess={() => void fetchDashboard()}
+      />
+
+      <ReconciliationModal
+        isOpen={isReconcileOpen}
+        onClose={() => setIsReconcileOpen(false)}
+        onSuccess={() => void fetchDashboard()}
+        locationName="Store Stock"
       />
     </div>
   );
