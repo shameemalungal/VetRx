@@ -24,7 +24,7 @@ export interface RouteEngineConfig {
   averageSpeedKmH?: number; // default: 35 km/h for mixed rural/semi-urban veterinary rounds
   defaultTransitMinutes?: number; // default: 20 mins when coordinates missing
   defaultTransitKm?: number; // default: 10 km when coordinates missing
-  durationEstimates?: Map<string, ProcedureDurationEstimate> | ProcedureDurationEstimate[];
+  durationEstimates?: Map<string, ProcedureDurationEstimate> | ProcedureDurationEstimate[] | Record<string, ProcedureDurationEstimate>;
 }
 
 export class CvpRouteEngine {
@@ -84,7 +84,7 @@ export class CvpRouteEngine {
   static estimateVisitDuration(
     visit: Visit,
     overrideMinutes?: number,
-    durationEstimates?: Map<string, ProcedureDurationEstimate> | ProcedureDurationEstimate[]
+    durationEstimates?: Map<string, ProcedureDurationEstimate> | ProcedureDurationEstimate[] | Record<string, ProcedureDurationEstimate>
   ): number {
     if (overrideMinutes != null && overrideMinutes > 0) {
       return overrideMinutes;

@@ -310,7 +310,6 @@ export const CallsListPage: React.FC = () => {
         >
           <Calendar className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
           <span>Follow-ups</span>
-          <span className="cvp-badge-phase">Phase 8</span>
         </button>
       </div>
 
@@ -369,9 +368,8 @@ export const CallsListPage: React.FC = () => {
             key={call.id}
             call={call}
             onPostpone={(c: Call) => setPostponeModalCall(c)}
-            onSelect={(_c: Call) => {
-              // Open detailed modal or highlight
-            }}
+            onSelect={(c: Call) => navigate(`/calls/${c.id}`)}
+            onReviewCase={(c: Call) => navigate(`/calls/${c.id}`)}
           />
         ))}
 

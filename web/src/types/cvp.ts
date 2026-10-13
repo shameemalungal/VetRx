@@ -85,6 +85,8 @@ export interface Call {
   status: CallStatus;
   notes?: string;
   plannedProcedure?: string;
+  visits?: Visit[];
+  linkedVisit?: Visit;
   createdAt: Date | string;
   updatedAt?: Date | string;
 }

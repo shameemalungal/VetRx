@@ -7,7 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuditService } from '../lib/audit.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
-import type { CallPriority, VisitFlexibility, CallStatus } from '@prisma/client';
+import type { CallPriority, VisitFlexibility, CallStatus, VisitStatus } from '@prisma/client';
 
 export class CvpBackendService {
   // ── List Calls ────────────────────────────────────────────────────────
@@ -238,6 +238,315 @@ export class CvpBackendService {
       flexibility: 'CAN_POSTPONE_TODAY',
       preferredDate: targetDate,
       notes: reason,
+    });
+  }
+
+  // ── Schedule Visit from Call (Call-to-Visit Workflow) ─────────────────
+  static async scheduleCall(
+    id: string,
+    practiceId: string,
+    data: {
+      scheduledDate: Date;
+      priority?: CallPriority;
+      flexibility?: VisitFlexibility;
+      preferredTime?: string | null;
+      locationId?: string | null;
+      address?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      estimatedDurationMinutes?: number;
+      notes?: string | null;
+      cases?: Array<{
+        patientId?: string | null;
+        patientName?: string | null;
+        species?: string | null;
+        chiefComplaint: string;
+        tentativeDiagnosis?: string | null;
+        procedureCategory?: string | null;
+      }>;
+      addToTodayPlan?: boolean;
+    }
+  ) {
+    return prisma.$transaction(async (tx) => {
+      // 1. Verify Call belongs to practice
+      const call = await tx.call.findFirst({
+        where: { id, practiceId },
+        include: {
+          owner: true,
+          visits: {
+            include: { cases: true },
+          },
+        },
+      });
+
+      if (!call) {
+        throw new AppError(404, 'CALL_NOT_FOUND', 'Call record not found.');
+      }
+
+      // Idempotency: If this call already has a visit scheduled, return existing visit and call
+      if (call.visits && call.visits.length > 0) {
+        const existingVisit = call.visits[0];
+        return {
+          visit: existingVisit,
+          call,
+          alreadyExisted: true,
+        };
+      }
+
+      // 2. Resolve or create Owner if not present
+      let resolvedOwnerId = call.ownerId;
+      if (!resolvedOwnerId) {
+        let owner = await tx.owner.findFirst({
+          where: { practiceId, phone: call.callerPhone },
+        });
+
+        if (!owner) {
+          owner = await tx.owner.create({
+            data: {
+              practiceId,
+              name: call.tempOwnerName?.trim() || 'Client (Direct Caller)',
+              phone: call.callerPhone.trim(),
+              address: data.address?.trim() || call.locationAddress?.trim() || null,
+            },
+          });
+        }
+        resolvedOwnerId = owner.id;
+
+        // Associate owner with the call
+        await tx.call.update({
+          where: { id: call.id },
+          data: { ownerId: resolvedOwnerId },
+        });
+      }
+
+      // 3. Resolve Location & Metadata
+      const resolvedAddress =
+        data.address?.trim() ||
+        call.locationAddress?.trim() ||
+        call.owner?.address ||
+        'Client Location';
+
+      const resolvedLat = data.latitude ?? call.latitude ?? null;
+      const resolvedLng = data.longitude ?? call.longitude ?? null;
+      const resolvedPriority = data.priority || call.priority || 'PLANNED';
+      const resolvedFlexibility = data.flexibility || call.flexibility || 'MUST_ATTEND_TODAY';
+
+      // 4. Create Visit
+      const visit = await tx.visit.create({
+        data: {
+          practiceId,
+          callId: call.id,
+          ownerId: resolvedOwnerId,
+          locationId: data.locationId || null,
+          address: resolvedAddress,
+          latitude: resolvedLat,
+          longitude: resolvedLng,
+          priority: resolvedPriority,
+          flexibility: resolvedFlexibility,
+          scheduledDate: data.scheduledDate,
+          estimatedDurationMinutes: data.estimatedDurationMinutes || (resolvedPriority === 'EMERGENCY' ? 45 : 30),
+          notes: data.notes?.trim() || call.notes?.trim() || null,
+          status: 'REGISTERED',
+          scheduledAt: new Date(),
+        },
+      });
+
+      // 5. Create VisitCase(s)
+      const inputCases = data.cases && data.cases.length > 0 ? data.cases : null;
+      if (inputCases) {
+        for (const c of inputCases) {
+          await tx.visitCase.create({
+            data: {
+              practiceId,
+              visitId: visit.id,
+              patientId: c.patientId || null,
+              chiefComplaint: c.chiefComplaint.trim() || call.symptoms,
+              tentativeDiagnosis: c.tentativeDiagnosis?.trim() || call.tentativeAssessment || null,
+              procedureCategory: c.procedureCategory?.trim() || call.plannedProcedure || (resolvedPriority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+              notes: c.patientName ? `Patient: ${c.patientName}` : null,
+            },
+          });
+        }
+      } else {
+        // Create default case from call symptoms
+        await tx.visitCase.create({
+          data: {
+            practiceId,
+            visitId: visit.id,
+            chiefComplaint: call.symptoms,
+            tentativeDiagnosis: call.tentativeAssessment || null,
+            procedureCategory: call.plannedProcedure || (resolvedPriority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+            notes: call.species ? `Species: ${call.species}${call.tempPatientName ? ` (${call.tempPatientName})` : ''}` : null,
+          },
+        });
+      }
+
+      // 6. Update Call status to SCHEDULED
+      const updatedCall = await tx.call.update({
+        where: { id: call.id },
+        data: {
+          status: 'SCHEDULED',
+          preferredDate: data.scheduledDate,
+        },
+        include: {
+          owner: true,
+        },
+      });
+
+      // 7. Add to Today's Plan if requested
+      if (data.addToTodayPlan) {
+        const planDate = new Date(data.scheduledDate);
+        planDate.setHours(0, 0, 0, 0);
+
+        let plan = await tx.dailyPlan.findFirst({
+          where: { practiceId, planDate },
+          include: {
+            routeStops: {
+              orderBy: { stopOrder: 'desc' },
+              take: 1,
+            },
+          },
+        });
+
+        if (!plan) {
+          plan = await tx.dailyPlan.create({
+            data: {
+              practiceId,
+              planDate,
+              status: 'DRAFT',
+            },
+            include: {
+              routeStops: true,
+            },
+          });
+        }
+
+        const maxStopOrder = plan.routeStops[0]?.stopOrder ?? -1;
+        await tx.routeStop.create({
+          data: {
+            dailyPlanId: plan.id,
+            visitId: visit.id,
+            stopOrder: maxStopOrder + 1,
+            isLocked: false,
+          },
+        });
+      }
+
+      // 8. Fetch complete visit with cases
+      const completeVisit = await tx.visit.findUnique({
+        where: { id: visit.id },
+        include: {
+          owner: true,
+          cases: {
+            include: {
+              patient: true,
+            },
+          },
+          routeStops: true,
+        },
+      });
+
+      void AuditService.record({
+        practiceId,
+        action: 'VISIT_SCHEDULED_FROM_CALL',
+        resource: 'Visit',
+        resourceId: visit.id,
+        details: {
+          callId: call.id,
+          priority: visit.priority,
+          scheduledDate: visit.scheduledDate,
+          addToTodayPlan: Boolean(data.addToTodayPlan),
+        },
+      });
+
+      return {
+        visit: completeVisit!,
+        call: updatedCall,
+        alreadyExisted: false,
+      };
+    });
+  }
+
+  // ── Close Call Without Visit ──────────────────────────────────────────
+  static async closeCall(
+    id: string,
+    practiceId: string,
+    data: {
+      reason: string;
+      reasonDetails?: string;
+      clinicalNotes?: string;
+    }
+  ) {
+    const call = await this.getCallById(id, practiceId);
+    const closureNote = `[Closed: ${data.reason}]${data.reasonDetails ? ` ${data.reasonDetails}` : ''}${data.clinicalNotes ? ` | Notes: ${data.clinicalNotes}` : ''}`;
+    const updatedNotes = call.notes ? `${call.notes} | ${closureNote}` : closureNote;
+
+    const updated = await prisma.call.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        notes: updatedNotes,
+      },
+      include: {
+        owner: true,
+        visits: true,
+      },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'CALL_CLOSED_NO_VISIT',
+      resource: 'Call',
+      resourceId: id,
+      details: {
+        reason: data.reason,
+        callerPhone: call.callerPhone,
+      },
+    });
+
+    return updated;
+  }
+
+  // ── List Visits ───────────────────────────────────────────────────────
+  static async listVisits(
+    practiceId: string,
+    filters?: {
+      date?: string;
+      callId?: string;
+      status?: string;
+    }
+  ) {
+    const where: any = { practiceId };
+    if (filters?.callId) {
+      where.callId = filters.callId;
+    }
+    if (filters?.status) {
+      where.status = filters.status as VisitStatus;
+    }
+    if (filters?.date) {
+      const d = new Date(filters.date);
+      d.setHours(0, 0, 0, 0);
+      const nextDay = new Date(d);
+      nextDay.setDate(nextDay.getDate() + 1);
+      where.scheduledDate = {
+        gte: d,
+        lt: nextDay,
+      };
+    }
+
+    return prisma.visit.findMany({
+      where,
+      orderBy: [{ scheduledDate: 'asc' }, { sequenceOrder: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        owner: true,
+        call: true,
+        cases: {
+          include: {
+            patient: true,
+          },
+        },
+        routeStops: true,
+      },
     });
   }
 

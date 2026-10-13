@@ -141,6 +141,62 @@ cvpRouter.post('/calls/:id/postpone', async (req: AuthenticatedRequest, res, nex
   }
 });
 
+// ── POST /api/calls/:id/schedule (Call-to-Visit Workflow) ────────────────────
+const scheduleCallSchema = z.object({
+  scheduledDate: z.string().transform((v) => new Date(v)),
+  priority: z.enum(['EMERGENCY', 'URGENT', 'COULD_NOT_ASSESS', 'PLANNED']).optional(),
+  flexibility: z.enum(['MUST_ATTEND_TODAY', 'CAN_POSTPONE_TODAY', 'PREFERRED_TODAY', 'SPECIFIC_DATE']).optional(),
+  preferredTime: z.string().max(50).nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
+  address: z.string().max(500).nullable().optional(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
+  estimatedDurationMinutes: z.number().int().positive().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  cases: z
+    .array(
+      z.object({
+        patientId: z.string().uuid().nullable().optional(),
+        patientName: z.string().max(120).nullable().optional(),
+        species: z.string().max(60).nullable().optional(),
+        chiefComplaint: z.string().min(1).max(2000),
+        tentativeDiagnosis: z.string().max(2000).nullable().optional(),
+        procedureCategory: z.string().max(120).nullable().optional(),
+      })
+    )
+    .optional(),
+  addToTodayPlan: z.boolean().default(false),
+});
+
+cvpRouter.post('/calls/:id/schedule', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const parsed = scheduleCallSchema.parse(req.body);
+    const result = await CvpBackendService.scheduleCall(getId(req), practiceId, parsed);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── POST /api/calls/:id/close ────────────────────────────────────────────────
+const closeCallSchema = z.object({
+  reason: z.string().min(1).max(200),
+  reasonDetails: z.string().max(1000).optional(),
+  clinicalNotes: z.string().max(2000).optional(),
+});
+
+cvpRouter.post('/calls/:id/close', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const parsed = closeCallSchema.parse(req.body);
+    const updated = await CvpBackendService.closeCall(getId(req), practiceId, parsed);
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── GET /api/daily-plans ──────────────────────────────────────────────────────
 cvpRouter.get('/daily-plans', async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -213,6 +269,20 @@ cvpRouter.post('/visits/:id/postpone', async (req: AuthenticatedRequest, res, ne
     const { targetDate, reason } = schema.parse(req.body);
     const postponed = await CvpBackendService.postponeVisit(practiceId, getId(req), targetDate, reason);
     res.status(200).json(postponed);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── GET /api/visits ───────────────────────────────────────────────────────────
+cvpRouter.get('/visits', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const date = req.query.date as string | undefined;
+    const callId = req.query.callId as string | undefined;
+    const status = req.query.status as string | undefined;
+    const visits = await CvpBackendService.listVisits(practiceId, { date, callId, status });
+    res.status(200).json(visits);
   } catch (err) {
     next(err);
   }

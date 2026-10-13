@@ -274,17 +274,17 @@
 
 .inv-status-in_stock {
   background: #dcfce7;
-  color: #15803d;
+  color: #166534;
 }
 
 .inv-status-low_stock {
   background: #fef3c7;
-  color: #b45309;
+  color: #92400e;
 }
 
 .inv-status-out_of_stock {
   background: #fee2e2;
-  color: #b91c1c;
+  color: #991b1b;
 }
 
 .inv-status-expired {

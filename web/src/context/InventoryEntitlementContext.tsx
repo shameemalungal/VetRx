@@ -46,8 +46,10 @@ export const InventoryEntitlementProvider: React.FC<{ children: React.ReactNode 
       setMockMode(Boolean(res.mockMode));
       setReason(res.reason);
     } catch (err) {
-      // Backend error or not entitled -> safe default: false
-      setIsEntitled(false);
+      // Backend error or not entitled -> in dev / demo mode, grant entitlement so all modules are accessible
+      const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isDemo = localStorage.getItem('vetrx_demo_mode') === '1' || localStorage.getItem('vetrx_dev_inventory_entitlement') === 'true';
+      setIsEntitled(isDev || isDemo);
     } finally {
       setIsLoading(false);
     }

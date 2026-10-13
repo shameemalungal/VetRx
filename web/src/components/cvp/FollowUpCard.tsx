@@ -46,50 +46,50 @@ export const FollowUpCard: React.FC<FollowUpCardProps> = ({
     switch (status) {
       case 'OVERDUE':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
-            <AlertTriangle className="w-3 h-3 text-rose-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-900 border border-rose-300 animate-pulse">
+            <AlertTriangle className="w-3 h-3 text-rose-700" />
             OVERDUE
           </span>
         );
       case 'DUE':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
-            <Clock className="w-3 h-3 text-amber-700" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border border-amber-300">
+            <Clock className="w-3 h-3 text-amber-800" />
             DUE TODAY
           </span>
         );
       case 'UPCOMING':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-            <Calendar className="w-3 h-3 text-blue-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300">
+            <Calendar className="w-3 h-3 text-blue-700" />
             UPCOMING
           </span>
         );
       case 'SCHEDULED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
-            <CalendarCheck className="w-3 h-3 text-teal-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-900 border border-teal-300">
+            <CalendarCheck className="w-3 h-3 text-teal-700" />
             SCHEDULED
           </span>
         );
       case 'COMPLETED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
             COMPLETED
           </span>
         );
       case 'POSTPONED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
-            <RotateCcw className="w-3 h-3 text-purple-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300">
+            <RotateCcw className="w-3 h-3 text-purple-700" />
             POSTPONED
           </span>
         );
       case 'CANCELLED':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
-            <X className="w-3 h-3 text-slate-500" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300">
+            <X className="w-3 h-3 text-slate-600" />
             CANCELLED
           </span>
         );

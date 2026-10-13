@@ -10,9 +10,10 @@ interface CallCardProps {
   call: Call;
   onPostpone?: (call: Call) => void;
   onSelect?: (call: Call) => void;
+  onReviewCase?: (call: Call) => void;
 }
 
-export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect }) => {
+export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect, onReviewCase }) => {
   const priorityClass = `priority-${call.priority.toLowerCase()}`;
 
   const formatTimeAgo = (dateInput: Date | string) => {
@@ -51,6 +52,10 @@ export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect }
     }
   };
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isPostponed = call.status === 'SCHEDULED' && Boolean(call.preferredDate && String(call.preferredDate) > todayStr);
+  const isUpcoming = call.status === 'LOGGED' && Boolean(call.preferredDate && String(call.preferredDate) > todayStr);
+
   return (
     <div
       className={`cvp-call-card ${priorityClass}`}
@@ -68,6 +73,26 @@ export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect }
           <span className={`cvp-priority-tag ${call.priority.toLowerCase()}`}>
             {call.priority.replace(/_/g, ' ')}
           </span>
+          {isPostponed && (
+            <span className="cvp-status-tag postponed">
+              ⏳ Postponed
+            </span>
+          )}
+          {isUpcoming && (
+            <span className="cvp-status-tag upcoming">
+              📅 Upcoming
+            </span>
+          )}
+          {call.status === 'SCHEDULED' && !isPostponed && (
+            <span className="cvp-status-tag scheduled">
+              📅 Scheduled
+            </span>
+          )}
+          {call.status === 'CANCELLED' && (
+            <span className="cvp-status-tag cancelled">
+              ✕ Cancelled
+            </span>
+          )}
           {call.species && (
             <span className="cvp-species-tag">
               {call.species} {call.animalCount && call.animalCount > 1 ? `(${call.animalCount})` : ''}
@@ -104,6 +129,18 @@ export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect }
 
       {/* Action Strip */}
       <div className="cvp-card-actions">
+        <button
+          type="button"
+          className="btn-card-action review-case"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onReviewCase) onReviewCase(call);
+            else if (onSelect) onSelect(call);
+          }}
+          title="Review Case & Next Actions"
+        >
+          📋 Review Case
+        </button>
         {call.callerPhone && (
           <button
             type="button"

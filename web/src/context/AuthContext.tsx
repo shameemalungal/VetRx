@@ -171,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: 'Dr. Anand Sharma',
             avatarUrl: null,
             emailVerified: true,
+            platformRole: 'PLATFORM_SUPER_ADMIN',
             createdAt: new Date().toISOString(),
           };
           const demoPractice: AuthPractice = {
@@ -218,6 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: 'Dr. Anand Sharma',
           avatarUrl: null,
           emailVerified: true,
+          platformRole: 'PLATFORM_SUPER_ADMIN',
           createdAt: new Date().toISOString(),
         };
         const demoPractice: AuthPractice = {

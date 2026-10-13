@@ -433,7 +433,7 @@ export const CallRegistrationPage: React.FC = () => {
       {/* MODE 1: DURING CALL FAST INTAKE                                     */}
       {/* =================================================================== */}
       {mode === 'during' && (
-        <div className="space-y-4">
+        <div className="space-y-4 pb-36 md:pb-24">
           <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
             <div className="border-b border-slate-100 pb-3">
               <span className="text-xs font-black uppercase tracking-wider text-teal-700">
@@ -658,13 +658,18 @@ export const CallRegistrationPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Sticky Bottom Quick Save */}
-          <div className="fixed bottom-0 left-0 right-0 p-3 sm:p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl z-40">
+          {/* Sticky Bottom Quick Save (Positions cleanly above mobile bottom nav) */}
+          <div
+            className="fixed bottom-quick-save left-0 right-0 p-3 sm:p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-2xl z-40"
+            style={{
+              zIndex: 90,
+            }}
+          >
             <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setMode('after')}
-                className="px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 transition-all"
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 transition-all"
               >
                 Switch to Guided View
               </button>
@@ -673,7 +678,7 @@ export const CallRegistrationPage: React.FC = () => {
                 type="button"
                 onClick={handleSaveCall}
                 disabled={isSubmitting}
-                className="px-6 py-3 rounded-2xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-black shadow-lg shadow-teal-700/25 transition-all flex items-center gap-2 disabled:opacity-50"
+                className="min-h-[44px] px-6 py-2.5 rounded-2xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-sm font-black shadow-lg shadow-teal-700/25 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span>Saving...</span>

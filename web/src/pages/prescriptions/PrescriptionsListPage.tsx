@@ -367,7 +367,7 @@ export const PrescriptionsListPage: React.FC = () => {
           <button
             type="button"
             className="btn btn-sm"
-            style={{ background: '#f59e0b', color: '#ffffff', fontWeight: 600, border: 'none' }}
+            style={{ background: '#b45309', color: '#ffffff', fontWeight: 600, border: 'none' }}
             onClick={() => setStatusFilter('Pending Approval')}
           >
             Review Pending ({pendingCount})

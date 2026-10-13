@@ -181,13 +181,13 @@ export const FollowUpsPage: React.FC = () => {
   };
 
   return (
-    <div className="cvp-container max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+    <div className="cvp-container max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-28 sm:pb-12 space-y-4 sm:space-y-6">
       {/* Top Banner / Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-teal-100 text-teal-800">
-              CVP Phase 8
+              Clinical Follow-ups
             </span>
             <span className="text-xs font-semibold text-slate-500">
               Follow-up &amp; Recurrence Hub
@@ -214,7 +214,7 @@ export const FollowUpsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-3.5 py-2 rounded-2xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-2xl bg-teal-700 hover:bg-teal-800 active:scale-95 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             <span>New Follow-up</span>
@@ -223,22 +223,16 @@ export const FollowUpsPage: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-b border-slate-200">
+      <div className="cvp-followup-tabs-bar">
         <button
           type="button"
           onClick={() => handleTabChange('due_today')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'due_today'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'due_today' ? 'active-due' : ''}`}
         >
           <Clock className="w-3.5 h-3.5" />
           <span>Due Today</span>
           {dueTodayCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeTab === 'due_today' ? 'bg-white text-amber-700' : 'bg-amber-100 text-amber-800'
-            }`}>
+            <span className={`cvp-followup-tab-count ${activeTab !== 'due_today' ? 'cvp-followup-tab-count-due' : ''}`}>
               {dueTodayCount}
             </span>
           )}
@@ -247,18 +241,12 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('overdue')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'overdue'
-              ? 'bg-rose-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'overdue' ? 'active-overdue' : ''}`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
           <span>Overdue</span>
           {overdueCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeTab === 'overdue' ? 'bg-white text-rose-700' : 'bg-rose-100 text-rose-800'
-            }`}>
+            <span className={`cvp-followup-tab-count ${activeTab !== 'overdue' ? 'cvp-followup-tab-count-overdue' : ''}`}>
               {overdueCount}
             </span>
           )}
@@ -267,18 +255,12 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('upcoming')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'upcoming'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'upcoming' ? 'active-upcoming' : ''}`}
         >
           <Calendar className="w-3.5 h-3.5" />
           <span>Upcoming</span>
           {upcomingCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeTab === 'upcoming' ? 'bg-white text-blue-700' : 'bg-blue-100 text-blue-800'
-            }`}>
+            <span className={`cvp-followup-tab-count ${activeTab !== 'upcoming' ? 'cvp-followup-tab-count-upcoming' : ''}`}>
               {upcomingCount}
             </span>
           )}
@@ -287,18 +269,12 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('recurring')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'recurring'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'recurring' ? 'active-recurring' : ''}`}
         >
           <Repeat className="w-3.5 h-3.5" />
           <span>Recurring Schedules</span>
           {recurringCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeTab === 'recurring' ? 'bg-white text-indigo-700' : 'bg-indigo-100 text-indigo-800'
-            }`}>
+            <span className={`cvp-followup-tab-count ${activeTab !== 'recurring' ? 'cvp-followup-tab-count-recurring' : ''}`}>
               {recurringCount}
             </span>
           )}
@@ -307,18 +283,12 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('awaiting_confirmation')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'awaiting_confirmation'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'awaiting_confirmation' ? 'active-awaiting' : ''}`}
         >
           <PhoneCall className="w-3.5 h-3.5" />
           <span>Awaiting Client</span>
           {awaitingConfCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeTab === 'awaiting_confirmation' ? 'bg-white text-purple-700' : 'bg-purple-100 text-purple-800'
-            }`}>
+            <span className={`cvp-followup-tab-count ${activeTab !== 'awaiting_confirmation' ? 'cvp-followup-tab-count-awaiting' : ''}`}>
               {awaitingConfCount}
             </span>
           )}
@@ -327,11 +297,7 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('postponed')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'postponed'
-              ? 'bg-slate-700 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'postponed' ? 'active-postponed' : ''}`}
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Postponed ({postponedCount})</span>
@@ -340,11 +306,7 @@ export const FollowUpsPage: React.FC = () => {
         <button
           type="button"
           onClick={() => handleTabChange('completed')}
-          className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-            activeTab === 'completed'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
+          className={`cvp-followup-tab ${activeTab === 'completed' ? 'active-completed' : ''}`}
         >
           <CheckCircle2 className="w-3.5 h-3.5" />
           <span>Completed ({completedCount})</span>
@@ -355,13 +317,13 @@ export const FollowUpsPage: React.FC = () => {
       {activeTab !== 'recurring' && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-3 rounded-2xl border border-slate-200">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by farmer, patient, reason, or notes..."
-              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-teal-500 font-medium"
+              className="w-full text-xs pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-slate-900 bg-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 font-medium"
             />
           </div>
 
@@ -369,7 +331,7 @@ export const FollowUpsPage: React.FC = () => {
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="text-xs p-2 rounded-xl border border-slate-200 bg-white font-medium"
+              className="text-xs p-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium"
             >
               <option value="ALL">All Priorities</option>
               <option value="EMERGENCY">Emergency</option>
@@ -380,7 +342,7 @@ export const FollowUpsPage: React.FC = () => {
             <select
               value={reasonFilter}
               onChange={(e) => setReasonFilter(e.target.value)}
-              className="text-xs p-2 rounded-xl border border-slate-200 bg-white font-medium"
+              className="text-xs p-2 rounded-xl border border-slate-200 bg-white text-slate-800 font-medium"
             >
               <option value="ALL">All Reasons</option>
               <option value="POST_TREATMENT_REVIEW">Review</option>
@@ -411,7 +373,7 @@ export const FollowUpsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold transition-all shadow-sm"
               >
                 Create Recurring Schedule
               </button>
@@ -485,7 +447,7 @@ export const FollowUpsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCreateModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold transition-all shadow-sm"
               >
                 Create Follow-up
               </button>

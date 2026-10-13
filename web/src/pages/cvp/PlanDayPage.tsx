@@ -25,6 +25,7 @@ import { RouteStopCard } from '../../components/cvp/RouteStopCard';
 import { OverCapacityModal } from '../../components/cvp/OverCapacityModal';
 import { WhatsAppHandoffModal } from '../../components/cvp/WhatsAppHandoffModal';
 import { EmergencyInsertionModal } from '../../components/cvp/EmergencyInsertionModal';
+import { PostponeModal } from '../../components/cvp/PostponeModal';
 import type {
   DailyPlan,
   RouteStop,
@@ -856,85 +857,29 @@ export const PlanDayPage: React.FC = () => {
         />
       )}
 
-      {/* CVP-17: Postpone Modal (Custom inline dialog) */}
+      {/* Postpone Modal */}
       {postponeTargetVisit && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
-                Postpone Visit
-              </h2>
-              <button
-                type="button"
-                onClick={() => setPostponeTargetVisit(null)}
-                className="text-xs font-bold text-slate-400 hover:text-slate-600"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <div>
-              <p className="text-xs text-slate-600">
-                Reschedule visit for{' '}
-                <strong className="text-slate-900">{postponeTargetVisit.ownerName}</strong> at{' '}
-                {postponeTargetVisit.address}:
-              </p>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <label className="font-bold text-slate-700 block">Select Target Date:</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 1);
-                    handleConfirmPostpone(d.toISOString().split('T')[0], 'Postponed to Tomorrow');
-                  }}
-                  className="p-2.5 rounded-xl border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-center"
-                >
-                  Tomorrow
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 2);
-                    handleConfirmPostpone(d.toISOString().split('T')[0], 'Postponed in 2 Days');
-                  }}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-center"
-                >
-                  In 2 Days
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 3);
-                    handleConfirmPostpone(d.toISOString().split('T')[0], 'Next Route Window');
-                  }}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-center"
-                >
-                  Next Available Route
-                </button>
-                <input
-                  type="date"
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleConfirmPostpone(e.target.value, 'Doctor Specific Date Selection');
-                    }
-                  }}
-                  className="p-2 rounded-xl border border-slate-300 font-mono text-center"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <PostponeModal
+          isOpen={Boolean(postponeTargetVisit)}
+          call={{
+            id: String(postponeTargetVisit.id),
+            callerPhone: postponeTargetVisit.ownerPhone || '',
+            ownerName: postponeTargetVisit.ownerName,
+            tempOwnerName: postponeTargetVisit.ownerName,
+            species: postponeTargetVisit.cases?.[0]?.species || 'Animal',
+            tempPatientName: postponeTargetVisit.cases?.[0]?.patientName || 'Animal',
+            locationAddress: postponeTargetVisit.address,
+            symptoms: postponeTargetVisit.cases?.[0]?.chiefComplaint || postponeTargetVisit.notes || 'Routine consultation',
+            priority: postponeTargetVisit.priority || 'PLANNED',
+            flexibility: postponeTargetVisit.flexibility || 'CAN_POSTPONE_TODAY',
+            status: 'SCHEDULED',
+            createdAt: new Date().toISOString(),
+          }}
+          onClose={() => setPostponeTargetVisit(null)}
+          onConfirm={async (_callId, postponeDate, reason) => {
+            await handleConfirmPostpone(postponeDate, reason);
+          }}
+        />
       )}
 
       {/* CVP-18: WhatsApp Notification Modal */}

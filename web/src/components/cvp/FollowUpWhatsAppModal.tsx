@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { followUpService } from '../../services/followUpService';
 import type { FollowUp } from '../../types/cvp';
 import {
@@ -59,14 +60,18 @@ export const FollowUpWhatsAppModal: React.FC<FollowUpWhatsAppModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      style={{ zIndex: 1050 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="followup-wa-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-emerald-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="bg-white rounded-3xl shadow-2xl border border-emerald-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]"
+        style={{ maxHeight: '85dvh' }}
+      >
         {/* Header */}
         <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -75,7 +80,7 @@ export const FollowUpWhatsAppModal: React.FC<FollowUpWhatsAppModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] font-black tracking-wider uppercase text-emerald-100">
-                Client Communication (Phase 8)
+                Client Communication
               </div>
               <h2 id="followup-wa-title" className="text-lg font-black tracking-tight">
                 WhatsApp Follow-up Note
@@ -154,4 +159,6 @@ export const FollowUpWhatsAppModal: React.FC<FollowUpWhatsAppModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

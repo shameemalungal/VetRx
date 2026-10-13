@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { followUpService } from '../../services/followUpService';
@@ -165,23 +166,27 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-modal flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      style={{ zIndex: 1050 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-followup-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-xl w-full overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh]"
+        style={{ maxHeight: '85dvh' }}
+      >
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-teal-700 to-emerald-700 text-white flex items-center justify-between">
+        <div className="shrink-0 p-4 sm:p-5 bg-gradient-to-r from-teal-700 to-emerald-700 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
               <Stethoscope className="w-6 h-6 text-white" />
             </div>
             <div>
               <div className="text-[10px] font-black tracking-wider uppercase text-teal-200">
-                Phase 8 Clinical Follow-up
+                Clinical Follow-up &amp; Recurrence
               </div>
               <h2 id="create-followup-title" className="text-lg font-black tracking-tight">
                 {isRecurring ? 'Create Recurring Schedule' : 'Schedule Clinical Follow-up'}
@@ -197,8 +202,10 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 flex-1">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Scrollable Form Body */}
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 min-h-0">
           {errorMsg && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -220,6 +227,8 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
               </div>
             </div>
             <button
+              id="toggle-recurring-series"
+              aria-label="Toggle recurring visit series"
               type="button"
               onClick={() => setIsRecurring(!isRecurring)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
@@ -517,19 +526,21 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
             <span className="font-bold">Clinical Reminder:</span> This creates a recommended follow-up schedule. It does NOT automatically book a physical appointment or replace the veterinarian&apos;s daily route-planning judgment.
           </div>
 
-          {/* Submit buttons */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+          </div>
+
+          {/* Pinned Action Footer */}
+          <div className="shrink-0 p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100"
+              className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white text-xs font-black shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
               <span>{isSubmitting ? 'Saving...' : isRecurring ? 'Create Recurring Series' : 'Schedule Follow-up'}</span>
@@ -539,4 +550,6 @@ export const CreateFollowUpModal: React.FC<CreateFollowUpModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

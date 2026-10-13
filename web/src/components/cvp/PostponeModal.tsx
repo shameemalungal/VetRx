@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Call } from '../../types/cvp';
 import { X, Calendar, Clock, AlertTriangle, Send } from 'lucide-react';
 
@@ -71,29 +72,36 @@ export const PostponeModal: React.FC<PostponeModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200">
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-modal flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200"
+      style={{ zIndex: 1050 }}
+    >
       <div 
-        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+        className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 max-h-[85dvh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+        style={{ maxHeight: '85dvh' }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="postpone-modal-title"
       >
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="shrink-0 p-4 sm:p-5 flex items-center justify-between border-b border-slate-100 bg-white">
           <div className="flex items-center gap-2 text-amber-700">
-            <Clock className="w-5 h-5" />
-            <h2 id="postpone-modal-title" className="text-lg font-bold text-slate-800">
+            <Clock className="w-5 h-5 text-amber-600" />
+            <h2 id="postpone-modal-title" className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
               Postpone Visit
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             aria-label="Close postpone dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Scrollable Content Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
 
         {/* Call Summary Banner */}
         <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
@@ -257,14 +265,15 @@ export const PostponeModal: React.FC<PostponeModalProps> = ({
             />
           </div>
         )}
+        </div>
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex items-center gap-3">
+        {/* Pinned Action Footer */}
+        <div className="shrink-0 p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex-1 py-2.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            className="min-h-[44px] flex-1 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition-colors shadow-sm"
           >
             Cancel
           </button>
@@ -272,7 +281,7 @@ export const PostponeModal: React.FC<PostponeModalProps> = ({
             type="button"
             onClick={handlePostpone}
             disabled={loading || !selectedDate || (reason === 'Other' && !customReason.trim())}
-            className="flex-1 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 rounded-xl shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-1.5"
+            className="min-h-[44px] flex-1 py-2.5 text-xs font-black text-white bg-amber-600 hover:bg-amber-700 active:scale-95 disabled:opacity-50 rounded-xl shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-1.5"
           >
             {loading ? 'Saving...' : 'Confirm Postpone'}
           </button>
@@ -280,4 +289,6 @@ export const PostponeModal: React.FC<PostponeModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

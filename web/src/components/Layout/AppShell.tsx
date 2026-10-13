@@ -257,6 +257,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     const items = [
       { label: 'Home',               path: '/dashboard',       icon: 'home'        },
       { label: 'Calls & Visits',     path: '/calls',           icon: 'phone'       },
+      { label: 'Follow-ups',         path: '/follow-ups',      icon: 'calendar'    },
       { label: 'Patients',           path: '/patients',        icon: 'patients'    },
       { label: 'Prescriptions',      path: '/prescriptions',   icon: 'prescription'},
       { label: 'Treatment Packages', path: '/packages',        icon: 'packages'    },
@@ -264,6 +265,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     ];
     if (isInventoryEntitled) {
       items.push({ label: 'Inventory', path: '/inventory', icon: 'inventory' });
+      items.push({ label: 'Practice Bag', path: '/inventory/bag', icon: 'bag' });
     }
     items.push({ label: 'Invoices & Receipts', path: '/invoices', icon: 'invoices' });
     return items;
@@ -272,6 +274,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   // Secondary destinations rendered inside the mobile "More" menu
   const secondaryNavItems = React.useMemo(() => {
     const items = [
+      {
+        label: 'Follow-ups & Recurrence',
+        path: '/follow-ups',
+        icon: 'calendar',
+        subtitle: 'Clinical rechecks & recurring visit schedules',
+      },
       {
         label: 'Invoices & Receipts',
         path: '/invoices',
@@ -310,6 +318,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const isMoreActive = React.useMemo(() => {
     const morePaths = [
+      '/follow-ups',
       '/invoices',
       '/packages',
       '/medicines',

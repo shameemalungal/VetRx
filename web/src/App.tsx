@@ -28,6 +28,7 @@ import { PlanDayPage } from './pages/cvp/PlanDayPage';
 import { FieldModePage } from './pages/cvp/FieldModePage';
 import { VisitDetailPage } from './pages/cvp/VisitDetailPage';
 import { FollowUpsPage } from './pages/cvp/FollowUpsPage';
+import { CaseDetailPage } from './pages/cvp/CaseDetailPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { AcceptInvitationPage } from './pages/auth/AcceptInvitationPage';
@@ -286,6 +287,8 @@ function AuthenticatedAppRoutes() {
         {/* Call & Visit Planner (CVP) Module — Phase 2, 3 & 4 */}
         <Route path="/calls" element={<CallsListPage />} />
         <Route path="/calls/register" element={<CallRegistrationPage />} />
+        <Route path="/calls/:id" element={<CaseDetailPage />} />
+        <Route path="/calls/case/:id" element={<CaseDetailPage />} />
         <Route path="/calls/new" element={<Navigate to="/calls/register" replace />} />
         <Route path="/calls/today" element={<TodayDashboardPage />} />
         <Route path="/calls/plan" element={<PlanDayPage />} />
@@ -297,12 +300,15 @@ function AuthenticatedAppRoutes() {
         <Route path="/calls/postponed" element={<Navigate to="/calls?tab=postponed" replace />} />
         <Route path="/calls/all" element={<Navigate to="/calls?tab=all" replace />} />
 
+        {/* Follow-ups & Recurring Schedules */}
+        <Route path="/follow-ups" element={<FollowUpsPage />} />
+
         {/* CVP Route Aliases */}
         <Route path="/cvp" element={<Navigate to="/calls" replace />} />
         <Route path="/cvp/calls" element={<Navigate to="/calls" replace />} />
         <Route path="/cvp/today" element={<Navigate to="/calls/today" replace />} />
         <Route path="/cvp/plan" element={<Navigate to="/calls/plan" replace />} />
-        <Route path="/cvp/follow-ups" element={<FollowUpsPage />} />
+        <Route path="/cvp/follow-ups" element={<Navigate to="/follow-ups" replace />} />
 
         {/* Patients Module (Phase 2) */}
         <Route path="/patients" element={<PatientsListPage />} />
@@ -328,6 +334,7 @@ function AuthenticatedAppRoutes() {
         <Route path="/inventory/dashboard" element={<Navigate to="/inventory" replace />} />
         <Route path="/inventory/stock" element={<InventoryRouteGate><InventoryStockPage /></InventoryRouteGate>} />
         <Route path="/inventory/bag" element={<InventoryRouteGate><PracticeBagPage /></InventoryRouteGate>} />
+        <Route path="/inventory/practice-bag" element={<Navigate to="/inventory/bag" replace />} />
         <Route path="/inventory/purchases" element={<InventoryRouteGate><InventoryPurchasesPage /></InventoryRouteGate>} />
         <Route path="/inventory/alerts" element={<InventoryRouteGate><InventoryAlertsPage /></InventoryRouteGate>} />
         <Route path="/inventory/movements" element={<InventoryRouteGate><InventoryMovementsPage /></InventoryRouteGate>} />

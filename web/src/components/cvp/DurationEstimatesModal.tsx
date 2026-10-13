@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { durationLearningService } from '../../services/durationLearningService';
@@ -95,23 +96,27 @@ export const DurationEstimatesModal: React.FC<DurationEstimatesModalProps> = ({
     return map[cat] || cat;
   };
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-modal flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+      style={{ zIndex: 1050 }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="duration-estimates-title"
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[85dvh] sm:max-h-[90vh]"
+        style={{ maxHeight: '85dvh' }}
+      >
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white flex items-center justify-between">
+        <div className="shrink-0 p-4 sm:p-5 bg-gradient-to-r from-blue-700 to-indigo-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
               <Clock className="w-6 h-6 text-white" />
             </div>
             <div>
               <div className="text-[10px] font-black tracking-wider uppercase text-blue-200">
-                Route Engine Intelligence (Phase 8)
+                Route Engine Intelligence
               </div>
               <h2 id="duration-estimates-title" className="text-lg font-black tracking-tight">
                 Procedure Visit Duration Learning
@@ -139,7 +144,7 @@ export const DurationEstimatesModal: React.FC<DurationEstimatesModalProps> = ({
         </div>
 
         {/* Explanatory Banner */}
-        <div className="p-4 bg-slate-50 border-b border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
+        <div className="shrink-0 p-4 bg-slate-50 border-b border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
           <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
             The route capacity engine automatically learns procedure durations from your practice&apos;s completed visits using a robust statistical median (min. 3 completed visits, excluding outliers). You can manually override any estimate.
@@ -147,7 +152,7 @@ export const DurationEstimatesModal: React.FC<DurationEstimatesModalProps> = ({
         </div>
 
         {/* Content Table / List */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 min-h-0">
           {estimates.map((est) => {
             const isEditing = editingCategory === est.procedureCategory;
 
@@ -258,12 +263,12 @@ export const DurationEstimatesModal: React.FC<DurationEstimatesModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>Tenant Isolated to Practice: {practiceId}</span>
+        <div className="shrink-0 p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <span className="truncate pr-2">Tenant: Practice {practiceId}</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold"
+            className="min-h-[44px] px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs shadow-md transition-all shrink-0"
           >
             Done
           </button>
@@ -271,4 +276,6 @@ export const DurationEstimatesModal: React.FC<DurationEstimatesModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

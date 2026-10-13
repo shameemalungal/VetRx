@@ -20,8 +20,8 @@
   --color-surface-tint:             #006a61;
 
   /* ── Colour: Outline ─────────────────────────────────────── */
-  --color-outline:                  #6d7a77;
-  --color-outline-variant:          #bcc9c6;
+  --color-outline:                  #475569;
+  --color-outline-variant:          #cbd5e1;
 
   /* ── Colour: Primary ─────────────────────────────────────── */
   --color-primary:                  #00685f;
@@ -73,16 +73,65 @@
   --color-text-muted:   var(--color-on-surface-variant);
   --color-focus-ring:   rgba(0, 104, 95, 0.18);
 
-  /* Status colours (contextual) */
-  --color-warning:         #f59e0b;
+  /* Status colours (contextual — WCAG AA compliant >= 4.5:1) */
+  --color-warning:         #b45309;
   --color-warning-surface: #fef3c7;
   --color-warning-text:    #92400e;
-  --color-danger:          #ef4444;
+  --color-danger:          #b91c1c;
   --color-danger-surface:  #fef2f2;
   --color-danger-text:     #991b1b;
-  --color-success:         #10b981;
+  --color-success:         #047857;
   --color-success-surface: #ecfdf5;
   --color-success-text:    #065f46;
+
+  /* ── Accessible Semantic Tab Tokens (WCAG AA >= 4.5:1) ────── */
+  --color-tab-bg:                   #ffffff;
+  --color-tab-text:                 #334155;
+  --color-tab-border:               #cbd5e1;
+  --color-tab-hover-bg:             #f1f5f9;
+  --color-tab-hover-text:           #0f172a;
+  --color-tab-active-bg:            #ffffff;
+  --color-tab-active-text:          #0f172a;
+  --color-tab-active-border:        #cbd5e1;
+
+  /* Active Accent Tab Variants (White text with high-contrast background) */
+  --color-tab-due-today-active-bg:   #b45309;  /* Contrast with white: 4.9:1 */
+  --color-tab-due-today-active-text: #ffffff;
+  --color-tab-overdue-active-bg:     #be123c;  /* Contrast with white: 5.3:1 */
+  --color-tab-overdue-active-text:   #ffffff;
+  --color-tab-upcoming-active-bg:    #1d4ed8;  /* Contrast with white: 6.5:1 */
+  --color-tab-upcoming-active-text:  #ffffff;
+  --color-tab-recurring-active-bg:   #4338ca;  /* Contrast with white: 6.8:1 */
+  --color-tab-recurring-active-text: #ffffff;
+
+  /* Accessible Status Badge Tokens */
+  --color-badge-overdue-bg:         #ffe4e6;
+  --color-badge-overdue-text:       #9f1239;  /* Contrast: 7.2:1 */
+  --color-badge-overdue-border:     #fecdd3;
+
+  --color-badge-due-bg:             #fef3c7;
+  --color-badge-due-text:           #92400e;  /* Contrast: 7.1:1 */
+  --color-badge-due-border:         #fde68a;
+
+  --color-badge-upcoming-bg:        #dbeafe;
+  --color-badge-upcoming-text:      #1e40af;  /* Contrast: 7.3:1 */
+  --color-badge-upcoming-border:    #bfdbfe;
+
+  --color-badge-scheduled-bg:       #e0f2fe;
+  --color-badge-scheduled-text:     #0369a1;  /* Contrast: 5.6:1 */
+  --color-badge-scheduled-border:   #bae6fd;
+
+  --color-badge-completed-bg:       #d1fae5;
+  --color-badge-completed-text:     #065f46;  /* Contrast: 7.5:1 */
+  --color-badge-completed-border:   #a7f3d0;
+
+  --color-badge-postponed-bg:       #f3e8ff;
+  --color-badge-postponed-text:     #6b21a8;  /* Contrast: 7.4:1 */
+  --color-badge-postponed-border:   #e9d5ff;
+
+  --color-badge-cancelled-bg:       #f1f5f9;
+  --color-badge-cancelled-text:     #334155;  /* Contrast: 8.5:1 */
+  --color-badge-cancelled-border:   #cbd5e1;
 
   /* ── Typography ──────────────────────────────────────────── */
   --font-heading:   'Plus Jakarta Sans', sans-serif;
