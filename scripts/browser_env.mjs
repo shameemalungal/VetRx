@@ -78,7 +78,7 @@ export async function launchReliableBrowser(options = {}) {
   const config = detectBrowserConfig();
   const launchOptions = {
     headless: options.headless ?? true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', ...(options.args || [])],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', ...(options.args || [])],
     ...options,
   };
 

@@ -388,7 +388,7 @@ export const VisitDetailPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
             <div className="text-xs uppercase font-extrabold tracking-wider text-teal-700">
-              Visit Details (CVP-21)
+              Visit Details
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
               {visit.ownerName || 'Client'}
@@ -451,7 +451,7 @@ export const VisitDetailPage: React.FC = () => {
               ) : (
                 <>
                   <MapPin className="w-4 h-4" />
-                  <span>Record Arrival (CVP-20)</span>
+                  <span>Record Arrival</span>
                 </>
               )}
             </button>
@@ -472,7 +472,7 @@ export const VisitDetailPage: React.FC = () => {
               ) : (
                 <>
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Start Active Visit (CVP-22)</span>
+                  <span>Start Active Visit</span>
                 </>
               )}
             </button>
@@ -485,7 +485,7 @@ export const VisitDetailPage: React.FC = () => {
               className="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 min-h-[44px]"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Review & Finalize Visit (CVP-25)</span>
+              <span>Review & Finalize Visit</span>
             </button>
           )}
 
@@ -671,7 +671,7 @@ export const VisitDetailPage: React.FC = () => {
           <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5">
             <h2 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2 mb-4">
               <History className="w-4 h-4 text-teal-700" />
-              Visit Status Timeline (CVP-45)
+              Visit Status Timeline
             </h2>
 
             {visit.timelineEvents && visit.timelineEvents.length > 0 ? (
@@ -1060,7 +1060,7 @@ export const VisitDetailPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Visit Completion Review (CVP-25)
+                Visit Completion Review
               </h3>
               <button
                 type="button"

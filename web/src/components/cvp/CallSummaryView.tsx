@@ -39,6 +39,14 @@ export const CallSummaryView: React.FC<CallSummaryViewProps> = ({
   onEdit,
   onConfirm,
 }) => {
+  const priorityModifier = call.priority === 'EMERGENCY'
+    ? 'emergency'
+    : call.priority === 'URGENT'
+    ? 'urgent'
+    : call.priority === 'COULD_NOT_ASSESS'
+    ? 'unassessed'
+    : 'planned';
+
   const priorityInfo = call.priority
     ? PRIORITY_BADGES[call.priority as CallPriority] || PRIORITY_BADGES.PLANNED
     : PRIORITY_BADGES.PLANNED;
@@ -46,22 +54,20 @@ export const CallSummaryView: React.FC<CallSummaryViewProps> = ({
   return (
     <div className="space-y-4 animate-fade-in">
       {/* Top Priority Banner */}
-      <div
-        className={`p-4 rounded-2xl ${priorityInfo.bg} ${priorityInfo.text} shadow-md flex items-center justify-between gap-3`}
-      >
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl">{priorityInfo.icon}</span>
+      <div className={`cvp-summary-priority-banner ${priorityModifier}`}>
+        <div className="flex items-center gap-3">
+          <span className="text-2xl shrink-0">{priorityInfo.icon}</span>
           <div>
-            <div className="text-xs font-black uppercase tracking-wider opacity-90">
+            <div className="cvp-summary-priority-tag">
               Priority Triage
             </div>
-            <div className="text-base font-extrabold">{priorityInfo.label} CASE</div>
+            <div className="cvp-summary-priority-heading">{priorityInfo.label} CASE</div>
           </div>
         </div>
 
         <div className="text-right">
-          <div className="text-[11px] font-semibold opacity-90">Flexibility</div>
-          <div className="text-xs font-bold">
+          <div className="cvp-summary-flex-label">Flexibility</div>
+          <div className="cvp-summary-flex-value">
             {call.flexibility ? FLEXIBILITY_LABELS[call.flexibility as VisitFlexibility] : 'Must Attend Today'}
           </div>
         </div>
@@ -198,7 +204,7 @@ export const CallSummaryView: React.FC<CallSummaryViewProps> = ({
           ) : (
             <>
               <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-              <span>Confirm & Log Call (CVP-11)</span>
+              <span>Confirm & Log Call</span>
             </>
           )}
         </button>

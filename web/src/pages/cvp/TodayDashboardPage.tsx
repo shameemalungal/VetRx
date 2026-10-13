@@ -90,7 +90,7 @@ export const TodayDashboardPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-teal-700">
             <Compass className="w-4 h-4" />
-            <span>Field & Call Planner (CVP-01)</span>
+            <span>Field &amp; Call Planner</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
             Today&apos;s Field Dashboard
@@ -109,7 +109,7 @@ export const TodayDashboardPage: React.FC = () => {
             type="button"
             onClick={() => setIsSearchOpen(true)}
             className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-sm transition-all flex items-center gap-1.5 text-xs font-semibold"
-            title="Global Search (CVP-43)"
+            title="Global Search"
             aria-label="Search calls, owners, and locations"
           >
             <Search className="w-4 h-4 text-slate-500" />
@@ -121,7 +121,7 @@ export const TodayDashboardPage: React.FC = () => {
             type="button"
             onClick={() => setIsQuickActionsOpen(true)}
             className="p-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white shadow-md shadow-teal-700/20 transition-all flex items-center gap-1.5 text-xs font-bold"
-            title="Quick Action Menu (CVP-42)"
+            title="Quick Action Menu"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Quick Action</span>
@@ -192,7 +192,7 @@ export const TodayDashboardPage: React.FC = () => {
               className="flex-1 py-2.5 px-3 rounded-xl bg-white hover:bg-teal-50 text-teal-900 font-black text-xs shadow-md transition-all flex items-center justify-center gap-1.5 min-h-[44px]"
             >
               <Compass className="w-4 h-4 text-teal-700" />
-              <span>Field Mode (CVP-19)</span>
+              <span>Field Mode</span>
             </button>
             <button
               type="button"

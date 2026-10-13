@@ -149,7 +149,7 @@ export const StockInModal: React.FC<StockInModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
-              CVP-29 Stock Receipt
+              Stock Receipt
             </span>
             <h2 className="text-base sm:text-lg font-black text-slate-900 mt-1 flex items-center gap-2">
               <Icon name="box" size={18} />

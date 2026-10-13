@@ -372,7 +372,7 @@ export const PlanDayPage: React.FC = () => {
             <div>
               <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-teal-700">
                 <Compass className="w-3.5 h-3.5" />
-                <span>Route Preparation (CVP-13)</span>
+                <span>Route Preparation</span>
               </div>
               <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-tight">
                 Daily Route & Capacity Planner
@@ -700,7 +700,7 @@ export const PlanDayPage: React.FC = () => {
               type="button"
               onClick={handleSimulateEmergency}
               className="px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-black transition-all flex items-center gap-1 shadow-xs"
-              title="Simulate incoming emergency to test CVP-49 re-routing"
+              title="Simulate incoming emergency to test re-routing"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
               <span className="hidden sm:inline">Simulate</span> Emergency
@@ -866,7 +866,7 @@ export const PlanDayPage: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
-                Postpone Visit (CVP-17)
+                Postpone Visit
               </h2>
               <button
                 type="button"
@@ -981,7 +981,7 @@ export const PlanDayPage: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-wider text-teal-700">
-                    Final Confirmation (CVP-48)
+                    Final Confirmation
                   </div>
                   <h2 id="confirm-plan-title" className="text-base font-black text-slate-900">
                     Confirm Today&apos;s Daily Plan

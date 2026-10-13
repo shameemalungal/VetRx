@@ -187,7 +187,7 @@ export const FieldModePage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
             <Compass className="w-4 h-4" />
-            <span>Active Field Execution Mode (CVP-19)</span>
+            <span>Active Field Execution Mode</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
             Traveling & Stop Execution
@@ -386,7 +386,7 @@ export const FieldModePage: React.FC = () => {
                     ) : (
                       <>
                         <MapPin className="w-4 h-4" />
-                        <span>Record Arrival (CVP-20)</span>
+                        <span>Record Arrival</span>
                       </>
                     )}
                   </button>
@@ -407,7 +407,7 @@ export const FieldModePage: React.FC = () => {
                   ) : (
                     <>
                       <Play className="w-4 h-4 fill-white" />
-                      <span>Start Visit (CVP-22)</span>
+                      <span>Start Visit</span>
                     </>
                   )}
                 </button>

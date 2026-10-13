@@ -174,7 +174,7 @@ export const CallsListPage: React.FC = () => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-teal-700">
             <PhoneCall className="w-4 h-4 shrink-0" />
-            <span className="truncate">Call &amp; Visit Queue (CVP-02)</span>
+            <span className="truncate">Call &amp; Visit Queue</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1 break-words">
             Incoming Calls &amp; Cases

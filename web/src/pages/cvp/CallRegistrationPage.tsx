@@ -331,7 +331,7 @@ export const CallRegistrationPage: React.FC = () => {
             }`}
           >
             <PhoneCall className="w-3.5 h-3.5" />
-            <span>During Call (CVP-04)</span>
+            <span>During Call</span>
           </button>
           <button
             type="button"
@@ -343,7 +343,7 @@ export const CallRegistrationPage: React.FC = () => {
             }`}
           >
             <PhoneForwarded className="w-3.5 h-3.5" />
-            <span>After Call (CVP-03)</span>
+            <span>After Call</span>
           </button>
         </div>
       </div>
@@ -430,7 +430,7 @@ export const CallRegistrationPage: React.FC = () => {
       </div>
 
       {/* =================================================================== */}
-      {/* MODE 1: DURING CALL FAST INTAKE (CVP-04)                             */}
+      {/* MODE 1: DURING CALL FAST INTAKE                                     */}
       {/* =================================================================== */}
       {mode === 'during' && (
         <div className="space-y-4">
@@ -440,7 +440,7 @@ export const CallRegistrationPage: React.FC = () => {
                 Rapid Clinical Intake Pad
               </span>
               <h2 className="text-lg font-black text-slate-900 leading-tight">
-                Active Call Intake (CVP-04)
+                Active Call Intake
               </h2>
               <p className="text-xs text-slate-500">
                 Quickly capture key caller and triage facts with zero mandatory friction.
@@ -556,18 +556,14 @@ export const CallRegistrationPage: React.FC = () => {
 
             {/* Triage Priority Selector */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              <label className="cvp-form-field-label">
                 Clinical Priority Triage
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="cvp-priority-grid">
                 <button
                   type="button"
                   onClick={() => setPriority('EMERGENCY')}
-                  className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                    priority === 'EMERGENCY'
-                      ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-400'
-                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  }`}
+                  className={`cvp-priority-card-btn emergency ${priority === 'EMERGENCY' ? 'selected' : ''}`}
                 >
                   <span>🚨</span>
                   <span>Emergency</span>
@@ -575,11 +571,7 @@ export const CallRegistrationPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setPriority('URGENT')}
-                  className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                    priority === 'URGENT'
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-300'
-                      : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                  }`}
+                  className={`cvp-priority-card-btn urgent ${priority === 'URGENT' ? 'selected' : ''}`}
                 >
                   <span>⚡</span>
                   <span>Urgent</span>
@@ -587,11 +579,7 @@ export const CallRegistrationPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setPriority('COULD_NOT_ASSESS')}
-                  className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                    priority === 'COULD_NOT_ASSESS'
-                      ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-400'
-                      : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                  }`}
+                  className={`cvp-priority-card-btn unassessed ${priority === 'COULD_NOT_ASSESS' ? 'selected' : ''}`}
                 >
                   <span>❓</span>
                   <span>Unassessed</span>
@@ -599,11 +587,7 @@ export const CallRegistrationPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setPriority('PLANNED')}
-                  className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                    priority === 'PLANNED'
-                      ? 'bg-teal-700 text-white border-teal-700 shadow-md ring-2 ring-teal-400'
-                      : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
-                  }`}
+                  className={`cvp-priority-card-btn planned ${priority === 'PLANNED' ? 'selected' : ''}`}
                 >
                   <span>📅</span>
                   <span>Planned</span>
@@ -749,7 +733,7 @@ export const CallRegistrationPage: React.FC = () => {
                   Step 1 of 5
                 </span>
                 <h2 className="cvp-card-title">
-                  Caller & Owner Matching (CVP-46)
+                  Caller & Owner Matching
                 </h2>
                 <p className="cvp-card-subtitle">
                   Match caller phone against existing client records or register new owner.
@@ -779,13 +763,14 @@ export const CallRegistrationPage: React.FC = () => {
                     value={callerPhone}
                     onChange={(e) => setCallerPhone(e.target.value)}
                     placeholder="+91 98765 43210"
-                    className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-bold"
+                    className="cvp-form-control"
+                    style={{ paddingLeft: '40px' }}
                     autoFocus
                   />
                 </div>
               </div>
 
-              {/* Matched Owners (CVP-46) */}
+              {/* Matched Owners */}
               {matchedOwners.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -809,7 +794,7 @@ export const CallRegistrationPage: React.FC = () => {
               {/* Optional Temporary Farmer Name */}
               {!selectedOwner && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="cvp-form-field-label">
                     Or Temporary Caller / Farmer Name
                   </label>
                   <input
@@ -817,7 +802,7 @@ export const CallRegistrationPage: React.FC = () => {
                     value={tempOwnerName}
                     onChange={(e) => setTempOwnerName(e.target.value)}
                     placeholder="e.g. Ramesh Patil (unregistered caller)"
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                    className="cvp-form-control"
                   />
                 </div>
               )}
@@ -830,7 +815,7 @@ export const CallRegistrationPage: React.FC = () => {
                   className="btn-cvp-secondary w-full sm:w-auto"
                 >
                   <UserPlus className="w-4 h-4 text-teal-700" />
-                  <span>+ Quick New Owner (CVP-06)</span>
+                  <span>+ Quick New Owner</span>
                 </button>
 
                 <button
@@ -845,7 +830,7 @@ export const CallRegistrationPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 2: ANIMAL & PATIENT SELECTION (CVP-07, CVP-08) */}
+          {/* STEP 2: ANIMAL & PATIENT SELECTION */}
           {step === 2 && (
             <div className="cvp-card-container animate-fade-in">
               <div className="cvp-card-header">
@@ -853,7 +838,7 @@ export const CallRegistrationPage: React.FC = () => {
                   Step 2 of 5
                 </span>
                 <h2 className="cvp-card-title">
-                  Patient & Caseload Selection (CVP-07)
+                  Select Animals & Caseload
                 </h2>
                 <p className="cvp-card-subtitle">
                   Select animals to attend on this visit (multi-select for farm trips).
@@ -900,7 +885,7 @@ export const CallRegistrationPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Quick Add Patient button (CVP-08) */}
+              {/* Quick Add Patient button */}
               {selectedOwner && (
                 <div>
                   <button
@@ -909,14 +894,14 @@ export const CallRegistrationPage: React.FC = () => {
                     className="btn-cvp-secondary"
                   >
                     <PawPrint className="w-4 h-4 text-teal-700" />
-                    <span>+ Quick New Patient (CVP-08)</span>
+                    <span>+ Quick New Animal</span>
                   </button>
                 </div>
               )}
 
               {/* Unregistered / Temporary animal description */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="cvp-form-field-label">
                   Or Temporary Animal / Herd Description
                 </label>
                 <input
@@ -924,20 +909,20 @@ export const CallRegistrationPage: React.FC = () => {
                   value={tempPatientName}
                   onChange={(e) => setTempPatientName(e.target.value)}
                   placeholder="e.g. Jersey Cow #3 + 1 calf, or 5 Sheep"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                  className="cvp-form-control"
                 />
               </div>
 
-              {/* Species & Head count */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Species & Head count aligned responsively */}
+              <div className="cvp-species-headcount-grid">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="cvp-form-field-label">
                     Primary Species
                   </label>
                   <select
                     value={species}
                     onChange={(e) => setSpecies(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium bg-white"
+                    className="cvp-form-control"
                   >
                     {SPECIES_PILLS.map((sp) => (
                       <option key={sp} value={sp}>
@@ -948,7 +933,7 @@ export const CallRegistrationPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="cvp-form-field-label">
                     Animal Head Count
                   </label>
                   <input
@@ -956,7 +941,7 @@ export const CallRegistrationPage: React.FC = () => {
                     min={1}
                     value={animalCount}
                     onChange={(e) => setAnimalCount(parseInt(e.target.value, 10) || 1)}
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                    className="cvp-form-control"
                   />
                 </div>
               </div>
@@ -983,7 +968,7 @@ export const CallRegistrationPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 3: CLINICAL DETAILS & TRIAGE (CVP-09, CVP-44) */}
+          {/* STEP 3: CLINICAL DETAILS & TRIAGE */}
           {step === 3 && (
             <div className="cvp-card-container animate-fade-in">
               <div className="cvp-card-header">
@@ -991,7 +976,7 @@ export const CallRegistrationPage: React.FC = () => {
                   Step 3 of 5
                 </span>
                 <h2 className="cvp-card-title">
-                  Clinical Intake & Priority Triage (CVP-09)
+                  Clinical Triage
                 </h2>
                 <p className="cvp-card-subtitle">
                   Capture symptoms, veterinarian tentative assessment, priority, and procedures.
@@ -1000,18 +985,14 @@ export const CallRegistrationPage: React.FC = () => {
 
               {/* Priority Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="cvp-form-field-label">
                   Priority Level <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="cvp-priority-grid">
                   <button
                     type="button"
                     onClick={() => setPriority('EMERGENCY')}
-                    className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                      priority === 'EMERGENCY'
-                        ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-400'
-                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                    }`}
+                    className={`cvp-priority-card-btn emergency ${priority === 'EMERGENCY' ? 'selected' : ''}`}
                   >
                     <span>🚨</span>
                     <span>Emergency</span>
@@ -1019,11 +1000,7 @@ export const CallRegistrationPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setPriority('URGENT')}
-                    className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                      priority === 'URGENT'
-                        ? 'bg-amber-500 text-white border-amber-500 shadow-md ring-2 ring-amber-300'
-                        : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                    }`}
+                    className={`cvp-priority-card-btn urgent ${priority === 'URGENT' ? 'selected' : ''}`}
                   >
                     <span>⚡</span>
                     <span>Urgent</span>
@@ -1031,11 +1008,7 @@ export const CallRegistrationPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setPriority('COULD_NOT_ASSESS')}
-                    className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                      priority === 'COULD_NOT_ASSESS'
-                        ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-400'
-                        : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                    }`}
+                    className={`cvp-priority-card-btn unassessed ${priority === 'COULD_NOT_ASSESS' ? 'selected' : ''}`}
                   >
                     <span>❓</span>
                     <span>Unassessed</span>
@@ -1043,11 +1016,7 @@ export const CallRegistrationPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setPriority('PLANNED')}
-                    className={`p-2.5 rounded-2xl text-xs font-black border transition-all flex items-center justify-center gap-1.5 ${
-                      priority === 'PLANNED'
-                        ? 'bg-teal-700 text-white border-teal-700 shadow-md ring-2 ring-teal-400'
-                        : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
-                    }`}
+                    className={`cvp-priority-card-btn planned ${priority === 'PLANNED' ? 'selected' : ''}`}
                   >
                     <span>📅</span>
                     <span>Planned</span>
@@ -1057,10 +1026,10 @@ export const CallRegistrationPage: React.FC = () => {
 
               {/* Flexibility Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <label className="cvp-form-field-label">
                   Schedule Flexibility
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold">
+                <div className="cvp-flexibility-grid">
                   {[
                     { id: 'MUST_ATTEND_TODAY', label: 'Must Attend Today' },
                     { id: 'CAN_POSTPONE_TODAY', label: 'Can Postpone' },
@@ -1071,11 +1040,7 @@ export const CallRegistrationPage: React.FC = () => {
                       type="button"
                       key={fl.id}
                       onClick={() => setFlexibility(fl.id as VisitFlexibility)}
-                      className={`p-2 rounded-xl border text-center transition-all ${
-                        flexibility === fl.id
-                          ? 'bg-slate-800 text-white border-slate-800'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
+                      className={`cvp-flex-btn ${flexibility === fl.id ? 'selected' : ''}`}
                     >
                       {fl.label}
                     </button>
@@ -1083,14 +1048,14 @@ export const CallRegistrationPage: React.FC = () => {
                 </div>
                 {flexibility === 'SPECIFIC_DATE' && (
                   <div className="mt-2.5">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    <label className="cvp-form-field-label">
                       Scheduled Visit Date
                     </label>
                     <input
                       type="date"
                       value={preferredDate}
                       onChange={(e) => setPreferredDate(e.target.value)}
-                      className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium bg-white"
+                      className="cvp-form-control"
                     />
                   </div>
                 )}
@@ -1098,7 +1063,7 @@ export const CallRegistrationPage: React.FC = () => {
 
               {/* Symptoms */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="cvp-form-field-label">
                   Reported Symptoms <span className="text-red-500">*</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1119,13 +1084,14 @@ export const CallRegistrationPage: React.FC = () => {
                   value={symptoms}
                   onChange={(e) => setSymptoms(e.target.value)}
                   placeholder="Describe owner's report in farmer's words..."
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium resize-none"
+                  className="cvp-form-control"
+                  style={{ resize: 'none' }}
                 />
               </div>
 
               {/* Tentative Doctor Assessment */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="cvp-form-field-label">
                   Doctor&apos;s Tentative Assessment
                 </label>
                 <input
@@ -1133,13 +1099,13 @@ export const CallRegistrationPage: React.FC = () => {
                   value={tentativeAssessment}
                   onChange={(e) => setTentativeAssessment(e.target.value)}
                   placeholder="e.g. Dystocia / Suspected uterine torsion or Post-parturient paresis"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                  className="cvp-form-control"
                 />
               </div>
 
               {/* Planned Procedure */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="cvp-form-field-label">
                   Planned Clinical Procedure
                 </label>
                 <input
@@ -1147,20 +1113,20 @@ export const CallRegistrationPage: React.FC = () => {
                   value={plannedProcedure}
                   onChange={(e) => setPlannedProcedure(e.target.value)}
                   placeholder="e.g. Obstetrical intervention, IV Calcium, Wound suture"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                  className="cvp-form-control"
                 />
               </div>
 
-              {/* Extended Details (CVP-44) */}
+              {/* Extended Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Preferred Time Window (CVP-44)
+                  <label className="cvp-form-field-label">
+                    Preferred Time Window
                   </label>
                   <select
                     value={preferredTimeWindow}
                     onChange={(e) => setPreferredTimeWindow(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium bg-white"
+                    className="cvp-form-control"
                   >
                     <option value="MORNING">Morning (8:00 AM - 12:00 PM)</option>
                     <option value="AFTERNOON">Afternoon (12:00 PM - 4:00 PM)</option>
@@ -1170,15 +1136,15 @@ export const CallRegistrationPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Farm Access & Gate Notes (CVP-44)
+                  <label className="cvp-form-field-label">
+                    Farm Access & Gate Notes
                   </label>
                   <input
                     type="text"
                     value={specialInstructions}
                     onChange={(e) => setSpecialInstructions(e.target.value)}
                     placeholder="e.g. Keep cow tethered in crush, gate code 1234"
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 font-medium"
+                    className="cvp-form-control"
                   />
                 </div>
               </div>
@@ -1205,7 +1171,7 @@ export const CallRegistrationPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 4: LOCATION SELECTION (CVP-10, CVP-47) */}
+          {/* STEP 4: LOCATION SELECTION */}
           {step === 4 && (
             <div className="cvp-card-container animate-fade-in">
               <div className="cvp-card-header">
@@ -1213,7 +1179,7 @@ export const CallRegistrationPage: React.FC = () => {
                   Step 4 of 5
                 </span>
                 <h2 className="cvp-card-title">
-                  Farm Location & GPS (CVP-10)
+                  Visit Location
                 </h2>
                 <p className="cvp-card-subtitle">
                   Select previously saved farm location or capture current GPS coordinates.
@@ -1256,7 +1222,7 @@ export const CallRegistrationPage: React.FC = () => {
             </div>
           )}
 
-          {/* STEP 5: INTAKE SUMMARY & CONFIRMATION (CVP-11) */}
+          {/* STEP 5: INTAKE SUMMARY & CONFIRMATION */}
           {step === 5 && (
             <div className="cvp-card-container animate-fade-in">
               <div className="cvp-card-header">
@@ -1264,7 +1230,7 @@ export const CallRegistrationPage: React.FC = () => {
                   Step 5 of 5
                 </span>
                 <h2 className="cvp-card-title">
-                  Review & Confirm Call (CVP-11)
+                  Review & Confirm
                 </h2>
                 <p className="cvp-card-subtitle">
                   Verify triage priority and visit location before adding to today&apos;s caseload.

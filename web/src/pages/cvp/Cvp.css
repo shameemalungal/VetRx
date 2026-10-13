@@ -1289,3 +1289,261 @@
   gap: 12px;
 }
 
+/* ── Priority Triage Buttons & Grid ─────────────────────────── */
+.cvp-priority-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (min-width: 640px) {
+  .cvp-priority-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.cvp-priority-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  text-decoration: none;
+  user-select: none;
+}
+
+.cvp-priority-card-btn span {
+  color: inherit !important;
+}
+
+/* Emergency State */
+.cvp-priority-card-btn.emergency {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border-color: #fca5a5 !important;
+}
+.cvp-priority-card-btn.emergency:hover {
+  background: #fee2e2 !important;
+}
+.cvp-priority-card-btn.emergency.selected {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35) !important;
+}
+
+/* Urgent State (2nd Priority Option) */
+.cvp-priority-card-btn.urgent {
+  background: #fffbeb !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
+}
+.cvp-priority-card-btn.urgent:hover {
+  background: #fef3c7 !important;
+}
+.cvp-priority-card-btn.urgent.selected {
+  background: #b45309 !important;
+  color: #ffffff !important;
+  border-color: #92400e !important;
+  box-shadow: 0 4px 12px rgba(180, 83, 9, 0.35) !important;
+}
+
+/* Could Not Assess / Unassessed State */
+.cvp-priority-card-btn.unassessed {
+  background: #faf5ff !important;
+  color: #6b21a8 !important;
+  border-color: #e9d5ff !important;
+}
+.cvp-priority-card-btn.unassessed:hover {
+  background: #f3e8ff !important;
+}
+.cvp-priority-card-btn.unassessed.selected {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #6d28d9 !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35) !important;
+}
+
+/* Planned State */
+.cvp-priority-card-btn.planned {
+  background: #f0fdfa !important;
+  color: #0f766e !important;
+  border-color: #99f6e4 !important;
+}
+.cvp-priority-card-btn.planned:hover {
+  background: #ccfbf1 !important;
+}
+.cvp-priority-card-btn.planned.selected {
+  background: #00685f !important;
+  color: #ffffff !important;
+  border-color: #004d46 !important;
+  box-shadow: 0 4px 12px rgba(0, 104, 95, 0.35) !important;
+}
+
+/* ── Schedule Flexibility Selector ───────────────────────────── */
+.cvp-flexibility-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@media (min-width: 640px) {
+  .cvp-flexibility-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.cvp-flex-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.cvp-flex-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.cvp-flex-btn.selected {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25) !important;
+}
+
+/* ── Review & Confirm Priority Summary Banner ───────────────── */
+.cvp-summary-priority-banner {
+  padding: 16px 20px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.cvp-summary-priority-banner.emergency {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border: 1px solid #b91c1c !important;
+}
+
+.cvp-summary-priority-banner.urgent {
+  background: #b45309 !important;
+  color: #ffffff !important;
+  border: 1px solid #92400e !important;
+}
+
+.cvp-summary-priority-banner.unassessed {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border: 1px solid #6d28d9 !important;
+}
+
+.cvp-summary-priority-banner.planned {
+  background: #00685f !important;
+  color: #ffffff !important;
+  border: 1px solid #004d46 !important;
+}
+
+.cvp-summary-priority-tag {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.92) !important;
+  margin-bottom: 2px;
+}
+
+.cvp-summary-priority-heading {
+  font-size: 1.125rem;
+  font-weight: 900;
+  color: #ffffff !important;
+  line-height: 1.25;
+}
+
+.cvp-summary-flex-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9) !important;
+  text-align: right;
+  margin-bottom: 2px;
+}
+
+.cvp-summary-flex-value {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: #ffffff !important;
+  text-align: right;
+}
+
+/* ── Species & Animal Head Count Alignment on Mobile ─────────── */
+.cvp-species-headcount-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 520px) {
+  .cvp-species-headcount-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.cvp-form-field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #334155;
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+
+.cvp-form-control {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cvp-form-control:focus {
+  border-color: #0d9488 !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18) !important;
+}
+
