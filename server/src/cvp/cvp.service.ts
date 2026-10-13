@@ -872,7 +872,15 @@ export class CvpBackendService {
           },
         },
         call: true,
-        cases: true,
+        cases: {
+          include: {
+            prescription: {
+              include: {
+                items: true,
+              },
+            },
+          },
+        },
         procedures: {
           orderBy: { performedAt: 'asc' },
         },

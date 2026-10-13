@@ -553,6 +553,8 @@ export class ClinicalService {
     status?: string;
     forwardedToUserId?: string | null;
     forwardingRemarks?: string | null;
+    visitId?: string | null;
+    visitCaseId?: string | null;
     items: Array<{
       medicineId?: string | null;
       medicineName: string;
@@ -741,6 +743,41 @@ export class ClinicalService {
       resourceId: rx.id,
       details: { rxNumber: rx.rxNumber, patientId: rx.patientId, itemCount: data.items.length, status: initialStatus },
     });
+
+    // ── Link to VisitCase and Record Visit Timeline Event (if visitId provided) ──
+    if (data.visitId) {
+      try {
+        const visitId = data.visitId;
+        // Find matching case by patientId or specific visitCaseId
+        const targetCase = data.visitCaseId
+          ? await prisma.visitCase.findFirst({ where: { id: data.visitCaseId, practiceId, visitId } })
+          : await prisma.visitCase.findFirst({ where: { visitId, practiceId, patientId: data.patientId } }) ||
+            await prisma.visitCase.findFirst({ where: { visitId, practiceId } });
+
+        if (targetCase) {
+          await prisma.visitCase.update({
+            where: { id: targetCase.id },
+            data: {
+              prescriptionId: rx.id,
+              patientId: targetCase.patientId || data.patientId,
+            },
+          });
+        }
+
+        await prisma.visitTimelineEvent.create({
+          data: {
+            practiceId,
+            visitId,
+            eventType: 'PRESCRIPTION_LINKED',
+            title: `ePrescription Linked: ${rx.rxNumber}`,
+            description: `ePrescription #${rx.rxNumber} (${data.items.length} items, Status: ${initialStatus}) linked to clinical visit case.`,
+            occurredAt: new Date(),
+          },
+        });
+      } catch (linkErr) {
+        console.warn('Could not automatically link prescription to visit case:', linkErr);
+      }
+    }
 
     return rx;
   }

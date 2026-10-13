@@ -312,6 +312,8 @@ const createPrescriptionSchema = z.object({
   targetUserId: z.string().min(1).nullable().optional(),
   targetMemberId: z.string().min(1).nullable().optional(),
   forwardingRemarks: z.string().max(1000).nullable().optional(),
+  visitId: z.string().nullable().optional(),
+  visitCaseId: z.string().nullable().optional(),
   items: z.array(
     z.object({
       medicineId: z.string().uuid().nullable().optional(),

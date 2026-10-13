@@ -241,6 +241,8 @@ export interface Prescription {
   ownerId: number;
   practitionerId?: number;
   packageId?: number;      // if created from a package
+  visitId?: number | string; // if created from a field visit or consultation
+  visitCaseId?: number | string; // specific linked visit case
   symptoms?: string;
   diagnosis?: string;
   instructions?: string;   // owner advice / follow-up

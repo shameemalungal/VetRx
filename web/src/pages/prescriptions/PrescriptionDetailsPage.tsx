@@ -5,7 +5,7 @@
 // =============================================================
 
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -25,6 +25,7 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173
 export const PrescriptionDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const rxId = id ? parseInt(id, 10) : undefined;
 
   const { user, can, hasRole } = useAuth();
@@ -596,6 +597,26 @@ export const PrescriptionDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Linked Visit Banner ─────────────────────────────────── */}
+      {(searchParams.get('fromVisit') || prescription.visitId) && (
+        <div className="no-print mb-4 p-3.5 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-between text-xs text-teal-900 shadow-sm max-w-7xl mx-auto">
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 rounded-lg bg-teal-200 text-teal-950 font-black uppercase tracking-wider text-[10px]">
+              Linked Field Visit
+            </span>
+            <span className="font-bold text-slate-800">
+              This ePrescription is associated with Physical Visit #{searchParams.get('fromVisit') || prescription.visitId}
+            </span>
+          </div>
+          <Link
+            to={`/calls/visits/${searchParams.get('fromVisit') || prescription.visitId}`}
+            className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-teal-100 text-teal-900 font-bold border border-teal-300 transition-colors shadow-sm"
+          >
+            Return to Visit
+          </Link>
+        </div>
+      )}
 
       {/* ── Page Header Module ─────────────────────────────────── */}
       <div className="no-print rx-preview-header-card">

@@ -137,13 +137,36 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  // ── Populate initial data for Edit or Preselected Owner ────────
+  const phoneParam = searchParams.get('phone') || searchParams.get('ownerPhone');
+
+  // Query animals belonging to the selected owner
+  const ownerAnimals = useLiveQuery(
+    () => (selectedOwnerId ? db.patients.where('ownerId').equals(Number(selectedOwnerId)).toArray() : []),
+    [selectedOwnerId]
+  ) || [];
+
+  // ── Populate initial data for Edit or Preselected Owner / Phone ────────
   useEffect(() => {
     if (preselectedOwnerId) {
       setSelectedOwnerId(preselectedOwnerId);
       setOwnerMode('existing');
+    } else if (phoneParam && existingOwners) {
+      const cleanTarget = phoneParam.replace(/\D/g, '');
+      const match = existingOwners.find((o) => {
+        if (!o.phone) return false;
+        const d = o.phone.replace(/\D/g, '');
+        return d.endsWith(cleanTarget) || cleanTarget.endsWith(d);
+      });
+      if (match && match.id) {
+        setSelectedOwnerId(match.id);
+        setOwnerMode('existing');
+        setOwnerSearchQuery(match.phone || phoneParam);
+      } else {
+        setOwnerMode('new');
+        setNewOwnerPhone(phoneParam);
+      }
     }
-  }, [preselectedOwnerId]);
+  }, [preselectedOwnerId, phoneParam, existingOwners]);
 
   useEffect(() => {
     if (mode === 'edit' && patientId) {
@@ -167,12 +190,19 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
     }
   }, [mode, patientId]);
 
-  // Set default selected owner if none selected yet
+  // Set default selected owner if none selected yet and no phone param provided
   useEffect(() => {
-    if (mode === 'new' && !selectedOwnerId && existingOwners && existingOwners.length > 0 && !preselectedOwnerId) {
+    if (
+      mode === 'new' &&
+      !selectedOwnerId &&
+      existingOwners &&
+      existingOwners.length > 0 &&
+      !preselectedOwnerId &&
+      !phoneParam
+    ) {
       setSelectedOwnerId(existingOwners[0].id!);
     }
-  }, [mode, selectedOwnerId, existingOwners, preselectedOwnerId]);
+  }, [mode, selectedOwnerId, existingOwners, preselectedOwnerId, phoneParam]);
 
   // Normalize phone number helper for duplicate prevention
   const normalizePhoneNumber = (phone: string): string => {
@@ -237,6 +267,30 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
           createdAt: now,
           updatedAt: now,
         }) as number;
+
+        if (typeof window !== 'undefined' && navigator.onLine) {
+          try {
+            const res = await fetch('/api/owners', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                name: newOwnerName.trim(),
+                phone: newOwnerPhone.trim(),
+                address: newOwnerAddress.trim() || null,
+                email: newOwnerEmail.trim() || null,
+              }),
+            });
+            if (res.ok) {
+              const serverOwner = await res.json();
+              if (serverOwner?.id) {
+                await db.owners.update(finalOwnerId, { serverId: serverOwner.id } as any);
+              }
+            }
+          } catch (err) {
+            console.warn('Backend owner sync failed:', err);
+          }
+        }
       } else {
         finalOwnerId = Number(selectedOwnerId);
       }
@@ -262,6 +316,36 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
           createdAt: now,
           updatedAt: now,
         }) as number;
+
+        if (typeof window !== 'undefined' && navigator.onLine) {
+          try {
+            const ownerRec = await db.owners.get(finalOwnerId);
+            const serverOwnerId = (ownerRec as any)?.serverId;
+            if (serverOwnerId) {
+              const res = await fetch('/api/patients', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  ownerId: serverOwnerId,
+                  name: name.trim(),
+                  species,
+                  breed: breed.trim() || null,
+                  sex,
+                  notes: [ageNote.trim(), notes.trim()].filter(Boolean).join(' | ') || null,
+                }),
+              });
+              if (res.ok) {
+                const sPatient = await res.json();
+                if (sPatient?.id) {
+                  await db.patients.update(newPatientId, { serverId: sPatient.id } as any);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Backend patient sync failed:', err);
+          }
+        }
 
         const fromParam = searchParams.get('from');
         if (fromParam === 'rx') {
@@ -492,48 +576,97 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
 
                 {/* Selected Owner Preview */}
                 {selectedOwnerRecord && (
-                  <div className="owner-preview-banner mt-space-sm">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: '36px',
-                          height: '36px',
-                          minWidth: '36px',
-                          borderRadius: '50%',
-                          background: 'var(--color-primary-container, #d1fae5)',
-                          color: 'var(--color-primary, #065f46)',
-                          fontWeight: 700,
-                          fontSize: '14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {selectedOwnerRecord.name.charAt(0).toUpperCase()}
+                  <>
+                    <div className="owner-preview-banner mt-space-sm">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            minWidth: '36px',
+                            borderRadius: '50%',
+                            background: 'var(--color-primary-container, #d1fae5)',
+                            color: 'var(--color-primary, #065f46)',
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {selectedOwnerRecord.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <strong style={{ color: 'var(--color-on-surface)', fontSize: '13px' }} className="truncate">
+                            {selectedOwnerRecord.name}
+                          </strong>
+                          <span style={{ fontSize: '11.5px', color: 'var(--color-outline)' }} className="truncate">
+                            {selectedOwnerRecord.phone} {selectedOwnerRecord.email ? `• ${selectedOwnerRecord.email}` : ''}
+                            {selectedOwnerRecord.address ? ` • ${selectedOwnerRecord.address}` : ''}
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                        <strong style={{ color: 'var(--color-on-surface)', fontSize: '13px' }} className="truncate">
-                          {selectedOwnerRecord.name}
-                        </strong>
-                        <span style={{ fontSize: '11.5px', color: 'var(--color-outline)' }} className="truncate">
-                          {selectedOwnerRecord.phone} {selectedOwnerRecord.email ? `• ${selectedOwnerRecord.email}` : ''}
-                          {selectedOwnerRecord.address ? ` • ${selectedOwnerRecord.address}` : ''}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="badge badge-primary shrink-0">Selected Client</span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm text-xs"
+                          onClick={() => setSelectedOwnerId('')}
+                          title="Change selected client"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Associated Animals for this Owner */}
+                    <div className="mt-3 p-3.5 rounded-2xl bg-surface-container-low border border-outline-variant">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                          <Icon name="paw" size={14} className="text-primary" />
+                          <span>Registered Animals for {selectedOwnerRecord.name} ({ownerAnimals.length})</span>
+                        </span>
+                        <span className="text-[11px] text-outline">
+                          {ownerAnimals.length > 0 ? 'Click to reuse animal data or proceed to add a new one' : 'No prior animals registered'}
                         </span>
                       </div>
+                      {ownerAnimals.length === 0 ? (
+                        <p className="text-xs text-outline italic m-0">
+                          This is the first animal being registered under this client.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                          {ownerAnimals.map((animal) => (
+                            <div
+                              key={animal.id}
+                              onClick={() => {
+                                setName(animal.name);
+                                setSpecies(animal.species);
+                                setBreed(animal.breed || '');
+                                setSex(animal.sex || 'Unknown');
+                                setAgeNote(animal.ageNote || '');
+                                setWeightKg(animal.weightKg !== undefined && animal.weightKg !== null ? String(animal.weightKg) : '');
+                                setMicrochipNumber(animal.microchipNumber || '');
+                                setIdentificationRef(animal.identificationRef || '');
+                                setNotes(animal.notes || '');
+                              }}
+                              className="p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant hover:border-primary cursor-pointer flex items-center justify-between text-xs transition-colors"
+                              title="Click to populate form with this animal's details"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <strong className="text-on-surface block truncate">{animal.name}</strong>
+                                <span className="text-outline text-[11px] truncate block">
+                                  {animal.species} {animal.breed ? `• ${animal.breed}` : ''} {animal.ageNote ? `(${animal.ageNote})` : ''}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-bold text-primary shrink-0">Use Details</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="badge badge-primary shrink-0">Selected Client</span>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm text-xs"
-                        onClick={() => setSelectedOwnerId('')}
-                        title="Change selected client"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
             ) : (

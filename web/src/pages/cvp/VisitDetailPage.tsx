@@ -8,6 +8,8 @@ import type {
   Visit,
   VisitStatus,
   Medicine,
+  TreatmentPackage,
+  Prescription,
 } from '../../types';
 import {
   ArrowLeft,
@@ -28,6 +30,9 @@ import {
   ChevronRight,
   User,
   Calendar,
+  Package,
+  FileText,
+  Sparkles,
 } from 'lucide-react';
 import { CreateFollowUpModal } from '../../components/cvp/CreateFollowUpModal';
 import type { FollowUp } from '../../types/cvp';
@@ -73,6 +78,19 @@ export const VisitDetailPage: React.FC = () => {
     return await db.medicines.toArray();
   }) || [];
 
+  // Load treatment packages from database
+  const treatmentPackages: TreatmentPackage[] = useLiveQuery(async () => {
+    return await db.treatmentPackages.toArray();
+  }) || [];
+
+  // Load linked prescriptions originating from or associated with this visit
+  const linkedPrescriptions: Prescription[] = useLiveQuery(async () => {
+    if (!id) return [];
+    const allRx = await db.prescriptions.toArray();
+    const caseRxIds = (visit?.cases || []).map((c) => String(c.prescriptionId)).filter(Boolean);
+    return allRx.filter((rx) => String(rx.visitId) === String(id) || caseRxIds.includes(String(rx.id)));
+  }, [id, visit?.cases]) || [];
+
   // Load linked follow-ups originating from this visit (Phase 8)
   const linkedFollowUps: FollowUp[] = useLiveQuery(async () => {
     if (!id) return [];
@@ -103,6 +121,7 @@ export const VisitDetailPage: React.FC = () => {
   // Modals state
   const [isProcedureModalOpen, setIsProcedureModalOpen] = useState(false);
   const [isMedicineModalOpen, setIsMedicineModalOpen] = useState(false);
+  const [isApplyPackageModalOpen, setIsApplyPackageModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
 
@@ -118,12 +137,33 @@ export const VisitDetailPage: React.FC = () => {
   const [medPatientName, setMedPatientName] = useState('');
   const [medSearch, setMedSearch] = useState('');
   const [selectedMedId, setSelectedMedId] = useState<number | string | null>(null);
+  const [selectedMedRecord, setSelectedMedRecord] = useState<Medicine | null>(null);
+  const [isMedDropdownOpen, setIsMedDropdownOpen] = useState(false);
   const [medQty, setMedQty] = useState(1);
   const [medUnit, setMedUnit] = useState('ml');
   const [medRoute, setMedRoute] = useState('IM');
   const [medBatch, setMedBatch] = useState('');
   const [medInstructions, setMedInstructions] = useState('');
   const [isSubmittingMed, setIsSubmittingMed] = useState(false);
+
+  // Treatment package application state
+  const [pkgSelectedId, setPkgSelectedId] = useState<number | null>(null);
+  const [pkgPatientName, setPkgPatientName] = useState<string>('');
+  const [pkgKitId, setPkgKitId] = useState<string>('');
+  const [pkgItemsList, setPkgItemsList] = useState<Array<{
+    id?: number;
+    checked: boolean;
+    medicineId?: number;
+    medicineName: string;
+    presentation: string;
+    strength?: string;
+    quantity: number;
+    unit: string;
+    route: string;
+    batchNumber: string;
+    instructions?: string;
+  }>>([]);
+  const [isSubmittingPkg, setIsSubmittingPkg] = useState(false);
 
   // Completion review form state
   const [completionNotes, setCompletionNotes] = useState('');
@@ -135,12 +175,46 @@ export const VisitDetailPage: React.FC = () => {
   const [isResumingVisit, setIsResumingVisit] = useState(false);
   const [gpsMessage, setGpsMessage] = useState<string | null>(null);
 
+  // Populate items when treatment package selection changes
+  useEffect(() => {
+    if (!pkgSelectedId) {
+      setPkgItemsList([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const items = await db.treatmentPackageItems
+          .where('packageId')
+          .equals(pkgSelectedId)
+          .sortBy('sortOrder');
+        setPkgItemsList(
+          items.map((p) => ({
+            id: p.id,
+            checked: true,
+            medicineId: p.medicineId,
+            medicineName: p.brandName,
+            presentation: p.presentation || 'Injection',
+            strength: p.strengthVolume || p.strength,
+            quantity: p.quantity || 1,
+            unit: p.unit || 'dose',
+            route: p.route || 'IM',
+            batchNumber: '',
+            instructions: p.directions || '',
+          }))
+        );
+      } catch (err) {
+        console.error('Error loading package items:', err);
+      }
+    })();
+  }, [pkgSelectedId]);
+
   // Set default patient when modal opens
   useEffect(() => {
     if (visit?.cases && visit.cases.length > 0) {
       const firstPatient = visit.cases[0].species || 'Patient #1';
       setProcPatientName(firstPatient);
       setMedPatientName(firstPatient);
+      setPkgPatientName(firstPatient);
     }
   }, [visit?.id]);
 
@@ -274,6 +348,8 @@ export const VisitDetailPage: React.FC = () => {
       });
       setMedSearch('');
       setSelectedMedId(null);
+      setSelectedMedRecord(null);
+      setIsMedDropdownOpen(false);
       setMedQty(1);
       setMedBatch('');
       setMedInstructions('');
@@ -282,6 +358,59 @@ export const VisitDetailPage: React.FC = () => {
       console.error('Failed to record medicine usage:', err);
     } finally {
       setIsSubmittingMed(false);
+    }
+  };
+
+  // Apply Treatment Package to Administered Medicines Handler
+  const handleApplyPackageMedicines = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!visit?.id) return;
+    const itemsToAdminister = pkgItemsList.filter((i) => i.checked);
+    if (itemsToAdminister.length === 0) {
+      alert('Please select at least one medicine from the package that was actually administered.');
+      return;
+    }
+
+    setIsSubmittingPkg(true);
+    const chosenKit = fieldKits.find((k) => k.id === (pkgKitId || selectedKitId));
+
+    try {
+      for (const itm of itemsToAdminister) {
+        const idempotencyKey = `pkg_use_${visit.id}_${itm.medicineId || itm.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        await cvpService.recordMedicineUsage(visit.id, {
+          patientName: pkgPatientName || medPatientName,
+          medicineId: itm.medicineId || 0,
+          medicineName: itm.medicineName,
+          quantityUsed: Number(itm.quantity) || 1,
+          unit: itm.unit,
+          route: itm.route,
+          batchNumber: itm.batchNumber.trim() || undefined,
+          instructions: itm.instructions?.trim() || undefined,
+          locationId: pkgKitId || selectedKitId || undefined,
+          locationName: chosenKit?.name || undefined,
+          idempotencyKey,
+        });
+      }
+
+      // Increment package usage count in treatmentPackages without modifying the package template!
+      if (pkgSelectedId) {
+        const pkg = await db.treatmentPackages.get(pkgSelectedId);
+        if (pkg?.id) {
+          await db.treatmentPackages.update(pkg.id, {
+            usageCount: (pkg.usageCount || 0) + 1,
+            lastUsedAt: new Date(),
+          });
+        }
+      }
+
+      setIsApplyPackageModalOpen(false);
+      setPkgSelectedId(null);
+      setPkgItemsList([]);
+    } catch (err) {
+      console.error('Failed to apply package medicines:', err);
+      alert('Failed to record medicines administered from package.');
+    } finally {
+      setIsSubmittingPkg(false);
     }
   };
 
@@ -606,19 +735,35 @@ export const VisitDetailPage: React.FC = () => {
 
           {/* 3. Actual Medicine Usage (CVP-24) */}
           <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <h2 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
                 <Pill className="w-4 h-4 text-teal-700" />
                 Actual Medicine Administered ({(visit.medicineUsages || []).length})
               </h2>
-              <button
-                type="button"
-                onClick={() => setIsMedicineModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs shadow-sm transition-all"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Record Medicine</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsApplyPackageModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs shadow-sm transition-all"
+                  title="Apply planned medicines from a saved treatment package"
+                >
+                  <Package className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Apply Package</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMedId(null);
+                    setSelectedMedRecord(null);
+                    setMedSearch('');
+                    setIsMedicineModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs shadow-sm transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Record Medicine</span>
+                </button>
+              </div>
             </div>
 
             {visit.medicineUsages && visit.medicineUsages.length > 0 ? (
@@ -700,6 +845,84 @@ export const VisitDetailPage: React.FC = () => {
             )}
           </section>
 
+          {/* Linked ePrescriptions Card */}
+          <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-teal-700" />
+                Linked ePrescriptions ({linkedPrescriptions.length})
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  const firstPatId = visit.cases?.[0]?.patientId || '';
+                  const ownerId = visit.ownerId || '';
+                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}`);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-[11px] border border-teal-200 transition-colors"
+                title="Create new ePrescription linked to this visit"
+              >
+                <Plus className="w-3 h-3 text-teal-700" />
+                <span>New Rx</span>
+              </button>
+            </div>
+
+            {linkedPrescriptions.length > 0 ? (
+              <div className="space-y-2">
+                {linkedPrescriptions.map((rx) => {
+                  const rxDate = new Date(rx.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+                  return (
+                    <div
+                      key={rx.id}
+                      className="p-3 rounded-2xl bg-teal-50/50 border border-teal-200/80 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 font-mono text-xs">{rx.rxNumber}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            rx.status === 'Approved'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : rx.status === 'Pending Approval'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-200 text-slate-800'
+                          }`}>
+                            {rx.status}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Created: {rxDate}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/prescriptions/${rx.id}?fromVisit=${visit.id}`)}
+                          className="px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 font-bold text-[11px] text-slate-700 shadow-sm"
+                        >
+                          View
+                        </button>
+                        {(rx.status === 'Draft' || rx.status === 'Changes Requested') && (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/prescriptions/${rx.id}/edit?visitId=${visit.id}`)}
+                            className="px-2.5 py-1 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-[11px] shadow-sm"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
+                No ePrescription created yet for this visit.
+              </div>
+            )}
+          </section>
+
           {/* Quick Links: Prescription / Invoice */}
           <section className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-3xl border border-teal-200 p-4 text-xs space-y-3">
             <div className="font-black text-teal-900 uppercase tracking-wider text-[11px]">
@@ -711,10 +934,17 @@ export const VisitDetailPage: React.FC = () => {
             <div className="space-y-2">
               <button
                 type="button"
-                onClick={() => navigate('/prescriptions/new')}
-                className="w-full py-2 px-3 rounded-xl bg-white hover:bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center justify-between"
+                onClick={() => {
+                  const firstPatId = visit.cases?.[0]?.patientId || '';
+                  const ownerId = visit.ownerId || '';
+                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}`);
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center justify-between shadow-sm"
               >
-                <span>Create Prescription</span>
+                <span className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-teal-600" />
+                  <span>{linkedPrescriptions.length > 0 ? 'Create Additional ePrescription' : 'Create ePrescription'}</span>
+                </span>
                 <ChevronRight className="w-4 h-4 text-teal-600" />
               </button>
               <button
@@ -915,34 +1145,113 @@ export const VisitDetailPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Medicine Name with Suggestion / Search */}
+              {/* Medicine Name using Canonical Medicine Catalogue */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Medicine Name *</label>
-                <input
-                  type="text"
-                  required
-                  list="medicine-catalog-list"
-                  placeholder="e.g. Oxytetracycline 20%, Meloxicam 5mg/ml"
-                  value={medSearch}
-                  onChange={(e) => {
-                    setMedSearch(e.target.value);
-                    const match = medicines.find(
-                      (m) => m.brandName.toLowerCase() === e.target.value.toLowerCase()
-                    );
-                    if (match) {
-                      setSelectedMedId(match.id || 0);
-                      if (match.defaultUnit) setMedUnit(match.defaultUnit);
-                    }
-                  }}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                />
-                <datalist id="medicine-catalog-list">
-                  {medicines.map((m) => (
-                    <option key={m.id} value={m.brandName}>
-                      {m.presentation} — {m.genericName || ''}
-                    </option>
-                  ))}
-                </datalist>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Medicine Name (from Formulary Catalogue) *
+                </label>
+                {selectedMedRecord ? (
+                  <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <Pill className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                        <span className="truncate">{selectedMedRecord.brandName}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                        {selectedMedRecord.genericName || selectedMedRecord.presentation} • {selectedMedRecord.strengthVolume || selectedMedRecord.strength || selectedMedRecord.packSize || 'Standard pack'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMedRecord(null);
+                        setSelectedMedId(null);
+                        setMedSearch('');
+                        setIsMedDropdownOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[11px] shrink-0"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Search medicine brand or generic name..."
+                      value={medSearch}
+                      onFocus={() => setIsMedDropdownOpen(true)}
+                      onChange={(e) => {
+                        setMedSearch(e.target.value);
+                        setIsMedDropdownOpen(true);
+                      }}
+                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                    />
+
+                    {isMedDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-slate-100">
+                        {medicines
+                          .filter((m) => {
+                            if (!medSearch.trim()) return true;
+                            const q = medSearch.toLowerCase();
+                            return (
+                              (m.brandName || '').toLowerCase().includes(q) ||
+                              (m.genericName || '').toLowerCase().includes(q)
+                            );
+                          })
+                          .slice(0, 25)
+                          .map((m) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedMedId(m.id || 0);
+                                setSelectedMedRecord(m);
+                                setMedSearch(m.brandName);
+                                if (m.defaultUnit) setMedUnit(m.defaultUnit);
+                                if (m.defaultRoute) setMedRoute(m.defaultRoute);
+                                setIsMedDropdownOpen(false);
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-teal-50/70 transition-colors flex items-start justify-between gap-2"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-slate-900 text-xs truncate">
+                                  {m.brandName}
+                                </div>
+                                <div className="text-[11px] text-slate-500 truncate">
+                                  {m.genericName || 'No generic name'}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                  {m.presentation}
+                                </span>
+                                {(m.strengthVolume || m.strength) && (
+                                  <div className="text-[10px] text-teal-700 font-bold mt-0.5">
+                                    {m.strengthVolume || m.strength}
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+
+                        {medicines.filter((m) => {
+                          if (!medSearch.trim()) return true;
+                          const q = medSearch.toLowerCase();
+                          return (
+                            (m.brandName || '').toLowerCase().includes(q) ||
+                            (m.genericName || '').toLowerCase().includes(q)
+                          );
+                        }).length === 0 && (
+                          <div className="p-3 text-center text-xs text-slate-500">
+                            No catalogue medicine matches &quot;{medSearch}&quot;.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Source Field Kit / Vehicle Selector (CVP-28 & Multi-Kit) */}
@@ -1046,6 +1355,224 @@ export const VisitDetailPage: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-black shadow-md shadow-teal-700/20"
                 >
                   {isSubmittingMed ? 'Recording…' : 'Record Medicine'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Apply Treatment Package in Actual Medicine Administered ── */}
+      {isApplyPackageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                <Package className="w-4 h-4 text-amber-700" />
+                Apply Treatment Package
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsApplyPackageModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyPackageMedicines} className="mt-4 space-y-4 text-xs">
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed">
+                <div className="font-bold mb-0.5 flex items-center gap-1.5 text-amber-950">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                  Clinical Usage Checklist
+                </div>
+                Selecting a package loads its planned pharmacotherapy. Review the list and select <strong>ONLY</strong> the medicines actually administered. Unselected items will not be recorded or deducted from inventory. The master package template will not be altered.
+              </div>
+
+              {/* Target Animal */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Target Animal / Patient *</label>
+                <select
+                  value={pkgPatientName}
+                  onChange={(e) => setPkgPatientName(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                >
+                  {cases.map((c, i) => (
+                    <option key={i} value={c.species || `Animal #${i + 1}`}>
+                      {c.species || `Animal #${i + 1}`} {c.patientId ? `(ID: ${c.patientId})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Source Field Kit / Vehicle Selector */}
+              {fieldKits.length > 0 && (
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Deduct From Field Kit / Vehicle *
+                  </label>
+                  <select
+                    value={pkgKitId || selectedKitId}
+                    onChange={(e) => setPkgKitId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
+                  >
+                    {fieldKits.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.name} {k.vehicleNumber ? `(Reg: ${k.vehicleNumber})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Select Package */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Select Treatment Package *</label>
+                <select
+                  required
+                  value={pkgSelectedId || ''}
+                  onChange={(e) => setPkgSelectedId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none text-slate-900"
+                >
+                  <option value="">-- Choose a Saved Treatment Package --</option>
+                  {treatmentPackages.map((pkg) => (
+                    <option key={pkg.id} value={pkg.id}>
+                      {pkg.name} ({pkg.species || 'General'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Package Included Items Checklist */}
+              {pkgItemsList.length > 0 && (
+                <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-slate-800 uppercase tracking-wider text-[11px]">
+                      Package Medicines ({pkgItemsList.filter((i) => i.checked).length} of {pkgItemsList.length} Selected)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allChecked = pkgItemsList.every((i) => i.checked);
+                        setPkgItemsList((prev) => prev.map((i) => ({ ...i, checked: !allChecked })));
+                      }}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-900"
+                    >
+                      {pkgItemsList.every((i) => i.checked) ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {pkgItemsList.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className={`p-3 rounded-2xl border transition-all ${
+                          item.checked
+                            ? 'bg-teal-50/40 border-teal-200'
+                            : 'bg-slate-50/70 border-slate-200 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={item.checked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setPkgItemsList((prev) =>
+                                prev.map((it, i) => (i === idx ? { ...it, checked } : it))
+                              );
+                            }}
+                            className="mt-0.5 rounded border-slate-300 text-teal-700 focus:ring-teal-600 w-4 h-4 cursor-pointer"
+                          />
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-black text-slate-900 text-xs truncate">
+                                {item.medicineName}
+                              </span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                                {item.presentation}
+                              </span>
+                            </div>
+
+                            {item.checked && (
+                              <div className="mt-2 grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-600 block">Dose Qty</label>
+                                  <input
+                                    type="number"
+                                    min="0.1"
+                                    step="any"
+                                    required
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const quantity = Number(e.target.value);
+                                      setPkgItemsList((prev) =>
+                                        prev.map((it, i) => (i === idx ? { ...it, quantity } : it))
+                                      );
+                                    }}
+                                    className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-medium text-xs focus:outline-none focus:ring-1 focus:ring-teal-600"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-600 block">Unit</label>
+                                  <input
+                                    type="text"
+                                    value={item.unit}
+                                    onChange={(e) => {
+                                      const unit = e.target.value;
+                                      setPkgItemsList((prev) =>
+                                        prev.map((it, i) => (i === idx ? { ...it, unit } : it))
+                                      );
+                                    }}
+                                    className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-medium text-xs focus:outline-none focus:ring-1 focus:ring-teal-600"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-600 block">Route</label>
+                                  <select
+                                    value={item.route}
+                                    onChange={(e) => {
+                                      const route = e.target.value;
+                                      setPkgItemsList((prev) =>
+                                        prev.map((it, i) => (i === idx ? { ...it, route } : it))
+                                      );
+                                    }}
+                                    className="w-full p-1.5 rounded-lg border border-slate-300 bg-white font-medium text-xs focus:outline-none focus:ring-1 focus:ring-teal-600"
+                                  >
+                                    {ADMINISTRATION_ROUTES.map((r) => (
+                                      <option key={r} value={r}>
+                                        {r}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsApplyPackageModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPkg || pkgItemsList.filter((i) => i.checked).length === 0}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black shadow-md shadow-amber-600/20"
+                >
+                  {isSubmittingPkg
+                    ? 'Recording…'
+                    : `Confirm Administered (${pkgItemsList.filter((i) => i.checked).length})`}
                 </button>
               </div>
             </form>

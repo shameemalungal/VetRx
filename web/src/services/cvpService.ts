@@ -622,6 +622,31 @@ export class CvpService {
       });
     }
 
+    // Online sync to backend
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const res = await fetch('/api/owners', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: data.name.trim(),
+            phone: cleanPhone,
+            address: data.address?.trim() || null,
+            email: data.email?.trim() || null,
+          }),
+        });
+        if (res.ok) {
+          const serverOwner = await res.json();
+          if (serverOwner?.id && newOwner) {
+            await db.owners.update(ownerId, { serverId: serverOwner.id } as any);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend owner sync failed, saved locally in Dexie:', err);
+      }
+    }
+
     return newOwner;
   }
 
@@ -656,7 +681,40 @@ export class CvpService {
       updatedAt: now,
     });
 
-    return db.patients.get(patientId);
+    const newPatient = await db.patients.get(patientId);
+
+    // Online sync to backend
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const ownerRecord = await db.owners.get(data.ownerId);
+        const serverOwnerId = (ownerRecord as any)?.serverId;
+        if (serverOwnerId) {
+          const res = await fetch('/api/patients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              ownerId: serverOwnerId,
+              name: data.name.trim(),
+              species: data.species,
+              breed: data.breed?.trim() || null,
+              sex: data.sex || null,
+              notes: data.ageNote?.trim() || null,
+            }),
+          });
+          if (res.ok) {
+            const serverPatient = await res.json();
+            if (serverPatient?.id) {
+              await db.patients.update(patientId, { serverId: serverPatient.id } as any);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Backend patient sync failed, saved locally in Dexie:', err);
+      }
+    }
+
+    return newPatient;
   }
 
   // ── Global Search ───────────────────────────────────────────────────

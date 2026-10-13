@@ -42,6 +42,8 @@ import { inventoryApi, type PrescriptionStockResolution } from '../../services/i
 import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 import { ExternalPrescriptionModal } from './ExternalPrescriptionModal';
 
+import { cvpService } from '../../services/cvpService';
+
 function extractNumericDose(val?: string | number): string {
   if (val === undefined || val === null) return '1';
   if (typeof val === 'number') return String(val);
@@ -96,6 +98,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const packageIdParam = searchParams.get('packageId')
     ? parseInt(searchParams.get('packageId')!, 10)
     : null;
+  const visitIdParam = searchParams.get('visitId');
+  const visitCaseIdParam = searchParams.get('visitCaseId');
 
   const { practitioner } = useSettingsStore();
   const { user, can, hasRole } = useAuth();
@@ -1549,6 +1553,50 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     }
   }, [mode, packageIdParam, treatmentPackages]);
 
+  // ── Auto-link patient from visit if navigated with ?visitId= ─────
+  const visitPatientLinkedRef = useRef(false);
+  useEffect(() => {
+    if (visitIdParam && !selectedPatientId && allPatients && allPatients.length > 0 && !visitPatientLinkedRef.current) {
+      void (async () => {
+        try {
+          const v = await cvpService.getVisitById(visitIdParam);
+          if (v?.cases && v.cases.length > 0) {
+            const firstCase = v.cases[0];
+            if (firstCase.patientId) {
+              const matched = allPatients.find((p) => String(p.id) === String(firstCase.patientId));
+              if (matched?.id) {
+                visitPatientLinkedRef.current = true;
+                setSelectedPatientId(matched.id);
+                if (firstCase.chiefComplaint && !symptoms) {
+                  setSymptoms(firstCase.chiefComplaint);
+                }
+                if (firstCase.tentativeDiagnosis && !diagnosis) {
+                  setDiagnosis(firstCase.tentativeDiagnosis);
+                }
+              }
+            } else if (firstCase.species) {
+              const matched = allPatients.find(
+                (p) => p.species.toLowerCase() === firstCase.species?.toLowerCase()
+              );
+              if (matched?.id) {
+                visitPatientLinkedRef.current = true;
+                setSelectedPatientId(matched.id);
+                if (firstCase.chiefComplaint && !symptoms) {
+                  setSymptoms(firstCase.chiefComplaint);
+                }
+                if (firstCase.tentativeDiagnosis && !diagnosis) {
+                  setDiagnosis(firstCase.tentativeDiagnosis);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[VetRx] Could not auto-resolve patient from visit:', err);
+        }
+      })();
+    }
+  }, [visitIdParam, selectedPatientId, allPatients]);
+
   // ── Eligible Clinicians Loader ────────────────────────────────
   const loadEligibleClinicians = async () => {
     setLoadingClinicians(true);
@@ -1838,6 +1886,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           patientId: safePatientId,
           ownerId,
           practitionerId,
+          visitId: visitIdParam ? String(visitIdParam) : existingRx?.visitId || undefined,
           symptoms: symptoms.trim() || undefined,
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
@@ -1906,6 +1955,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           patientId: safePatientId,
           ownerId,
           practitionerId,
+          visitId: visitIdParam ? String(visitIdParam) : undefined,
           symptoms: symptoms.trim() || undefined,
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
@@ -2016,9 +2066,73 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         }
       }
 
+      // If linked to a visit, update VisitCase and record timeline event
+      if (visitIdParam) {
+        try {
+          const allCases = await db.visitCases.toArray();
+          for (const c of allCases) {
+            if (String(c.visitId) === String(visitIdParam) && c.id) {
+              await db.visitCases.update(c.id as any, { prescriptionId: rxId });
+            }
+          }
+          await db.visitTimelineEvents.add({
+            visitId: String(visitIdParam),
+            eventType: 'PRESCRIPTION_LINKED',
+            title: 'ePrescription Linked',
+            description: `Prescription #${mode === 'edit' ? existingRx?.rxNumber : 'New'} (${targetStatus}) linked to clinical visit.`,
+            occurredAt: now,
+          });
+        } catch (linkErr) {
+          console.warn('[VetRx] Non-blocking: Could not link prescription to visitCase:', linkErr);
+        }
+
+        // Online sync to backend
+        if (navigator.onLine) {
+          try {
+            await fetch(`${API_BASE}/api/prescriptions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                patientId: String(safePatientId),
+                ownerId: String(ownerId),
+                visitId: String(visitIdParam),
+                visitCaseId: visitCaseIdParam ? String(visitCaseIdParam) : undefined,
+                symptoms: symptoms.trim() || undefined,
+                diagnosis: diagnosis.trim() || undefined,
+                instructions: advice.trim() || undefined,
+                followUpDays: followUpDays,
+                status: targetStatus === 'Approved' && !canApprove ? 'Draft' : targetStatus,
+                items: items.map((itm) => ({
+                  medicineId: itm.medicineId ? String(itm.medicineId) : undefined,
+                  brandName: itm.brandName,
+                  genericName: itm.genericName,
+                  presentation: itm.presentation,
+                  strength: itm.strength,
+                  dose: itm.dose,
+                  doseUnit: itm.doseUnit,
+                  quantity: itm.quantity,
+                  unit: itm.dispenseUnit || itm.unit,
+                  frequency: itm.frequency,
+                  durationDays: itm.durationDays,
+                  route: itm.route,
+                  directions: itm.directions,
+                })),
+              }),
+            });
+          } catch (syncErr) {
+            console.warn('[VetRx] Non-blocking: Server prescription sync failed:', syncErr);
+          }
+        }
+      }
+
       console.log('[VetRx] Prescription generation completed successfully', { rxId, targetStatus });
       // Navigate to View / Preview page
-      navigate(`/prescriptions/${rxId}`);
+      if (visitIdParam) {
+        navigate(`/prescriptions/${rxId}?fromVisit=${visitIdParam}`);
+      } else {
+        navigate(`/prescriptions/${rxId}`);
+      }
     } catch (err) {
       console.error('VetRx Generate failed:', err);
       const msg = err instanceof Error
@@ -2039,6 +2153,25 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   if (!selectedPatientId) {
     return (
       <div className="rx-page-container">
+        {visitIdParam && (
+          <div className="mb-4 p-3.5 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-between text-xs text-teal-900 shadow-sm max-w-4xl mx-auto">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-1 rounded-lg bg-teal-200 text-teal-950 font-black uppercase tracking-wider text-[10px]">
+                Field Visit Link
+              </span>
+              <span className="font-bold text-slate-800">
+                Prescription will be linked to Physical Visit #{visitIdParam}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/calls/visits/${visitIdParam}`)}
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-teal-100 text-teal-900 font-bold border border-teal-300 transition-colors shadow-sm"
+            >
+              Return to Visit
+            </button>
+          </div>
+        )}
         <div className="rx-select-animal-container">
           {/* Stepper Header */}
           <div className="rx-stepper-header">
@@ -2318,6 +2451,25 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   // ============================================================
   return (
     <div className="rx-page-container">
+      {visitIdParam && (
+        <div className="mb-4 p-3.5 bg-teal-50 border border-teal-200 rounded-2xl flex items-center justify-between text-xs text-teal-900 shadow-sm max-w-7xl mx-auto">
+          <div className="flex items-center gap-2.5">
+            <span className="px-2.5 py-1 rounded-lg bg-teal-200 text-teal-950 font-black uppercase tracking-wider text-[10px]">
+              Field Visit Link
+            </span>
+            <span className="font-bold text-slate-800">
+              Prescription is linked to Physical Visit #{visitIdParam}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/calls/visits/${visitIdParam}`)}
+            className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-teal-100 text-teal-900 font-bold border border-teal-300 transition-colors shadow-sm"
+          >
+            Return to Visit
+          </button>
+        </div>
+      )}
       {/* Stepper Header */}
       <div className="rx-stepper-header">
         <div className="rx-stepper-top">

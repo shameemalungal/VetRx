@@ -89,7 +89,7 @@ export const QuickNewPatientModal: React.FC<QuickNewPatientModalProps> = ({
             </div>
             <div>
               <h3 id="quick-patient-title" className="text-base font-extrabold text-slate-900">
-                Quick New Patient (CVP-08)
+                Quick New Patient
               </h3>
               <p className="text-xs text-slate-500">
                 Register animal under {ownerName}

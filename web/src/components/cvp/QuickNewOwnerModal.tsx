@@ -70,7 +70,7 @@ export const QuickNewOwnerModal: React.FC<QuickNewOwnerModalProps> = ({
             </div>
             <div>
               <h3 id="quick-owner-title" className="text-base font-extrabold text-slate-900">
-                Quick New Owner (CVP-06)
+                Quick New Owner
               </h3>
               <p className="text-xs text-slate-500">
                 Register a new client directly from field call intake

@@ -121,6 +121,11 @@ export class VetRxDatabase extends Dexie {
       recurringSchedules:         '++id, practiceId, ownerId, patientId, status, frequency, startDate, createdAt',
       procedureDurationEstimates: '++id, practiceId, procedureCategory, source, updatedAt',
     });
+
+    this.version(11).stores({
+      prescriptions:              '++id, rxNumber, patientId, ownerId, practitionerId, status, visitId, createdAt',
+      visitCases:                 '++id, visitId, patientId, prescriptionId, practiceId, createdAt',
+    });
   }
 }
 
