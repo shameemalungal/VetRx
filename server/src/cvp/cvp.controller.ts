@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { CvpBackendService } from './cvp.service.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePractice } from '../middleware/tenant.js';
+import { requirePracticePermission } from '../middleware/authorization.js';
+import { PERMISSIONS } from '../auth/permissions.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
@@ -33,7 +35,7 @@ function getId(req: AuthenticatedRequest): string {
 
 const createCallSchema = z.object({
   callerPhone: z.string().min(1).max(30),
-  ownerId: z.string().uuid().nullable().optional(),
+  ownerId: z.union([z.string(), z.number()]).transform((v) => (v && typeof v === 'string' && v.includes('-') ? v : null)).nullable().optional(),
   tempOwnerName: z.string().max(120).nullable().optional(),
   tempPatientName: z.string().max(120).nullable().optional(),
   species: z.string().max(60).nullable().optional(),
@@ -55,7 +57,7 @@ const updateCallSchema = createCallSchema.partial().extend({
 });
 
 // ── GET /api/calls ────────────────────────────────────────────────────────────
-cvpRouter.get('/calls', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/calls', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const tab = req.query.tab as 'today' | 'upcoming' | 'postponed' | 'all' | undefined;
@@ -76,7 +78,7 @@ cvpRouter.get('/calls', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── GET /api/calls/capacity ───────────────────────────────────────────────────
-cvpRouter.get('/calls/capacity', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/calls/capacity', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const workingHours = req.query.workingMinutes
@@ -91,7 +93,7 @@ cvpRouter.get('/calls/capacity', async (req: AuthenticatedRequest, res, next) =>
 });
 
 // ── GET /api/calls/:id ────────────────────────────────────────────────────────
-cvpRouter.get('/calls/:id', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/calls/:id', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const call = await CvpBackendService.getCallById(getId(req), practiceId);
@@ -102,7 +104,7 @@ cvpRouter.get('/calls/:id', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── POST /api/calls ───────────────────────────────────────────────────────────
-cvpRouter.post('/calls', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/calls', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = createCallSchema.parse(req.body);
@@ -114,7 +116,7 @@ cvpRouter.post('/calls', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── PATCH /api/calls/:id ──────────────────────────────────────────────────────
-cvpRouter.patch('/calls/:id', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.patch('/calls/:id', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = updateCallSchema.parse(req.body);
@@ -126,7 +128,7 @@ cvpRouter.patch('/calls/:id', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── POST /api/calls/:id/postpone ──────────────────────────────────────────────
-cvpRouter.post('/calls/:id/postpone', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/calls/:id/postpone', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -156,7 +158,7 @@ const scheduleCallSchema = z.object({
   cases: z
     .array(
       z.object({
-        patientId: z.string().uuid().nullable().optional(),
+        patientId: z.union([z.string().uuid(), z.string(), z.number()]).transform((v) => (v && typeof v === 'string' && v.includes('-') ? v : null)).nullable().optional(),
         patientName: z.string().max(120).nullable().optional(),
         species: z.string().max(60).nullable().optional(),
         chiefComplaint: z.string().min(1).max(2000),
@@ -168,7 +170,7 @@ const scheduleCallSchema = z.object({
   addToTodayPlan: z.boolean().default(false),
 });
 
-cvpRouter.post('/calls/:id/schedule', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/calls/:id/schedule', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = scheduleCallSchema.parse(req.body);
@@ -186,7 +188,7 @@ const closeCallSchema = z.object({
   clinicalNotes: z.string().max(2000).optional(),
 });
 
-cvpRouter.post('/calls/:id/close', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/calls/:id/close', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = closeCallSchema.parse(req.body);
@@ -198,7 +200,7 @@ cvpRouter.post('/calls/:id/close', async (req: AuthenticatedRequest, res, next) 
 });
 
 // ── GET /api/daily-plans ──────────────────────────────────────────────────────
-cvpRouter.get('/daily-plans', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/daily-plans', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const dateQuery = req.query.date as string | undefined;
@@ -236,7 +238,7 @@ const upsertPlanSchema = z.object({
     .optional(),
 });
 
-cvpRouter.post('/daily-plans', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/daily-plans', requirePracticePermission(PERMISSIONS.CVP_PLAN_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = upsertPlanSchema.parse(req.body);
@@ -248,7 +250,7 @@ cvpRouter.post('/daily-plans', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── POST /api/daily-plans/:id/confirm ─────────────────────────────────────────
-cvpRouter.post('/daily-plans/:id/confirm', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/daily-plans/:id/confirm', requirePracticePermission(PERMISSIONS.CVP_PLAN_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const confirmed = await CvpBackendService.confirmDailyPlan(practiceId, getId(req));
@@ -259,7 +261,7 @@ cvpRouter.post('/daily-plans/:id/confirm', async (req: AuthenticatedRequest, res
 });
 
 // ── POST /api/visits/:id/postpone ─────────────────────────────────────────────
-cvpRouter.post('/visits/:id/postpone', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/postpone', requirePracticePermission(PERMISSIONS.CVP_PLAN_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -275,7 +277,7 @@ cvpRouter.post('/visits/:id/postpone', async (req: AuthenticatedRequest, res, ne
 });
 
 // ── GET /api/visits ───────────────────────────────────────────────────────────
-cvpRouter.get('/visits', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/visits', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const date = req.query.date as string | undefined;
@@ -289,7 +291,7 @@ cvpRouter.get('/visits', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── GET /api/visits/:id ───────────────────────────────────────────────────────
-cvpRouter.get('/visits/:id', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/visits/:id', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const visit = await CvpBackendService.getVisitById(practiceId, getId(req));
@@ -306,7 +308,7 @@ const arriveSchema = z.object({
   accuracy: z.number().nullable().optional(),
 });
 
-cvpRouter.post('/visits/:id/arrive', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/arrive', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const locationData = arriveSchema.parse(req.body);
@@ -318,7 +320,7 @@ cvpRouter.post('/visits/:id/arrive', async (req: AuthenticatedRequest, res, next
 });
 
 // ── POST /api/visits/:id/start ────────────────────────────────────────────────
-cvpRouter.post('/visits/:id/start', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/start', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const started = await CvpBackendService.startVisit(practiceId, getId(req));
@@ -338,7 +340,7 @@ const recordProcedureSchema = z.object({
   standardFee: z.number().nonnegative().optional(),
 });
 
-cvpRouter.post('/visits/:id/procedures', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/procedures', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = recordProcedureSchema.parse(req.body);
@@ -351,9 +353,9 @@ cvpRouter.post('/visits/:id/procedures', async (req: AuthenticatedRequest, res, 
 
 // ── POST /api/visits/:id/medicine-usage ───────────────────────────────────────
 const recordMedicineUsageSchema = z.object({
-  patientId: z.string().nullable().optional(),
+  patientId: z.union([z.string(), z.number()]).transform((v) => (v !== null && v !== undefined && String(v).includes('-') ? String(v) : null)).nullable().optional(),
   patientName: z.string().max(120).nullable().optional(),
-  medicineId: z.string().nullable().optional(),
+  medicineId: z.union([z.string(), z.number()]).transform((v) => (v !== null && v !== undefined && String(v).includes('-') ? String(v) : null)).nullable().optional(),
   medicineName: z.string().min(1).max(200),
   batchNumber: z.string().max(100).nullable().optional(),
   quantityUsed: z.number().positive(),
@@ -364,7 +366,7 @@ const recordMedicineUsageSchema = z.object({
   locationId: z.string().nullable().optional(),
 });
 
-cvpRouter.post('/visits/:id/medicine-usage', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/medicine-usage', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = recordMedicineUsageSchema.parse(req.body);
@@ -384,7 +386,7 @@ const completeVisitSchema = z.object({
   completionNotes: z.string().max(4000).nullable().optional(),
 });
 
-cvpRouter.post('/visits/:id/complete', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/complete', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const parsed = completeVisitSchema.parse(req.body);
@@ -396,7 +398,7 @@ cvpRouter.post('/visits/:id/complete', async (req: AuthenticatedRequest, res, ne
 });
 
 // ── POST /api/visits/:id/resume ───────────────────────────────────────────────
-cvpRouter.post('/visits/:id/resume', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/visits/:id/resume', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const resumed = await CvpBackendService.resumeVisit(practiceId, getId(req));
@@ -407,7 +409,7 @@ cvpRouter.post('/visits/:id/resume', async (req: AuthenticatedRequest, res, next
 });
 
 // ── GET /api/visits/:id/timeline ──────────────────────────────────────────────
-cvpRouter.get('/visits/:id/timeline', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/visits/:id/timeline', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const timeline = await CvpBackendService.getVisitTimeline(practiceId, getId(req));
@@ -418,7 +420,7 @@ cvpRouter.get('/visits/:id/timeline', async (req: AuthenticatedRequest, res, nex
 });
 
 // ── GET /api/follow-ups (Phase 8) ─────────────────────────────────────────────
-cvpRouter.get('/follow-ups', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/follow-ups', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const list = await CvpBackendService.listFollowUps(practiceId, req.query as any);
@@ -429,7 +431,7 @@ cvpRouter.get('/follow-ups', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── POST /api/follow-ups (Phase 8) ────────────────────────────────────────────
-cvpRouter.post('/follow-ups', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/follow-ups', requirePracticePermission(PERMISSIONS.CVP_VISIT_EXECUTE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const created = await CvpBackendService.createFollowUp(practiceId, req.body);
@@ -440,7 +442,7 @@ cvpRouter.post('/follow-ups', async (req: AuthenticatedRequest, res, next) => {
 });
 
 // ── POST /api/recurring-schedules (Phase 8) ───────────────────────────────────
-cvpRouter.post('/recurring-schedules', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.post('/recurring-schedules', requirePracticePermission(PERMISSIONS.CVP_PLAN_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const created = await CvpBackendService.createRecurringSchedule(practiceId, req.body);
@@ -451,7 +453,7 @@ cvpRouter.post('/recurring-schedules', async (req: AuthenticatedRequest, res, ne
 });
 
 // ── GET /api/duration-estimates (Phase 8) ─────────────────────────────────────
-cvpRouter.get('/duration-estimates', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.get('/duration-estimates', requirePracticePermission(PERMISSIONS.CVP_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const estimates = await CvpBackendService.getDurationEstimates(practiceId);
@@ -462,7 +464,7 @@ cvpRouter.get('/duration-estimates', async (req: AuthenticatedRequest, res, next
 });
 
 // ── PUT /api/duration-estimates/:category (Phase 8) ───────────────────────────
-cvpRouter.put('/duration-estimates/:category', async (req: AuthenticatedRequest, res, next) => {
+cvpRouter.put('/duration-estimates/:category', requirePracticePermission(PERMISSIONS.CVP_PLAN_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const category = String(req.params.category);

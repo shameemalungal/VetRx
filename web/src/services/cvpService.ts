@@ -21,6 +21,46 @@ import { normalizePhoneNumber, arePhonesMatching } from '../utils/phoneUtils';
 import { durationLearningService } from './durationLearningService';
 
 export class CvpService {
+  // ── Canonical ID Resolution Helpers (Dexie numeric ID <-> Server UUID) ────
+  static async resolveOwnerServerUuid(ownerId?: number | string | null): Promise<string | null> {
+    if (!ownerId) return null;
+    if (typeof ownerId === 'string' && ownerId.includes('-')) return ownerId;
+    const numId = typeof ownerId === 'string' ? parseInt(ownerId, 10) : ownerId;
+    if (!isNaN(numId)) {
+      const owner = await db.owners.get(numId);
+      if (owner?.serverId && owner.serverId.includes('-')) {
+        return owner.serverId;
+      }
+    }
+    return null;
+  }
+
+  static async resolvePatientServerUuid(patientId?: number | string | null): Promise<string | null> {
+    if (!patientId) return null;
+    if (typeof patientId === 'string' && patientId.includes('-')) return patientId;
+    const numId = typeof patientId === 'string' ? parseInt(patientId, 10) : patientId;
+    if (!isNaN(numId)) {
+      const pat = await db.patients.get(numId);
+      if (pat?.serverId && pat.serverId.includes('-')) {
+        return pat.serverId;
+      }
+    }
+    return null;
+  }
+
+  static async resolveMedicineServerUuid(medicineId?: number | string | null): Promise<string | null> {
+    if (!medicineId) return null;
+    if (typeof medicineId === 'string' && medicineId.includes('-')) return medicineId;
+    const numId = typeof medicineId === 'string' ? parseInt(medicineId, 10) : medicineId;
+    if (!isNaN(numId)) {
+      const med = await db.medicines.get(numId);
+      if ((med as any)?.serverId && (med as any).serverId.includes('-')) {
+        return (med as any).serverId;
+      }
+    }
+    return null;
+  }
+
   // ── Capacity & Summary ──────────────────────────────────────────────
   static async getTodayCapacitySummary(workingHoursTotal: number = 480): Promise<CapacitySummary> {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -190,13 +230,14 @@ export class CvpService {
     // 3. Online sync attempt if network available
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
+        const resolvedOwnerUuid = await this.resolveOwnerServerUuid(data.ownerId);
         const res = await fetch('/api/calls', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
             callerPhone: data.callerPhone,
-            ownerId: typeof data.ownerId === 'string' && data.ownerId.includes('-') ? data.ownerId : null,
+            ownerId: resolvedOwnerUuid,
             tempOwnerName: data.tempOwnerName || data.ownerName || null,
             tempPatientName: data.tempPatientName || null,
             species: data.species || null,
@@ -216,7 +257,9 @@ export class CvpService {
         if (res.ok) {
           const serverCall = await res.json();
           if (serverCall?.id) {
-            await db.calls.update(id, { updatedAt: new Date() });
+            newCall.id = id;
+            (newCall as any).serverId = serverCall.id;
+            await db.calls.update(id, { serverId: serverCall.id, updatedAt: new Date() } as any);
           }
         }
       } catch (err) {
@@ -343,7 +386,7 @@ export class CvpService {
       estimatedDurationMinutes?: number;
       notes?: string;
       cases?: Array<{
-        patientId?: string;
+        patientId?: number | string;
         patientName?: string;
         species?: string;
         chiefComplaint: string;
@@ -358,16 +401,85 @@ export class CvpService {
         ? new Date(data.scheduledDate).toISOString()
         : data.scheduledDate.toISOString();
 
-    let remoteResult: { visit: Visit; call: Call } | null = null;
+    const numId = typeof id === 'string' && /^\d+$/.test(id) ? parseInt(id, 10) : id;
+    let existingCall = typeof numId === 'number' ? await db.calls.get(numId) : null;
+    if (!existingCall) {
+      const all = await db.calls.toArray();
+      existingCall = all.find((c) => String(c.id) === String(id)) || null;
+    }
 
-    if (typeof window !== 'undefined' && navigator.onLine) {
+    // Retain all patient-specific cases from intake or argument
+    let casesToSchedule: Array<{
+      patientId?: number | string;
+      patientName?: string;
+      species?: string;
+      chiefComplaint: string;
+      tentativeDiagnosis?: string;
+      procedureCategory?: string;
+    }> = [];
+
+    if (data.cases && data.cases.length > 0) {
+      casesToSchedule = data.cases.map((c) => ({
+        patientId: c.patientId,
+        patientName: c.patientName,
+        species: c.species,
+        chiefComplaint: c.chiefComplaint,
+        tentativeDiagnosis: c.tentativeDiagnosis,
+        procedureCategory: c.procedureCategory || 'GENERAL',
+      }));
+    } else if (existingCall?.selectedPatients && existingCall.selectedPatients.length > 0) {
+      casesToSchedule = existingCall.selectedPatients.map((sp) => ({
+        patientId: sp.id,
+        patientName: sp.name,
+        species: sp.species || existingCall?.species || 'Bovine',
+        chiefComplaint: existingCall?.symptoms || 'Field Consultation',
+        tentativeDiagnosis: existingCall?.tentativeAssessment,
+        procedureCategory: existingCall?.plannedProcedure || (existingCall?.priority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+      }));
+    } else if (existingCall?.patientIds && existingCall.patientIds.length > 0) {
+      for (const pId of existingCall.patientIds) {
+        const numPId = typeof pId === 'string' ? parseInt(pId, 10) : pId;
+        const pRecord = !isNaN(numPId) ? await db.patients.get(numPId) : null;
+        casesToSchedule.push({
+          patientId: pId,
+          patientName: pRecord?.name || existingCall.tempPatientName,
+          species: pRecord?.species || existingCall.species || 'Bovine',
+          chiefComplaint: existingCall.symptoms || 'Field Consultation',
+          tentativeDiagnosis: existingCall.tentativeAssessment,
+          procedureCategory: existingCall.plannedProcedure || (existingCall.priority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+        });
+      }
+    } else {
+      casesToSchedule = [
+        {
+          chiefComplaint: existingCall?.symptoms || 'Field Consultation',
+          tentativeDiagnosis: existingCall?.tentativeAssessment,
+          procedureCategory: existingCall?.plannedProcedure || (existingCall?.priority === 'EMERGENCY' ? 'EMERGENCY' : 'GENERAL'),
+          species: existingCall?.species || 'Bovine',
+          patientName: existingCall?.tempPatientName,
+        },
+      ];
+    }
+
+    let remoteResult: { visit: Visit; call: Call } | null = null;
+    const serverCallId = (existingCall as any)?.serverId || (typeof id === 'string' && id.includes('-') ? id : null);
+
+    if (serverCallId && typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch(`/api/calls/${id}/schedule`, {
+        const remoteCases = await Promise.all(
+          casesToSchedule.map(async (c) => ({
+            ...c,
+            patientId: await this.resolvePatientServerUuid(c.patientId),
+          }))
+        );
+
+        const res = await fetch(`/api/calls/${serverCallId}/schedule`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
             ...data,
+            cases: remoteCases,
             scheduledDate: scheduledDateIso,
           }),
         });
@@ -378,21 +490,11 @@ export class CvpService {
           console.warn('Backend server returned', res.status, '- continuing offline in Dexie');
         } else {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || 'Failed to schedule visit on server');
+          console.warn('Backend schedule call returned error:', errData.message);
         }
       } catch (err: any) {
         console.warn('Backend schedule call failed, recording locally:', err);
-        if (err.message && !err.message.includes('fetch') && !err.message.includes('server')) {
-          throw err;
-        }
       }
-    }
-
-    const numId = typeof id === 'string' && /^\d+$/.test(id) ? parseInt(id, 10) : id;
-    let existingCall = typeof numId === 'number' ? await db.calls.get(numId) : null;
-    if (!existingCall) {
-      const all = await db.calls.toArray();
-      existingCall = all.find((c) => String(c.id) === String(id)) || null;
     }
 
     const callRecord: Call = remoteResult?.call || {
@@ -426,20 +528,7 @@ export class CvpService {
       estimatedDurationMinutes: data.estimatedDurationMinutes || (data.priority === 'EMERGENCY' ? 45 : 30),
       notes: data.notes || existingCall?.notes,
       createdAt: new Date(),
-      cases: data.cases?.map((c) => ({
-        chiefComplaint: c.chiefComplaint,
-        tentativeDiagnosis: c.tentativeDiagnosis,
-        procedureCategory: c.procedureCategory || 'GENERAL',
-        species: c.species || existingCall?.species || 'Bovine',
-        patientName: c.patientName,
-      })) || [
-        {
-          chiefComplaint: existingCall?.symptoms || 'Field Consultation',
-          tentativeDiagnosis: existingCall?.tentativeAssessment,
-          procedureCategory: existingCall?.plannedProcedure || 'GENERAL',
-          species: existingCall?.species || 'Bovine',
-        },
-      ],
+      cases: casesToSchedule as any,
     };
 
     const existingVisit = (await db.visits.toArray()).find(
@@ -452,6 +541,28 @@ export class CvpService {
     } else {
       visitToSave.id = existingVisit.id;
       await db.visits.update(existingVisit.id as number, visitToSave as any);
+    }
+
+    // Persist each patient case into db.visitCases table
+    for (const c of casesToSchedule) {
+      const existingCase = await db.visitCases
+        .where('visitId')
+        .equals(vId as any)
+        .and((vc) => (c.patientId ? String(vc.patientId) === String(c.patientId) : vc.chiefComplaint === c.chiefComplaint))
+        .first();
+      if (!existingCase) {
+        await db.visitCases.add({
+          visitId: vId!,
+          patientId: c.patientId,
+          patientName: c.patientName,
+          species: c.species,
+          chiefComplaint: c.chiefComplaint,
+          tentativeDiagnosis: c.tentativeDiagnosis,
+          procedureCategory: c.procedureCategory,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+      }
     }
 
     return {
@@ -536,10 +647,27 @@ export class CvpService {
       if (o.phone && arePhonesMatching(o.phone, raw)) {
         return true;
       }
-      if (digitsOnly.length >= 4 && o.phone) {
-        const ownerDigits = o.phone.replace(/\D/g, '');
-        if (ownerDigits.includes(digitsOnly) || digitsOnly.includes(ownerDigits)) {
-          return true;
+      if (Array.isArray(o.alternatePhones)) {
+        for (const alt of o.alternatePhones) {
+          if (alt && arePhonesMatching(alt, raw)) {
+            return true;
+          }
+        }
+      }
+      if (digitsOnly.length >= 4) {
+        if (o.phone) {
+          const ownerDigits = o.phone.replace(/\D/g, '');
+          if (ownerDigits.includes(digitsOnly) || digitsOnly.includes(ownerDigits)) {
+            return true;
+          }
+        }
+        if (Array.isArray(o.alternatePhones)) {
+          for (const alt of o.alternatePhones) {
+            const altDigits = alt.replace(/\D/g, '');
+            if (altDigits.includes(digitsOnly) || digitsOnly.includes(altDigits)) {
+              return true;
+            }
+          }
         }
       }
       // 2. Match name or address
@@ -568,6 +696,74 @@ export class CvpService {
     return enriched;
   }
 
+  // ── Link Alternate Phone to Existing Owner (Stage 1.3) ──────────────────
+  static async linkAlternatePhoneToOwner(
+    ownerId: number | string,
+    phone: string
+  ): Promise<{ success: boolean; owner: any; message?: string }> {
+    const raw = phone.trim();
+    const cleanPhone = normalizePhoneNumber(raw) || raw.replace(/\D/g, '');
+    const numId = typeof ownerId === 'string' && /^\d+$/.test(ownerId) ? parseInt(ownerId, 10) : ownerId;
+    let localOwner = typeof numId === 'number' ? await db.owners.get(numId) : null;
+    if (!localOwner) {
+      const allOwners = await db.owners.toArray();
+      localOwner = allOwners.find((o) => String(o.id) === String(ownerId) || o.serverId === String(ownerId)) || null;
+    }
+
+    if (!localOwner) {
+      throw new Error(`Owner ${ownerId} not found.`);
+    }
+
+    // Check duplicate on this owner
+    const existingAlts = localOwner.alternatePhones || [];
+    if (localOwner.phone === cleanPhone || existingAlts.includes(cleanPhone)) {
+      return { success: true, owner: localOwner };
+    }
+
+    // Check conflict with other owners in local DB
+    const allOwners = await db.owners.toArray();
+    const conflict = allOwners.find(
+      (o) =>
+        o.id !== localOwner?.id &&
+        (arePhonesMatching(o.phone, cleanPhone) ||
+          (o.alternatePhones || []).some((alt) => arePhonesMatching(alt, cleanPhone)))
+    );
+    if (conflict) {
+      throw new Error(`This phone number is already registered to client "${conflict.name}".`);
+    }
+
+    // Update local Dexie record
+    const updatedAlts = [...existingAlts, cleanPhone];
+    if (localOwner.id) {
+      await db.owners.update(localOwner.id, {
+        alternatePhones: updatedAlts,
+        updatedAt: new Date(),
+      } as any);
+      localOwner.alternatePhones = updatedAlts;
+    }
+
+    // If serverId or online, sync with backend endpoint
+    const serverUuid = localOwner.serverId || (typeof ownerId === 'string' && ownerId.includes('-') ? ownerId : null);
+    if (serverUuid && typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const res = await fetch(`/api/clinical/owners/${serverUuid}/link-phone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phone: cleanPhone }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('Backend link-phone returned error:', errData.message);
+        }
+      } catch (err) {
+        console.warn('Backend link-phone sync failed, saved locally:', err);
+      }
+    }
+
+    return { success: true, owner: localOwner };
+  }
+
   static async getOwnerPatients(ownerId: number | string): Promise<any[]> {
     const numId = typeof ownerId === 'string' ? parseInt(ownerId, 10) : ownerId;
     if (isNaN(numId)) return [];
@@ -589,7 +785,11 @@ export class CvpService {
       const allOwners = await db.owners.toArray();
       const existing = allOwners.find((o) => {
         if (!o.phone) return false;
-        return arePhonesMatching(o.phone, cleanPhone);
+        if (arePhonesMatching(o.phone, cleanPhone)) return true;
+        if (Array.isArray(o.alternatePhones) && o.alternatePhones.some((alt) => arePhonesMatching(alt, cleanPhone))) {
+          return true;
+        }
+        return false;
       });
       if (existing) {
         return existing;
@@ -1241,11 +1441,18 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
+        const serverPatientId = await this.resolvePatientServerUuid(newUsage.patientId);
+        const serverMedicineId = await this.resolveMedicineServerUuid(newUsage.medicineId);
+
         const res = await fetch(`/api/visits/${visit.id}/medicine-usage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify(newUsage),
+          body: JSON.stringify({
+            ...newUsage,
+            patientId: serverPatientId,
+            medicineId: serverMedicineId,
+          }),
         });
         if (res.ok) {
           const resData = await res.json();

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "build": "tsc -p tsconfig.app.json --noEmit && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "tsx test_phase7_dosing.ts && tsx test_dose_and_import_fixes.ts && tsx test_shared_medicine_form.ts && tsx test_medicine_formulation_persistence.ts && tsx test_platform_header_layout.ts && tsx test_inventory_addon_v1.ts && tsx test_cvp_phase2_foundation.ts && tsx test_cvp_phase3_registration.ts && tsx test_cvp_phase8_followup_duration.ts && tsx test_contrast_integrity.ts && tsx test_unified_records_integration.ts",

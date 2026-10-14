@@ -126,6 +126,13 @@ export class VetRxDatabase extends Dexie {
       prescriptions:              '++id, rxNumber, patientId, ownerId, practitionerId, status, visitId, createdAt',
       visitCases:                 '++id, visitId, patientId, prescriptionId, practiceId, createdAt',
     });
+
+    this.version(12).stores({
+      owners:                     '++id, name, phone, *alternatePhones, serverId',
+      patients:                   '++id, ownerId, serverId, name, species',
+      invoices:                   '++id, invoiceNumber, patientId, ownerId, practitionerId, prescriptionId, *prescriptionIds, visitId, status, invoiceDate',
+      invoiceItems:               '++id, invoiceId, category, sortOrder, prescriptionId, patientId, visitId',
+    });
   }
 }
 

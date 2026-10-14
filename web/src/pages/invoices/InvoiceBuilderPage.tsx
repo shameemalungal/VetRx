@@ -13,6 +13,7 @@ import type {
   InvoiceStatus,
   MasterDataItem,
   Prescription,
+  Patient,
 } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -54,6 +55,9 @@ interface ItemDraft {
   ownerId?: number;
   ownerName?: string;
   medicineId?: number;
+  visitId?: number | string;
+  visitCaseId?: number | string;
+  procedureId?: number | string;
 }
 
 export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
@@ -63,7 +67,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const { isEntitled: isInventoryEntitled } = useInventoryEntitlement();
 
   const queryRxId = searchParams.get('prescriptionId') || searchParams.get('fromRx');
+  const queryVisitId = searchParams.get('visitId') || searchParams.get('fromVisit');
   const queryPatientId = searchParams.get('patientId');
+  const [currentVisitId, setCurrentVisitId] = useState<number | string | undefined>(undefined);
 
   // Live queries
   const allPatients = useLiveQuery(() => db.patients.toArray(), []) || [];
@@ -287,6 +293,103 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
             setItems(draftedItems);
           }
+        } else if (queryVisitId) {
+          setCurrentVisitId(queryVisitId);
+          const numVisitId = /^\d+$/.test(queryVisitId) ? parseInt(queryVisitId, 10) : queryVisitId;
+          const visit = typeof numVisitId === 'number' ? await db.visits.get(numVisitId) : null;
+          const matchedVisit = visit || (await db.visits.toArray()).find((v) => String(v.id) === String(queryVisitId));
+          if (matchedVisit) {
+            setNotes(`Linked to clinical field visit #${matchedVisit.id}`);
+            const firstPat = matchedVisit.cases?.[0]?.patientId || (matchedVisit as any).patientId || queryPatientId;
+            let visitPatient: Patient | undefined;
+            if (firstPat) {
+              const numPat = typeof firstPat === 'string' && /^\d+$/.test(firstPat) ? parseInt(firstPat, 10) : Number(firstPat);
+              if (!isNaN(numPat)) {
+                setSelectedPatientId(numPat);
+                visitPatient = await db.patients.get(numPat);
+              }
+            }
+
+            const visitOwner = visitPatient ? await db.owners.get(visitPatient.ownerId) : (matchedVisit.ownerId ? await db.owners.get(Number(matchedVisit.ownerId)) : undefined);
+            const visitPatientSubtitle = visitPatient ? formatAnimalSubtitle(visitPatient) : undefined;
+
+            // Load any recorded procedures for this visit from db.visitProcedures
+            const procs = await db.visitProcedures
+              .where('visitId')
+              .equals(matchedVisit.id as any)
+              .toArray();
+
+            // Load any medicine usage recorded for this visit from db.visitMedicineUsages
+            const usages = await db.visitMedicineUsages
+              .where('visitId')
+              .equals(matchedVisit.id as any)
+              .toArray();
+
+            const draftedFromVisit: ItemDraft[] = [];
+
+            // Map procedures to draft invoice line items (Stage 5)
+            for (const [i, p] of procs.entries()) {
+              draftedFromVisit.push({
+                tempId: `proc_${i}_${Date.now()}`,
+                category: 'Procedure Fee',
+                description: p.procedureName || 'Clinical Procedure',
+                quantity: 1,
+                unit: 'Per procedure',
+                unitPricePaisa: Math.round((p.standardFee || 0) * 100),
+                discountAmtPaisa: 0,
+                rateControlled: false,
+                visitId: matchedVisit.id,
+                procedureId: p.id,
+                patientId: p.patientId ? Number(p.patientId) : visitPatient?.id,
+                patientName: p.patientName || visitPatient?.name,
+                patientSubtitle: visitPatientSubtitle,
+                ownerId: visitOwner?.id,
+                ownerName: visitOwner?.name,
+              });
+            }
+
+            // Map medicine usages to draft invoice line items (Stage 6)
+            for (const [i, u] of usages.entries()) {
+              draftedFromVisit.push({
+                tempId: `usage_${i}_${Date.now()}`,
+                category: 'Prescription Medicine',
+                description: u.medicineName,
+                quantity: u.quantityUsed || 1,
+                unit: u.unit || 'units',
+                unitPricePaisa: 0,
+                discountAmtPaisa: 0,
+                rateControlled: false,
+                visitId: matchedVisit.id,
+                patientId: u.patientId ? Number(u.patientId) : visitPatient?.id,
+                patientName: u.patientName || visitPatient?.name,
+                patientSubtitle: visitPatientSubtitle,
+                ownerId: visitOwner?.id,
+                ownerName: visitOwner?.name,
+              });
+            }
+
+            // Default consultation fee if no items recorded yet
+            if (draftedFromVisit.length === 0) {
+              draftedFromVisit.push({
+                tempId: `visit_consult_${Date.now()}`,
+                category: 'Consultation Fee',
+                description: `Field Consultation - ${matchedVisit.cases?.[0]?.chiefComplaint || 'Clinical Visit'}`,
+                quantity: 1,
+                unit: 'Per visit',
+                unitPricePaisa: 50000, // ₹500
+                discountAmtPaisa: 0,
+                rateControlled: false,
+                visitId: matchedVisit.id,
+                patientId: visitPatient?.id,
+                patientName: visitPatient?.name,
+                patientSubtitle: visitPatientSubtitle,
+                ownerId: visitOwner?.id,
+                ownerName: visitOwner?.name,
+              });
+            }
+
+            setItems(draftedFromVisit);
+          }
         } else if (queryPatientId) {
           setSelectedPatientId(parseInt(queryPatientId, 10));
         }
@@ -294,7 +397,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     }
 
     void loadData();
-  }, [mode, id, queryRxId, queryPatientId]);
+  }, [mode, id, queryRxId, queryVisitId, queryPatientId]);
 
   // Selected Patient & Owner
   const selectedPatient = useMemo(() => {
@@ -794,6 +897,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           ownerId,
           prescriptionId: primaryPrescriptionId,
           prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
+          visitId: currentVisitId,
           invoiceDate: new Date(invoiceDate),
           discountTotal: doctorDiscountPaisa,
           taxTotal: 0,
@@ -815,6 +919,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           practitionerId: practitioner.id,
           prescriptionId: primaryPrescriptionId,
           prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
+          visitId: currentVisitId,
           invoiceDate: new Date(invoiceDate),
           discountTotal: doctorDiscountPaisa,
           taxTotal: 0,
@@ -854,6 +959,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           prescriptionId: item.prescriptionId,
           prescriptionNumber: item.prescriptionNumber,
           prescriptionDate: item.prescriptionDate,
+          visitId: item.visitId || currentVisitId,
+          visitCaseId: item.visitCaseId,
+          procedureId: item.procedureId,
           patientId: item.patientId,
           patientName: item.patientName,
           patientSubtitle: item.patientSubtitle,

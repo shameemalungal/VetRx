@@ -41,8 +41,10 @@ export interface Organisation {
 
 export interface Owner {
   id?: number;
+  serverId?: string;
   name: string;
   phone: string;
+  alternatePhones?: string[];
   email?: string;
   address?: string;
   notes?: string;
@@ -55,7 +57,9 @@ export type Sex = 'Male' | 'Female' | 'Male (Intact)' | 'Female (Intact)' | 'Unk
 
 export interface Patient {
   id?: number;
+  serverId?: string;
   ownerId: number;
+  serverOwnerId?: string;
   name: string;
   species: Species;
   breed?: string;
@@ -360,6 +364,7 @@ export interface Invoice {
   practitionerId: number;
   prescriptionId?: number;
   prescriptionIds?: number[];
+  visitId?: number | string;
   invoiceDate: Date;
   notes?: string;
   discountTotal: number;   // integer paisa
@@ -393,10 +398,13 @@ export interface InvoiceItem {
   govOrderDate?: string;    // e.g. "13-12-2023"
   rateControlled?: boolean; // locks rate from alteration during invoice creation
 
-  // Multi-prescription source metadata snapshot:
+  // Multi-prescription & visit procedure source metadata snapshot:
   prescriptionId?: number;
   prescriptionNumber?: string;
   prescriptionDate?: Date | string;
+  visitId?: number | string;
+  visitCaseId?: number | string;
+  procedureId?: number | string;
   patientId?: number;
   patientName?: string;
   patientSubtitle?: string;

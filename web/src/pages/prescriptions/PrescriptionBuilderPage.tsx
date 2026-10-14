@@ -1556,46 +1556,59 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   // ── Auto-link patient from visit if navigated with ?visitId= ─────
   const visitPatientLinkedRef = useRef(false);
   useEffect(() => {
-    if (visitIdParam && !selectedPatientId && allPatients && allPatients.length > 0 && !visitPatientLinkedRef.current) {
+    if (visitIdParam && !visitPatientLinkedRef.current && allPatients && allPatients.length > 0) {
       void (async () => {
         try {
           const v = await cvpService.getVisitById(visitIdParam);
-          if (v?.cases && v.cases.length > 0) {
-            const firstCase = v.cases[0];
-            if (firstCase.patientId) {
-              const matched = allPatients.find((p) => String(p.id) === String(firstCase.patientId));
-              if (matched?.id) {
-                visitPatientLinkedRef.current = true;
-                setSelectedPatientId(matched.id);
-                if (firstCase.chiefComplaint && !symptoms) {
-                  setSymptoms(firstCase.chiefComplaint);
+          if (v) {
+            const targetPatientId = preselectedPatientId || selectedPatientId;
+            let matchedCase = null;
+            if (visitCaseIdParam) {
+              matchedCase = v.cases?.find((c: any) => String(c.id) === String(visitCaseIdParam));
+            }
+            if (!matchedCase && targetPatientId) {
+              matchedCase = v.cases?.find((c: any) => String(c.patientId) === String(targetPatientId));
+            }
+            if (!matchedCase && v.cases && v.cases.length > 0) {
+              matchedCase = v.cases[0];
+            }
+
+            if (!selectedPatientId && matchedCase) {
+              if (matchedCase.patientId) {
+                const matched = allPatients.find((p) => String(p.id) === String(matchedCase.patientId));
+                if (matched?.id) {
+                  setSelectedPatientId(matched.id);
                 }
-                if (firstCase.tentativeDiagnosis && !diagnosis) {
-                  setDiagnosis(firstCase.tentativeDiagnosis);
-                }
-              }
-            } else if (firstCase.species) {
-              const matched = allPatients.find(
-                (p) => p.species.toLowerCase() === firstCase.species?.toLowerCase()
-              );
-              if (matched?.id) {
-                visitPatientLinkedRef.current = true;
-                setSelectedPatientId(matched.id);
-                if (firstCase.chiefComplaint && !symptoms) {
-                  setSymptoms(firstCase.chiefComplaint);
-                }
-                if (firstCase.tentativeDiagnosis && !diagnosis) {
-                  setDiagnosis(firstCase.tentativeDiagnosis);
+              } else if (matchedCase.species) {
+                const matched = allPatients.find(
+                  (p) => p.species.toLowerCase() === matchedCase.species?.toLowerCase()
+                );
+                if (matched?.id) {
+                  setSelectedPatientId(matched.id);
                 }
               }
             }
+
+            // Carry clinical symptoms/findings into prescription Symptoms field (Stage 4)
+            const symptomText = matchedCase?.chiefComplaint || (v as any)?.symptoms;
+            if (symptomText && !symptoms) {
+              setSymptoms(symptomText);
+            }
+
+            // Carry confirmed diagnosis / tentative assessment into prescription Diagnosis field (Stage 4)
+            const diagnosisText = matchedCase?.tentativeDiagnosis || (v as any)?.tentativeAssessment;
+            if (diagnosisText && !diagnosis) {
+              setDiagnosis(diagnosisText);
+            }
+
+            visitPatientLinkedRef.current = true;
           }
         } catch (err) {
           console.warn('[VetRx] Could not auto-resolve patient from visit:', err);
         }
       })();
     }
-  }, [visitIdParam, selectedPatientId, allPatients]);
+  }, [visitIdParam, visitCaseIdParam, preselectedPatientId, selectedPatientId, allPatients, symptoms, diagnosis]);
 
   // ── Eligible Clinicians Loader ────────────────────────────────
   const loadEligibleClinicians = async () => {
@@ -1800,7 +1813,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       const ownerId = selectedPatient?.ownerId;
       if (!ownerId) {
         const msg = 'The selected patient has no valid owner association. Please check the patient record in Patients.';
-        console.error('[VetRx] Generate failed:', msg, selectedPatient);
+        console.error('[VetRx] Generate failed: [ERR_PATIENT_MISSING_OWNER]', msg, { patientId: selectedPatient?.id });
         setErrorMsg(msg);
         setGenerationError(msg);
         setShowGenerationErrorModal(true);

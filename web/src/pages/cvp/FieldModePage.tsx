@@ -202,10 +202,10 @@ export const FieldModePage: React.FC = () => {
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : 'bg-amber-50 text-amber-800 border-amber-200'
             }`}
-            title={isOnline ? 'Online — Live Cloud Sync' : 'Offline — Queued in Local Dexie'}
+            title={isOnline ? 'Online — Authoritative Server Sync' : 'Offline — Connection to server required to commit records'}
           >
             {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-            <span className="hidden xs:inline">{isOnline ? 'Synced' : 'Offline Mode'}</span>
+            <span className="hidden xs:inline">{isOnline ? 'Connected' : 'Offline'}</span>
           </div>
 
           <button

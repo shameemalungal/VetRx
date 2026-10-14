@@ -10,6 +10,7 @@ import type {
   Medicine,
   TreatmentPackage,
   Prescription,
+  Invoice,
 } from '../../types';
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ import {
   Package,
   FileText,
   Sparkles,
+  Receipt,
 } from 'lucide-react';
 import { CreateFollowUpModal } from '../../components/cvp/CreateFollowUpModal';
 import type { FollowUp } from '../../types/cvp';
@@ -96,6 +98,13 @@ export const VisitDetailPage: React.FC = () => {
     if (!id) return [];
     const all = (await db.followUps.toArray()) as FollowUp[];
     return all.filter((f) => String(f.originVisitId) === String(id));
+  }, [id]) || [];
+
+  // Load linked invoices originating from this visit (Stage 5)
+  const linkedInvoices: Invoice[] = useLiveQuery(async () => {
+    if (!id) return [];
+    const allInv = await db.invoices.toArray();
+    return allInv.filter((inv) => String((inv as any).visitId) === String(id));
   }, [id]) || [];
 
   // Multiple Field Kits & Vehicles support (Phase 7)
@@ -677,6 +686,22 @@ export const VisitDetailPage: React.FC = () => {
                     </div>
                     <p className="text-xs text-slate-600 mt-1 font-medium">{c.chiefComplaint}</p>
                     {c.notes && <p className="text-[11px] text-slate-500 italic mt-0.5">{c.notes}</p>}
+
+                    <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const ownerId = visit?.ownerId || '';
+                          const patId = c.patientId || '';
+                          navigate(`/prescriptions/new?visitId=${visit?.id}&ownerId=${ownerId}&patientId=${patId}&visitCaseId=${c.id || ''}`);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-[11px] border border-teal-200 transition-colors shadow-sm"
+                        title="Create separate ePrescription for this animal"
+                      >
+                        <Plus className="w-3 h-3 text-teal-700" />
+                        <span>Prescribe for {c.patientName || c.species || `Animal #${idx + 1}`}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -949,10 +974,17 @@ export const VisitDetailPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/invoices/new')}
-                className="w-full py-2 px-3 rounded-xl bg-white hover:bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center justify-between"
+                onClick={() => {
+                  const firstPatId = visit?.cases?.[0]?.patientId || (visit as any)?.patientId || '';
+                  const ownerId = visit?.ownerId || '';
+                  navigate(`/invoices/new?visitId=${visit?.id}&ownerId=${ownerId}&patientId=${firstPatId}`);
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-white hover:bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center justify-between shadow-sm"
               >
-                <span>Generate Invoice</span>
+                <span className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-teal-600" />
+                  <span>{linkedInvoices.length > 0 ? 'Create Additional Invoice' : 'Generate Invoice'}</span>
+                </span>
                 <ChevronRight className="w-4 h-4 text-teal-600" />
               </button>
               <button
@@ -967,6 +999,30 @@ export const VisitDetailPage: React.FC = () => {
                 <ChevronRight className="w-4 h-4 text-teal-600" />
               </button>
             </div>
+
+            {/* Linked Invoices (Stage 5) */}
+            {linkedInvoices.length > 0 && (
+              <div className="pt-2 border-t border-teal-200/60 space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
+                  Linked Invoices ({linkedInvoices.length})
+                </div>
+                {linkedInvoices.map((inv) => (
+                  <div
+                    key={inv.id}
+                    onClick={() => navigate(`/invoices/${inv.id}`)}
+                    className="p-2.5 rounded-xl bg-white/80 border border-teal-200 flex items-center justify-between text-xs cursor-pointer hover:bg-white transition-all shadow-sm"
+                  >
+                    <div>
+                      <div className="font-mono font-bold text-slate-900">{inv.invoiceNumber}</div>
+                      <div className="text-[10px] text-slate-500">
+                        ₹{((inv.grandTotal || 0) / 100).toFixed(2)} • {inv.status}
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Linked Follow-ups */}
             {linkedFollowUps.length > 0 && (

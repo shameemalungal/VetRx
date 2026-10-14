@@ -40,6 +40,9 @@ import {
   Clipboard,
   Smartphone,
   ShieldCheck,
+  Link2,
+  Search,
+  X,
 } from 'lucide-react';
 import './Cvp.css';
 
@@ -75,6 +78,14 @@ export const CallRegistrationPage: React.FC = () => {
   // Modals state
   const [isNewOwnerOpen, setIsNewOwnerOpen] = useState(false);
   const [isNewPatientOpen, setIsNewPatientOpen] = useState(false);
+
+  // Link alternate phone state (Stage 1.3)
+  const [isLinkPhoneModalOpen, setIsLinkPhoneModalOpen] = useState(false);
+  const [linkSearchQuery, setLinkSearchQuery] = useState('');
+  const [linkSearchResults, setLinkSearchResults] = useState<Array<{ owner: any; patients: any[]; locations: OwnerLocation[] }>>([]);
+  const [linkSelectedMatch, setLinkSelectedMatch] = useState<{ owner: any; patients: any[]; locations: OwnerLocation[] } | null>(null);
+  const [isLinkingPhone, setIsLinkingPhone] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   // Android Call Capture & Intake Origin state
   const [callSource, setCallSource] = useState<'MANUAL' | 'ANDROID_SHARE' | 'CLIPBOARD_IMPORT'>('MANUAL');
@@ -193,6 +204,25 @@ export const CallRegistrationPage: React.FC = () => {
     const timer = setTimeout(matchOwners, 300);
     return () => clearTimeout(timer);
   }, [callerPhone]);
+
+  // Search clients for linking alternate phone (Stage 1.3)
+  useEffect(() => {
+    if (!isLinkPhoneModalOpen) return;
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const query = linkSearchQuery.trim();
+        const results = await cvpService.findMatchingOwners(query || callerPhone || 'a');
+        if (active) setLinkSearchResults(results);
+      } catch (err) {
+        console.warn('Error searching owners for phone linking:', err);
+      }
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [isLinkPhoneModalOpen, linkSearchQuery, callerPhone]);
 
   // Load patients and locations when owner selected
   const handleSelectOwner = (matchItem: { owner: any; patients: any[]; locations: OwnerLocation[] }) => {
@@ -814,14 +844,31 @@ export const CallRegistrationPage: React.FC = () => {
 
               {/* Actions for New Owner or Temp Name */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsNewOwnerOpen(true)}
-                  className="btn-cvp-secondary w-full sm:w-auto"
-                >
-                  <UserPlus className="w-4 h-4 text-teal-700" />
-                  <span>+ Quick New Owner</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsNewOwnerOpen(true)}
+                    className="btn-cvp-secondary w-full sm:w-auto"
+                  >
+                    <UserPlus className="w-4 h-4 text-teal-700" />
+                    <span>+ Quick New Owner</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLinkSearchQuery('');
+                      setLinkSelectedMatch(null);
+                      setLinkError(null);
+                      setIsLinkPhoneModalOpen(true);
+                    }}
+                    className="btn-cvp-secondary w-full sm:w-auto text-teal-700 border-teal-300 hover:bg-teal-50"
+                    title="Link this phone number as an alternate contact to an existing client"
+                  >
+                    <Link2 className="w-4 h-4 text-teal-700" />
+                    <span>Link to Existing Client</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
@@ -1282,6 +1329,136 @@ export const CallRegistrationPage: React.FC = () => {
             setSpecies(patient.species);
           }}
         />
+      )}
+
+      {/* Link Alternate Phone Modal (Stage 1.3) */}
+      {isLinkPhoneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 bg-teal-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-teal-300" />
+                <h3 className="text-sm font-black uppercase tracking-wider">Link Phone to Existing Client</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLinkPhoneModalOpen(false);
+                  setLinkError(null);
+                  setLinkSelectedMatch(null);
+                }}
+                className="p-1 rounded-full text-teal-200 hover:text-white hover:bg-teal-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 overflow-y-auto">
+              <p className="text-xs text-slate-600">
+                Link caller number <strong className="text-slate-900 font-mono">{callerPhone || '(No number entered)'}</strong> as an alternate phone to an existing registered client.
+              </p>
+
+              {linkError && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{linkError}</span>
+                </div>
+              )}
+
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={linkSearchQuery}
+                  onChange={(e) => setLinkSearchQuery(e.target.value)}
+                  placeholder="Search client by name, phone or village..."
+                  className="cvp-form-control text-xs"
+                  style={{ paddingLeft: '36px' }}
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {linkSearchResults.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    No clients found. Type a name or search term above.
+                  </div>
+                ) : (
+                  linkSearchResults.map((m) => {
+                    const isSelected = linkSelectedMatch?.owner.id === m.owner.id;
+                    return (
+                      <div
+                        key={m.owner.id}
+                        onClick={() => {
+                          setLinkSelectedMatch(m);
+                          setLinkError(null);
+                        }}
+                        className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-teal-50 border-teal-500 shadow-sm ring-2 ring-teal-500/20'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900">{m.owner.name}</span>
+                          <span className="font-mono text-[11px] text-slate-500">{m.owner.phone}</span>
+                        </div>
+                        {m.owner.address && (
+                          <div className="text-[11px] text-slate-500 mt-0.5 truncate">{m.owner.address}</div>
+                        )}
+                        <div className="text-[10px] text-teal-700 font-medium mt-1">
+                          {m.patients.length} animal(s): {m.patients.map((p: any) => p.name || p.species).join(', ') || 'None'}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLinkPhoneModalOpen(false);
+                  setLinkError(null);
+                  setLinkSelectedMatch(null);
+                }}
+                className="btn-cvp-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!linkSelectedMatch || !callerPhone.trim() || isLinkingPhone}
+                onClick={async () => {
+                  if (!linkSelectedMatch || !callerPhone.trim()) return;
+                  setIsLinkingPhone(true);
+                  setLinkError(null);
+                  try {
+                    const res = await cvpService.linkAlternatePhoneToOwner(linkSelectedMatch.owner.id, callerPhone);
+                    if (res.success) {
+                      handleSelectOwner({
+                        owner: res.owner || linkSelectedMatch.owner,
+                        patients: linkSelectedMatch.patients,
+                        locations: linkSelectedMatch.locations,
+                      });
+                      setIsLinkPhoneModalOpen(false);
+                      setPasteNotification(`Linked ${callerPhone} to ${linkSelectedMatch.owner.name}`);
+                    }
+                  } catch (err: any) {
+                    setLinkError(err.message || 'Failed to link phone');
+                  } finally {
+                    setIsLinkingPhone(false);
+                  }
+                }}
+                className="btn-cvp-primary"
+              >
+                {isLinkingPhone ? 'Linking...' : 'Confirm Link & Attach'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
