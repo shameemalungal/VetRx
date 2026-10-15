@@ -15,6 +15,7 @@ import { SubscriptionService } from './subscription.service.js';
 import { EntitlementService } from './entitlement.service.js';
 import { PaymentService } from './payment.service.js';
 import { AUTHORITATIVE_PLANS } from './plan.config.js';
+import { env } from '../config/env.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 export const commercialRouter = Router();
@@ -143,29 +144,39 @@ commercialRouter.get(
 /**
  * POST /api/commercial/entitlements/inventory/dev-toggle
  * Safe development/testing mechanism to enable or disable the Inventory add-on entitlement.
+ * STRICTLY unavailable in production (fails closed with 404), and requires SUBSCRIPTION_MANAGE role.
  */
-commercialRouter.post(
-  '/entitlements/inventory/dev-toggle',
-  async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const practiceId = getPracticeId(req);
-      const schema = z.object({
-        enabled: z.boolean(),
-      });
-      const { enabled } = schema.parse(req.body);
-      EntitlementService.setMockInventoryAddon(practiceId, enabled);
+if (env.NODE_ENV !== 'production') {
+  commercialRouter.post(
+    '/entitlements/inventory/dev-toggle',
+    requirePracticePermission(PERMISSIONS.SUBSCRIPTION_MANAGE),
+    async (req: AuthenticatedRequest, res, next) => {
+      try {
+        // Fail-closed server-side environment verification
+        const nodeEnv = process.env.NODE_ENV;
+        if (!nodeEnv || nodeEnv === 'production' || (nodeEnv !== 'development' && nodeEnv !== 'test')) {
+          throw new AppError(404, 'NOT_FOUND', 'This endpoint is strictly disabled in production environments.');
+        }
 
-      res.status(200).json({
-        practiceId,
-        hasInventoryEntitlement: enabled,
-        entitled: enabled,
-        message: `Inventory entitlement ${enabled ? 'enabled' : 'disabled'} for development/testing.`,
-      });
-    } catch (err) {
-      next(err);
+        const practiceId = getPracticeId(req);
+        const schema = z.object({
+          enabled: z.boolean(),
+        });
+        const { enabled } = schema.parse(req.body);
+        EntitlementService.setMockInventoryAddon(practiceId, enabled);
+
+        res.status(200).json({
+          practiceId,
+          hasInventoryEntitlement: enabled,
+          entitled: enabled,
+          message: `Inventory entitlement ${enabled ? 'enabled' : 'disabled'} for development/testing.`,
+        });
+      } catch (err) {
+        next(err);
+      }
     }
-  }
-);
+  );
+}
 
 /**
  * GET /api/commercial/usage

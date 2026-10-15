@@ -41,6 +41,49 @@ export function requirePracticePermission(permission: Permission | string) {
 }
 
 /**
+ * Middleware factory requiring at least one of the specified practice-level permissions.
+ */
+export function requirePracticeAnyPermission(...permissions: (Permission | string)[]) {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+      }
+      if (!req.practice || !req.membership) {
+        throw new AppError(403, 'NO_ACTIVE_PRACTICE', 'No active practice context.');
+      }
+
+      let authorized = false;
+      for (const perm of permissions) {
+        if (await AuthorizationService.hasPermission(req.user.id, req.practice.id, perm)) {
+          authorized = true;
+          break;
+        }
+      }
+
+      if (!authorized) {
+        throw new AppError(
+          403,
+          'INSUFFICIENT_PERMISSION',
+          `Action requires one of: ${permissions.join(', ')}`
+        );
+      }
+
+      if (!req.permissions) {
+        req.permissions = await AuthorizationService.getEffectivePermissions(
+          req.user.id,
+          req.practice.id
+        );
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
  * Middleware requiring platform super admin authorization.
  * Operates independently from practice tenant membership.
  */

@@ -28,10 +28,16 @@ export class EntitlementService {
   }
 
   static setMockInventoryAddon(practiceId: string, enabled: boolean): void {
+    if (process.env.NODE_ENV === 'production') {
+      return; // Strictly disabled in production
+    }
     this.mockInventoryAddons.set(practiceId, enabled);
   }
 
   static getMockInventoryAddon(practiceId: string): boolean | undefined {
+    if (process.env.NODE_ENV === 'production') {
+      return undefined;
+    }
     return this.mockInventoryAddons.get(practiceId);
   }
 
@@ -477,8 +483,9 @@ export class EntitlementService {
    * Evaluates if inventory_management addon is enabled for practice.
    */
   static async isInventoryAddonActive(practiceId: string, sub?: any): Promise<boolean> {
-    // 1. Check in-memory mock registry (for tests and quick dev toggle)
-    if (this.mockInventoryAddons.has(practiceId)) {
+    // 1. Check in-memory mock registry (STRICTLY disabled in production)
+    const isProd = process.env.NODE_ENV === 'production';
+    if (!isProd && this.mockInventoryAddons.has(practiceId)) {
       return Boolean(this.mockInventoryAddons.get(practiceId));
     }
 

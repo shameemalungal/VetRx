@@ -20,9 +20,11 @@ export class ClinicalService {
   static async listOwners(practiceId: string, search?: string) {
     const where: any = { practiceId };
     if (search && search.trim()) {
+      const q = search.trim();
       where.OR = [
-        { name: { contains: search.trim(), mode: 'insensitive' } },
-        { phone: { contains: search.trim() } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
+        { alternatePhones: { has: q } },
       ];
     }
     return prisma.owner.findMany({
@@ -30,6 +32,66 @@ export class ClinicalService {
       orderBy: { createdAt: 'desc' },
       include: { patients: true },
     });
+  }
+
+  static async linkAlternatePhone(id: string, practiceId: string, phone: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.OWNER_UPDATE);
+    }
+    const owner = await this.getOwnerById(id, practiceId);
+    let cleaned = phone.trim().replace(/[\s\-\(\)\.]/g, '');
+    if (cleaned.startsWith('+')) cleaned = cleaned.substring(1);
+    if (cleaned.startsWith('91') && cleaned.length === 12 && /^[6-9]/.test(cleaned.substring(2))) {
+      cleaned = cleaned.substring(2);
+    } else if (cleaned.startsWith('0') && cleaned.length === 11 && /^[6-9]/.test(cleaned.substring(1))) {
+      cleaned = cleaned.substring(1);
+    }
+
+    if (!cleaned) {
+      throw new AppError(400, 'INVALID_PHONE', 'Phone number cannot be empty.');
+    }
+
+    const existingAlts = owner.alternatePhones || [];
+    if (owner.phone === cleaned || existingAlts.includes(cleaned)) {
+      return owner; // Idempotent return
+    }
+
+    // Conflict check within this practice
+    const conflictOwner = await prisma.owner.findFirst({
+      where: {
+        practiceId,
+        id: { not: id },
+        OR: [
+          { phone: cleaned },
+          { alternatePhones: { has: cleaned } },
+        ],
+      },
+    });
+
+    if (conflictOwner) {
+      throw new AppError(409, 'PHONE_ALREADY_LINKED', `This phone number is already registered to owner "${conflictOwner.name}".`);
+    }
+
+    const updated = await prisma.owner.update({
+      where: { id },
+      data: {
+        alternatePhones: { push: cleaned },
+      },
+      include: { patients: true },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'OWNER_PHONE_LINKED',
+      resource: 'Owner',
+      resourceId: id,
+      details: {
+        ownerName: owner.name,
+        linkedPhone: cleaned,
+      },
+    });
+
+    return updated;
   }
 
   static async getOwnerById(id: string, practiceId: string) {
@@ -43,7 +105,10 @@ export class ClinicalService {
     return owner;
   }
 
-  static async createOwner(practiceId: string, data: { name: string; phone: string; email?: string | null; address?: string | null }) {
+  static async createOwner(practiceId: string, data: { name: string; phone: string; email?: string | null; address?: string | null }, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.OWNER_CREATE);
+    }
     const owner = await prisma.owner.create({
       data: {
         practiceId,
@@ -65,7 +130,10 @@ export class ClinicalService {
     return owner;
   }
 
-  static async updateOwner(id: string, practiceId: string, data: Partial<{ name: string; phone: string; email: string | null; address: string | null }>) {
+  static async updateOwner(id: string, practiceId: string, data: Partial<{ name: string; phone: string; email: string | null; address: string | null }>, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.OWNER_UPDATE);
+    }
     await this.getOwnerById(id, practiceId);
 
     const updated = await prisma.owner.update({
@@ -89,7 +157,10 @@ export class ClinicalService {
     return updated;
   }
 
-  static async deleteOwner(id: string, practiceId: string) {
+  static async deleteOwner(id: string, practiceId: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.OWNER_DELETE);
+    }
     await this.getOwnerById(id, practiceId);
 
     const deleted = await prisma.owner.delete({
@@ -150,7 +221,10 @@ export class ClinicalService {
     weightKg?: number | null;
     identification?: string | null;
     notes?: string | null;
-  }) {
+  }, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PATIENT_CREATE);
+    }
     // Verify owner belongs to same practice
     await this.getOwnerById(data.ownerId, practiceId);
 
@@ -192,7 +266,10 @@ export class ClinicalService {
     weightKg: number | null;
     identification: string | null;
     notes: string | null;
-  }>) {
+  }>, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PATIENT_UPDATE);
+    }
     await this.getPatientById(id, practiceId);
 
     const updated = await prisma.patient.update({
@@ -222,7 +299,10 @@ export class ClinicalService {
     return updated;
   }
 
-  static async deletePatient(id: string, practiceId: string) {
+  static async deletePatient(id: string, practiceId: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PATIENT_DELETE);
+    }
     await this.getPatientById(id, practiceId);
 
     const deleted = await prisma.patient.delete({
@@ -275,7 +355,10 @@ export class ClinicalService {
     strength?: string | null;
     unitPrice?: number;
     defaultDosageInstructions?: string | null;
-  }) {
+  }, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.MEDICINE_CREATE);
+    }
     const medicine = await prisma.medicine.create({
       data: {
         practiceId,
@@ -309,7 +392,10 @@ export class ClinicalService {
     unitPrice: number;
     defaultDosageInstructions: string | null;
     isActive: boolean;
-  }>) {
+  }>, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.MEDICINE_UPDATE);
+    }
     await this.getMedicineById(id, practiceId);
 
     const updated = await prisma.medicine.update({
@@ -337,7 +423,10 @@ export class ClinicalService {
     return updated;
   }
 
-  static async deleteMedicine(id: string, practiceId: string) {
+  static async deleteMedicine(id: string, practiceId: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.MEDICINE_DELETE);
+    }
     await this.getMedicineById(id, practiceId);
 
     // Soft delete / deactivate to preserve historical prescription relations
@@ -381,7 +470,10 @@ export class ClinicalService {
     description?: string | null;
     totalPrice?: number;
     itemsJson?: any;
-  }) {
+  }, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PACKAGE_CREATE);
+    }
     const pkg = await prisma.treatmentPackage.create({
       data: {
         practiceId,
@@ -409,7 +501,10 @@ export class ClinicalService {
     totalPrice: number;
     itemsJson: any;
     isActive: boolean;
-  }>) {
+  }>, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PACKAGE_UPDATE);
+    }
     await this.getPackageById(id, practiceId);
 
     const updated = await prisma.treatmentPackage.update({
@@ -434,7 +529,10 @@ export class ClinicalService {
     return updated;
   }
 
-  static async deletePackage(id: string, practiceId: string) {
+  static async deletePackage(id: string, practiceId: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PACKAGE_DELETE);
+    }
     await this.getPackageById(id, practiceId);
 
     const deleted = await prisma.treatmentPackage.delete({
@@ -1492,7 +1590,10 @@ export class ClinicalService {
       quantity?: number;
       totalPrice: number;
     }>;
-  }) {
+  }, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.INVOICE_CREATE);
+    }
     if (data.patientId) {
       await this.getPatientById(data.patientId, practiceId);
     }
@@ -1557,7 +1658,10 @@ export class ClinicalService {
     taxAmount: number;
     discountAmount: number;
     totalAmount: number;
-  }>) {
+  }>, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.INVOICE_UPDATE);
+    }
     const current = await this.getInvoiceById(id, practiceId);
 
     // If status changed to Cancelled, reverse stock
@@ -1611,7 +1715,10 @@ export class ClinicalService {
     return updated;
   }
 
-  static async deleteInvoice(id: string, practiceId: string) {
+  static async deleteInvoice(id: string, practiceId: string, actorUserId?: string) {
+    if (actorUserId) {
+      await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.INVOICE_DELETE);
+    }
     await this.getInvoiceById(id, practiceId);
 
     const deleted = await prisma.invoice.delete({

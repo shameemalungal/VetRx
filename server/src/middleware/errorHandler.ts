@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { env } from '../config/env.js';
-import { logger } from '../lib/logger.js';
+import { logger, sanitizeUrl } from '../lib/logger.js';
 import type { ApiErrorResponse, AuthenticatedRequest } from '../types/index.js';
 
 export class AppError extends Error {
@@ -29,6 +29,7 @@ export function errorHandler(
 ): void {
   const authReq = req as AuthenticatedRequest;
   const requestId = authReq.id;
+  const sanitizedUrl = sanitizeUrl(req.originalUrl || req.url);
 
   // 1. Handled App Errors
   if (err instanceof AppError) {
@@ -36,7 +37,7 @@ export function errorHandler(
       code: err.code,
       status: err.statusCode,
       requestId,
-      url: req.originalUrl,
+      url: sanitizedUrl,
     });
 
     res.status(err.statusCode).json({
@@ -57,7 +58,7 @@ export function errorHandler(
       message: i.message,
     }));
 
-    logger.warn('Validation error', { details: formattedDetails, requestId, url: req.originalUrl });
+    logger.warn('Validation error', { details: formattedDetails, requestId, url: sanitizedUrl });
 
     res.status(400).json({
       error: {
@@ -107,7 +108,7 @@ export function errorHandler(
     message: errorObj.message,
     stack: env.NODE_ENV !== 'production' ? errorObj.stack : undefined,
     requestId,
-    url: req.originalUrl,
+    url: sanitizedUrl,
   });
 
   const response: ApiErrorResponse = {

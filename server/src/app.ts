@@ -4,7 +4,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import { env } from './config/env.js';
-import { logger } from './lib/logger.js';
+import { logger, sanitizeUrl } from './lib/logger.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, AppError } from './middleware/errorHandler.js';
 import { authRouter } from './auth/auth.controller.js';
@@ -37,15 +37,30 @@ export function createApp() {
   // Security Headers
   app.use(
     helmet({
-      contentSecurityPolicy: env.NODE_ENV === 'production',
+      contentSecurityPolicy:
+        env.NODE_ENV === 'production'
+          ? {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+                fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+                imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+                connectSrc: ["'self'", 'https://app.vetrx.brightbase.in'],
+                objectSrc: ["'none'"],
+                baseUri: ["'self'"],
+                frameAncestors: ["'none'"],
+              },
+            }
+          : false,
       crossOriginEmbedderPolicy: false,
+      referrerPolicy: { policy: 'no-referrer' },
     })
   );
 
-  // CORS Configuration (Strict Origins Only)
+  // CORS Configuration (Strict Trusted Application Origins Only)
   const defaultOrigins = [
     'https://app.vetrx.brightbase.in',
-    'https://vetrx.brightbase.in',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
@@ -85,10 +100,11 @@ export function createApp() {
     const start = Date.now();
     res.on('finish', () => {
       const duration = Date.now() - start;
-      logger.info(`${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`, {
+      const sanitizedPath = sanitizeUrl(req.originalUrl || req.url);
+      logger.info(`${req.method} ${sanitizedPath} -> ${res.statusCode} (${duration}ms)`, {
         requestId: authReq.id,
         method: req.method,
-        path: req.originalUrl,
+        path: sanitizedPath,
         statusCode: res.statusCode,
         durationMs: duration,
         ip: req.ip,

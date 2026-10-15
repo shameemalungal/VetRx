@@ -317,6 +317,7 @@ model Owner {
   practice   Practice  @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   name       String
   phone      String
+  alternatePhones String[]  @default([])
   email      String?
   address    String?
   createdAt  DateTime  @default(now())

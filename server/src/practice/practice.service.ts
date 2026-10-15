@@ -1,13 +1,36 @@
 import { prisma } from '../lib/prisma.js';
 import { AuditService } from '../lib/audit.service.js';
+import { AuthorizationService } from '../auth/authorization.service.js';
+import { PERMISSIONS } from '../auth/permissions.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { SafePracticeDTO, SafePracticeSettingsDTO } from '../types/index.js';
 
 export class PracticeService {
+  private static mockPractices: Map<string, any> = new Map();
+  private static mockSettings: Map<string, SafePracticeSettingsDTO> = new Map();
+
+  static setMockPractice(practice: any): void {
+    this.mockPractices.set(practice.id, practice);
+  }
+
+  static setMockSettings(settings: SafePracticeSettingsDTO): void {
+    this.mockSettings.set(settings.practiceId, settings);
+  }
+
+  static clearMocks(): void {
+    this.mockPractices.clear();
+    this.mockSettings.clear();
+  }
+
   /**
    * Retrieves practice details for the active practice.
    */
   static async getPractice(practiceId: string): Promise<SafePracticeDTO> {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const p = this.mockPractices.get(practiceId);
+      if (p) return p;
+    }
+
     const practice = await prisma.practice.findUnique({
       where: { id: practiceId },
     });
@@ -27,31 +50,56 @@ export class PracticeService {
   }
 
   /**
-   * Updates practice details (requires OWNER role).
+   * Updates practice details (requires PRACTICE_SETTINGS_MANAGE permission).
    */
   static async updatePractice(
     practiceId: string,
     userId: string,
     updates: { name?: string; slug?: string }
   ): Promise<SafePracticeDTO> {
-    const practice = await prisma.practice.findUnique({
-      where: { id: practiceId },
-    });
+    // 1. Authoritative permission check
+    await AuthorizationService.requirePermission(userId, practiceId, PERMISSIONS.PRACTICE_SETTINGS_MANAGE);
 
-    if (!practice) {
-      throw new AppError(404, 'PRACTICE_NOT_FOUND', 'Practice not found.');
+    let updated: any;
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const practice = this.mockPractices.get(practiceId) || {
+        id: practiceId,
+        name: 'Mock Practice',
+        slug: 'mock-practice',
+        ownerUserId: userId,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      if (updates.name) practice.name = updates.name.trim();
+      if (updates.slug) practice.slug = updates.slug.trim().toLowerCase();
+      this.mockPractices.set(practiceId, practice);
+      updated = practice;
+    } else {
+      const practice = await prisma.practice.findUnique({
+        where: { id: practiceId },
+      });
+
+      if (!practice) {
+        throw new AppError(404, 'PRACTICE_NOT_FOUND', 'Practice not found.');
+      }
+
+      updated = await prisma.practice.update({
+        where: { id: practiceId },
+        data: {
+          name: updates.name ? updates.name.trim() : undefined,
+          slug: updates.slug ? updates.slug.trim().toLowerCase() : undefined,
+        },
+      });
     }
 
-    if (practice.ownerUserId !== userId) {
-      throw new AppError(403, 'FORBIDDEN', 'Only the practice owner can update practice details.');
-    }
-
-    const updated = await prisma.practice.update({
-      where: { id: practiceId },
-      data: {
-        name: updates.name ? updates.name.trim() : undefined,
-        slug: updates.slug ? updates.slug.trim().toLowerCase() : undefined,
-      },
+    // 2. Audit Trail
+    void AuditService.record({
+      practiceId,
+      userId,
+      action: 'PRACTICE_PROFILE_UPDATED',
+      resource: 'Practice',
+      resourceId: updated.id,
+      details: { modifiedFields: Object.keys(updates) },
     });
 
     return {
@@ -60,7 +108,7 @@ export class PracticeService {
       slug: updated.slug,
       ownerUserId: updated.ownerUserId,
       isActive: updated.isActive,
-      createdAt: updated.createdAt.toISOString(),
+      createdAt: typeof updated.createdAt === 'string' ? updated.createdAt : updated.createdAt.toISOString(),
     };
   }
 
@@ -68,6 +116,30 @@ export class PracticeService {
    * Retrieves settings for the active practice.
    */
   static async getSettings(practiceId: string): Promise<SafePracticeSettingsDTO> {
+    if (process.env.VETRX_FAST_TEST === '1') {
+      let s = this.mockSettings.get(practiceId);
+      if (!s) {
+        s = {
+          id: `settings-${practiceId}`,
+          practiceId,
+          clinicName: 'VetRx Practice',
+          address: null,
+          phone: null,
+          email: null,
+          registrationNumber: null,
+          doctorName: null,
+          doctorRegistrationNumber: null,
+          doctorPhotoUrl: null,
+          doctorSignatureUrl: null,
+          clinicLogoUrl: null,
+          ownerSpecialInstructionEnabled: false,
+          mykgvoaMemberId: null,
+        };
+        this.mockSettings.set(practiceId, s);
+      }
+      return s;
+    }
+
     let settings = await prisma.practiceSettings.findUnique({
       where: { practiceId },
     });
@@ -99,45 +171,66 @@ export class PracticeService {
 
   /**
    * Updates practice settings (clinic name, doctor profile, address, etc.)
+   * Requires PRACTICE_SETTINGS_MANAGE permission at the service boundary.
    */
   static async updateSettings(
     practiceId: string,
+    actorUserId: string,
     updates: Partial<Omit<SafePracticeSettingsDTO, 'id' | 'practiceId'>>
   ): Promise<SafePracticeSettingsDTO> {
-    const updated = await prisma.practiceSettings.upsert({
-      where: { practiceId },
-      create: {
-        practiceId,
-        ...updates,
-      },
-      update: {
-        ...updates,
-      },
-    });
+    // 1. Authoritative permission check
+    await AuthorizationService.requirePermission(actorUserId, practiceId, PERMISSIONS.PRACTICE_SETTINGS_MANAGE);
 
+    let result: SafePracticeSettingsDTO;
+
+    if (process.env.VETRX_FAST_TEST === '1') {
+      const existing = await this.getSettings(practiceId);
+      const updated: SafePracticeSettingsDTO = {
+        ...existing,
+        ...updates,
+      };
+      this.mockSettings.set(practiceId, updated);
+      result = updated;
+    } else {
+      const updated = await prisma.practiceSettings.upsert({
+        where: { practiceId },
+        create: {
+          practiceId,
+          ...updates,
+        },
+        update: {
+          ...updates,
+        },
+      });
+
+      result = {
+        id: updated.id,
+        practiceId: updated.practiceId,
+        clinicName: updated.clinicName,
+        address: updated.address,
+        phone: updated.phone,
+        email: updated.email,
+        registrationNumber: updated.registrationNumber,
+        doctorName: updated.doctorName,
+        doctorRegistrationNumber: updated.doctorRegistrationNumber,
+        doctorPhotoUrl: updated.doctorPhotoUrl,
+        doctorSignatureUrl: updated.doctorSignatureUrl,
+        clinicLogoUrl: updated.clinicLogoUrl,
+        ownerSpecialInstructionEnabled: updated.ownerSpecialInstructionEnabled,
+        mykgvoaMemberId: updated.mykgvoaMemberId,
+      };
+    }
+
+    // 2. Audit Trail recording actor, practice, and modified field names
     void AuditService.record({
       practiceId,
+      userId: actorUserId,
       action: 'PRACTICE_SETTINGS_UPDATED',
       resource: 'PracticeSettings',
-      resourceId: updated.id,
-      details: updates,
+      resourceId: result.id,
+      details: { modifiedFields: Object.keys(updates) },
     });
 
-    return {
-      id: updated.id,
-      practiceId: updated.practiceId,
-      clinicName: updated.clinicName,
-      address: updated.address,
-      phone: updated.phone,
-      email: updated.email,
-      registrationNumber: updated.registrationNumber,
-      doctorName: updated.doctorName,
-      doctorRegistrationNumber: updated.doctorRegistrationNumber,
-      doctorPhotoUrl: updated.doctorPhotoUrl,
-      doctorSignatureUrl: updated.doctorSignatureUrl,
-      clinicLogoUrl: updated.clinicLogoUrl,
-      ownerSpecialInstructionEnabled: updated.ownerSpecialInstructionEnabled,
-      mykgvoaMemberId: updated.mykgvoaMemberId,
-    };
+    return result;
   }
 }

@@ -2,7 +2,7 @@ import { env } from '../config/env.js';
 
 type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
-const SENSITIVE_KEYS = new Set([
+export const SENSITIVE_KEYS = new Set([
   'password',
   'passwordhash',
   'sessiontoken',
@@ -12,18 +12,75 @@ const SENSITIVE_KEYS = new Set([
   'google_client_secret',
   'secret',
   'clientsecret',
+  'token',
+  'invitationtoken',
+  'invitation_token',
+  'verificationtoken',
+  'verification_token',
+  'verificationcode',
+  'verification_code',
+  'code',
+  'apikey',
+  'api_key',
+  'credentials',
+  'accesstoken',
+  'access_token',
+  'refreshtoken',
+  'refresh_token',
 ]);
+
+/**
+ * Sanitizes URLs by redacting sensitive query parameters (tokens, passwords, keys).
+ */
+export function sanitizeUrl(url?: string): string {
+  if (!url) return '';
+  try {
+    const [path, queryString] = url.split('?');
+    if (!queryString) return path;
+    const params = new URLSearchParams(queryString);
+    for (const key of Array.from(params.keys())) {
+      const lowerKey = key.toLowerCase();
+      if (
+        SENSITIVE_KEYS.has(lowerKey) ||
+        lowerKey.includes('token') ||
+        lowerKey.includes('key') ||
+        lowerKey.includes('secret') ||
+        lowerKey.includes('auth') ||
+        lowerKey.includes('password') ||
+        lowerKey.includes('code')
+      ) {
+        params.set(key, '[REDACTED]');
+      }
+    }
+    const sanitizedQuery = params.toString();
+    return sanitizedQuery ? `${path}?${sanitizedQuery}` : path;
+  } catch {
+    return url.split('?')[0] || '';
+  }
+}
 
 function maskSensitive(obj: unknown, depth = 0): unknown {
   if (depth > 4 || obj === null || obj === undefined) return obj;
-  if (typeof obj === 'string') return obj;
+  if (typeof obj === 'string') {
+    if (obj.includes('?') && (obj.startsWith('/') || obj.startsWith('http://') || obj.startsWith('https://'))) {
+      return sanitizeUrl(obj);
+    }
+    return obj;
+  }
   if (Array.isArray(obj)) {
     return obj.map((item) => maskSensitive(item, depth + 1));
   }
   if (typeof obj === 'object') {
     const masked: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (SENSITIVE_KEYS.has(k.toLowerCase())) {
+      const lowerKey = k.toLowerCase();
+      if (
+        SENSITIVE_KEYS.has(lowerKey) ||
+        lowerKey.includes('token') ||
+        lowerKey.includes('secret') ||
+        lowerKey.includes('password') ||
+        lowerKey.includes('key')
+      ) {
         masked[k] = '***REDACTED***';
       } else {
         masked[k] = maskSensitive(v, depth + 1);

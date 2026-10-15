@@ -40,7 +40,7 @@ const createOwnerSchema = z.object({
   address: z.string().max(300).nullable().optional(),
 });
 
-clinicalRouter.get('/owners', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/owners', requirePracticePermission(PERMISSIONS.OWNER_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -51,7 +51,7 @@ clinicalRouter.get('/owners', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-clinicalRouter.get('/owners/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/owners/:id', requirePracticePermission(PERMISSIONS.OWNER_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const owner = await ClinicalService.getOwnerById(getId(req), practiceId);
@@ -61,38 +61,52 @@ clinicalRouter.get('/owners/:id', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-clinicalRouter.post('/owners', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/owners', requirePracticePermission(PERMISSIONS.OWNER_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createOwnerSchema.parse(req.body);
     const owner = await ClinicalService.createOwner(practiceId, {
       ...data,
       email: data.email === '' ? null : data.email,
-    });
+    }, req.user?.id);
     res.status(201).json(owner);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.patch('/owners/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.patch('/owners/:id', requirePracticePermission(PERMISSIONS.OWNER_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createOwnerSchema.partial().parse(req.body);
     const updated = await ClinicalService.updateOwner(getId(req), practiceId, {
       ...data,
       email: data.email === '' ? null : data.email,
-    });
+    }, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.delete('/owners/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/owners/:id/link-phone', requirePracticePermission(PERMISSIONS.OWNER_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deleteOwner(getId(req), practiceId);
+    const linkSchema = z.object({
+      phone: z.string().min(1).max(30),
+    });
+    const { phone } = linkSchema.parse(req.body);
+    const updated = await ClinicalService.linkAlternatePhone(getId(req), practiceId, phone, req.user?.id);
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+clinicalRouter.delete('/owners/:id', requirePracticePermission(PERMISSIONS.OWNER_DELETE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const deleted = await ClinicalService.deleteOwner(getId(req), practiceId, req.user?.id);
     res.status(200).json(deleted);
   } catch (err) {
     next(err);
@@ -115,7 +129,7 @@ const createPatientSchema = z.object({
   notes: z.string().max(1000).nullable().optional(),
 });
 
-clinicalRouter.get('/patients', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/patients', requirePracticePermission(PERMISSIONS.PATIENT_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -126,7 +140,7 @@ clinicalRouter.get('/patients', async (req: AuthenticatedRequest, res, next) => 
   }
 });
 
-clinicalRouter.get('/patients/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/patients/:id', requirePracticePermission(PERMISSIONS.PATIENT_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const patient = await ClinicalService.getPatientById(getId(req), practiceId);
@@ -136,33 +150,33 @@ clinicalRouter.get('/patients/:id', async (req: AuthenticatedRequest, res, next)
   }
 });
 
-clinicalRouter.post('/patients', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/patients', requirePracticePermission(PERMISSIONS.PATIENT_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     await EntitlementService.assertCanCreatePatient(practiceId);
     const data = createPatientSchema.parse(req.body);
-    const patient = await ClinicalService.createPatient(practiceId, data);
+    const patient = await ClinicalService.createPatient(practiceId, data, req.user?.id);
     res.status(201).json(patient);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.patch('/patients/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.patch('/patients/:id', requirePracticePermission(PERMISSIONS.PATIENT_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createPatientSchema.partial().parse(req.body);
-    const updated = await ClinicalService.updatePatient(getId(req), practiceId, data);
+    const updated = await ClinicalService.updatePatient(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.delete('/patients/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.delete('/patients/:id', requirePracticePermission(PERMISSIONS.PATIENT_DELETE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deletePatient(getId(req), practiceId);
+    const deleted = await ClinicalService.deletePatient(getId(req), practiceId, req.user?.id);
     res.status(200).json(deleted);
   } catch (err) {
     next(err);
@@ -182,7 +196,7 @@ const createMedicineSchema = z.object({
   defaultDosageInstructions: z.string().max(500).nullable().optional(),
 });
 
-clinicalRouter.get('/medicines', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/medicines', requirePracticePermission(PERMISSIONS.MEDICINE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -193,7 +207,7 @@ clinicalRouter.get('/medicines', async (req: AuthenticatedRequest, res, next) =>
   }
 });
 
-clinicalRouter.get('/medicines/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/medicines/:id', requirePracticePermission(PERMISSIONS.MEDICINE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const medicine = await ClinicalService.getMedicineById(getId(req), practiceId);
@@ -203,33 +217,33 @@ clinicalRouter.get('/medicines/:id', async (req: AuthenticatedRequest, res, next
   }
 });
 
-clinicalRouter.post('/medicines', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/medicines', requirePracticePermission(PERMISSIONS.MEDICINE_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     await EntitlementService.assertCanAddMedicine(practiceId);
     const data = createMedicineSchema.parse(req.body);
-    const medicine = await ClinicalService.createMedicine(practiceId, data);
+    const medicine = await ClinicalService.createMedicine(practiceId, data, req.user?.id);
     res.status(201).json(medicine);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.patch('/medicines/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.patch('/medicines/:id', requirePracticePermission(PERMISSIONS.MEDICINE_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createMedicineSchema.partial().parse(req.body);
-    const updated = await ClinicalService.updateMedicine(getId(req), practiceId, data);
+    const updated = await ClinicalService.updateMedicine(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.delete('/medicines/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.delete('/medicines/:id', requirePracticePermission(PERMISSIONS.MEDICINE_DELETE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deleteMedicine(getId(req), practiceId);
+    const deleted = await ClinicalService.deleteMedicine(getId(req), practiceId, req.user?.id);
     res.status(200).json(deleted);
   } catch (err) {
     next(err);
@@ -246,7 +260,7 @@ const createPackageSchema = z.object({
   itemsJson: z.any().optional(),
 });
 
-clinicalRouter.get('/packages', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/packages', requirePracticePermission(PERMISSIONS.PACKAGE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const packages = await ClinicalService.listPackages(practiceId);
@@ -256,7 +270,7 @@ clinicalRouter.get('/packages', async (req: AuthenticatedRequest, res, next) => 
   }
 });
 
-clinicalRouter.get('/packages/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/packages/:id', requirePracticePermission(PERMISSIONS.PACKAGE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const pkg = await ClinicalService.getPackageById(getId(req), practiceId);
@@ -266,33 +280,33 @@ clinicalRouter.get('/packages/:id', async (req: AuthenticatedRequest, res, next)
   }
 });
 
-clinicalRouter.post('/packages', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/packages', requirePracticePermission(PERMISSIONS.PACKAGE_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     await EntitlementService.assertCanCreatePackage(practiceId);
     const data = createPackageSchema.parse(req.body);
-    const pkg = await ClinicalService.createPackage(practiceId, data);
+    const pkg = await ClinicalService.createPackage(practiceId, data, req.user?.id);
     res.status(201).json(pkg);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.patch('/packages/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.patch('/packages/:id', requirePracticePermission(PERMISSIONS.PACKAGE_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createPackageSchema.partial().parse(req.body);
-    const updated = await ClinicalService.updatePackage(getId(req), practiceId, data);
+    const updated = await ClinicalService.updatePackage(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.delete('/packages/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.delete('/packages/:id', requirePracticePermission(PERMISSIONS.PACKAGE_DELETE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deletePackage(getId(req), practiceId);
+    const deleted = await ClinicalService.deletePackage(getId(req), practiceId, req.user?.id);
     res.status(200).json(deleted);
   } catch (err) {
     next(err);
@@ -540,7 +554,7 @@ const createInvoiceSchema = z.object({
   ).min(1),
 });
 
-clinicalRouter.get('/invoices', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/invoices', requirePracticePermission(PERMISSIONS.INVOICE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -551,7 +565,7 @@ clinicalRouter.get('/invoices', async (req: AuthenticatedRequest, res, next) => 
   }
 });
 
-clinicalRouter.get('/invoices/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.get('/invoices/:id', requirePracticePermission(PERMISSIONS.INVOICE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const invoice = await ClinicalService.getInvoiceById(getId(req), practiceId);
@@ -561,21 +575,21 @@ clinicalRouter.get('/invoices/:id', async (req: AuthenticatedRequest, res, next)
   }
 });
 
-clinicalRouter.post('/invoices', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.post('/invoices', requirePracticePermission(PERMISSIONS.INVOICE_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = createInvoiceSchema.parse(req.body);
     if (data.patientId) {
       await EntitlementService.assertCanCreateRecord(practiceId, data.patientId);
     }
-    const invoice = await ClinicalService.createInvoice(practiceId, data);
+    const invoice = await ClinicalService.createInvoice(practiceId, data, req.user?.id);
     res.status(201).json(invoice);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.patch('/invoices/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.patch('/invoices/:id', requirePracticePermission(PERMISSIONS.INVOICE_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const data = z.object({
@@ -585,17 +599,17 @@ clinicalRouter.patch('/invoices/:id', async (req: AuthenticatedRequest, res, nex
       discountAmount: z.number().min(0).optional(),
       totalAmount: z.number().min(0).optional(),
     }).parse(req.body);
-    const updated = await ClinicalService.updateInvoice(getId(req), practiceId, data);
+    const updated = await ClinicalService.updateInvoice(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
     next(err);
   }
 });
 
-clinicalRouter.delete('/invoices/:id', async (req: AuthenticatedRequest, res, next) => {
+clinicalRouter.delete('/invoices/:id', requirePracticePermission(PERMISSIONS.INVOICE_DELETE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const deleted = await ClinicalService.deleteInvoice(getId(req), practiceId);
+    const deleted = await ClinicalService.deleteInvoice(getId(req), practiceId, req.user?.id);
     res.status(200).json(deleted);
   } catch (err) {
     next(err);

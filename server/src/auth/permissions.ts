@@ -48,6 +48,16 @@ export const PERMISSIONS = {
   // Clinical Reports
   REPORT_VIEW: 'REPORT_VIEW',
 
+  // Inventory Management
+  INVENTORY_VIEW: 'INVENTORY_VIEW',
+  INVENTORY_MANAGE: 'INVENTORY_MANAGE',
+
+  // Community Veterinary Practice (CVP) Workflows
+  CVP_VIEW: 'CVP_VIEW',
+  CVP_CALL_MANAGE: 'CVP_CALL_MANAGE',
+  CVP_PLAN_MANAGE: 'CVP_PLAN_MANAGE',
+  CVP_VISIT_EXECUTE: 'CVP_VISIT_EXECUTE',
+
   // Practice & Administration
   PRACTICE_VIEW: 'PRACTICE_VIEW',
   PRACTICE_SETTINGS_MANAGE: 'PRACTICE_SETTINGS_MANAGE',
@@ -116,6 +126,12 @@ const CLINICAL_BASE_PERMISSIONS: Permission[] = [
   PERMISSIONS.INVOICE_DELETE,
   PERMISSIONS.REPORT_VIEW,
   PERMISSIONS.PRACTICE_VIEW,
+  PERMISSIONS.INVENTORY_VIEW,
+  PERMISSIONS.INVENTORY_MANAGE,
+  PERMISSIONS.CVP_VIEW,
+  PERMISSIONS.CVP_CALL_MANAGE,
+  PERMISSIONS.CVP_PLAN_MANAGE,
+  PERMISSIONS.CVP_VISIT_EXECUTE,
 ];
 
 const VIEW_ONLY_PERMISSIONS: Permission[] = [
@@ -127,6 +143,8 @@ const VIEW_ONLY_PERMISSIONS: Permission[] = [
   PERMISSIONS.INVOICE_VIEW,
   PERMISSIONS.REPORT_VIEW,
   PERMISSIONS.PRACTICE_VIEW,
+  PERMISSIONS.INVENTORY_VIEW,
+  PERMISSIONS.CVP_VIEW,
 ];
 
 const STAFF_PERMISSIONS: Permission[] = [
@@ -148,6 +166,9 @@ const STAFF_PERMISSIONS: Permission[] = [
   PERMISSIONS.INVOICE_UPDATE,
   PERMISSIONS.REPORT_VIEW,
   PERMISSIONS.PRACTICE_VIEW,
+  PERMISSIONS.INVENTORY_VIEW,
+  PERMISSIONS.CVP_VIEW,
+  PERMISSIONS.CVP_CALL_MANAGE,
 ];
 
 const VETERINARIAN_PERMISSIONS: Permission[] = [
@@ -207,9 +228,21 @@ export interface PermissionDefinition {
   key: Permission;
   label: string;
   description: string;
-  category: 'CLINICAL' | 'PRACTICE' | 'COMMERCIAL' | 'SECURITY' | 'PLATFORM';
+  category: 'CLINICAL' | 'PRACTICE' | 'COMMERCIAL' | 'SECURITY' | 'PLATFORM' | 'INVENTORY' | 'CVP';
   isClinicalSafetyCritical?: boolean;
 }
+
+export const INVENTORY_PERMISSIONS: Permission[] = [
+  PERMISSIONS.INVENTORY_VIEW,
+  PERMISSIONS.INVENTORY_MANAGE,
+];
+
+export const CVP_PERMISSIONS: Permission[] = [
+  PERMISSIONS.CVP_VIEW,
+  PERMISSIONS.CVP_CALL_MANAGE,
+  PERMISSIONS.CVP_PLAN_MANAGE,
+  PERMISSIONS.CVP_VISIT_EXECUTE,
+];
 
 export const CLINICAL_PERMISSIONS: Permission[] = [
   PERMISSIONS.PATIENT_VIEW,
@@ -275,6 +308,8 @@ export const PLATFORM_ONLY_PERMISSIONS: Permission[] = [
 
 export const ALL_ASSIGNABLE_PERMISSIONS: Permission[] = [
   ...CLINICAL_PERMISSIONS,
+  ...INVENTORY_PERMISSIONS,
+  ...CVP_PERMISSIONS,
   ...PRACTICE_PERMISSIONS,
   ...COMMERCIAL_PERMISSIONS,
   ...SECURITY_PERMISSIONS,
@@ -341,6 +376,14 @@ export const PERMISSION_METADATA: Record<Permission, PermissionDefinition> = {
   [PERMISSIONS.PLATFORM_USER_MANAGE]: { key: PERMISSIONS.PLATFORM_USER_MANAGE, label: 'Platform User Admin', description: 'Global user management and role assignment', category: 'PLATFORM' },
   [PERMISSIONS.PLATFORM_BILLING_MANAGE]: { key: PERMISSIONS.PLATFORM_BILLING_MANAGE, label: 'Platform Billing Admin', description: 'Global subscription and transaction administration', category: 'PLATFORM' },
   [PERMISSIONS.PLATFORM_AUDIT_VIEW]: { key: PERMISSIONS.PLATFORM_AUDIT_VIEW, label: 'Platform Audit View', description: 'Global platform security log review', category: 'PLATFORM' },
+
+  [PERMISSIONS.INVENTORY_VIEW]: { key: PERMISSIONS.INVENTORY_VIEW, label: 'View Inventory', description: 'View stock levels, batches, and movements', category: 'INVENTORY' },
+  [PERMISSIONS.INVENTORY_MANAGE]: { key: PERMISSIONS.INVENTORY_MANAGE, label: 'Manage Inventory', description: 'Perform stocktakes, adjustments, and purchase confirmations', category: 'INVENTORY' },
+
+  [PERMISSIONS.CVP_VIEW]: { key: PERMISSIONS.CVP_VIEW, label: 'View CVP Workflows', description: 'View field calls, route plans, and visits', category: 'CVP' },
+  [PERMISSIONS.CVP_CALL_MANAGE]: { key: PERMISSIONS.CVP_CALL_MANAGE, label: 'Manage Calls', description: 'Register, schedule, and triage farmer calls', category: 'CVP' },
+  [PERMISSIONS.CVP_PLAN_MANAGE]: { key: PERMISSIONS.CVP_PLAN_MANAGE, label: 'Manage Daily Plans', description: 'Generate and confirm field route plans', category: 'CVP' },
+  [PERMISSIONS.CVP_VISIT_EXECUTE]: { key: PERMISSIONS.CVP_VISIT_EXECUTE, label: 'Execute Visits', description: 'Conduct visits, log procedures, and record medicine usage', category: 'CVP' },
 };
 
 export interface PermissionGroup {

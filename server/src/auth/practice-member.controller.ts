@@ -36,15 +36,35 @@ practiceMemberRouter.get('/invitations/preview/:token', async (req, res, next) =
 });
 
 // ------------------------------------------------------------------------------
+// Request Invitation Verification Code (Public endpoint)
+// Dispatches a 6-digit OTP to the invited email address to prove ownership.
+// ------------------------------------------------------------------------------
+practiceMemberRouter.post('/invitations/request-verification', async (req, res, next) => {
+  try {
+    const { token } = z.object({ token: z.string().min(1, 'Token is required') }).parse(req.body);
+    const result = await InvitationService.requestInvitationVerificationOtp(token);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ------------------------------------------------------------------------------
 // Accept Invitation (Public/Authenticated endpoint)
 // User must be authenticated, but does not need prior membership in this practice.
+// If user email is unverified, a valid single-use OTP is required.
 // ------------------------------------------------------------------------------
 practiceMemberRouter.post('/invitations/accept', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const user = req.user;
     if (!user) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
 
-    const { token } = z.object({ token: z.string().min(1, 'Token is required') }).parse(req.body);
+    const { token, otp } = z
+      .object({
+        token: z.string().min(1, 'Token is required'),
+        otp: z.string().optional(),
+      })
+      .parse(req.body);
 
     const result = await InvitationService.acceptInvitation(
       token,
@@ -52,8 +72,10 @@ practiceMemberRouter.post('/invitations/accept', requireAuth, async (req: Authen
         id: user.id,
         email: user.email,
         name: user.name,
+        emailVerified: user.emailVerified,
       },
-      req.session?.id
+      req.session?.id,
+      otp
     );
 
     res.status(200).json({

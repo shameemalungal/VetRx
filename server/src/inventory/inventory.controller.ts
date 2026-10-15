@@ -7,6 +7,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePractice } from '../middleware/tenant.js';
+import { requirePracticePermission, requirePracticeAnyPermission } from '../middleware/authorization.js';
+import { PERMISSIONS } from '../auth/permissions.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { EntitlementService } from '../commercial/entitlement.service.js';
 import { InventoryService } from './inventory.service.js';
@@ -46,7 +48,7 @@ inventoryRouter.use(requireInventoryEntitlement);
 // Dashboard & Analytics
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/dashboard', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/dashboard', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const summary = await InventoryService.getDashboardSummary(practiceId);
@@ -60,7 +62,7 @@ inventoryRouter.get('/dashboard', async (req: AuthenticatedRequest, res, next) =
 // Items (Master Catalog)
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/items', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/items', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const { category, search, barcode, stockStatus, isActive } = req.query;
@@ -78,7 +80,7 @@ inventoryRouter.get('/items', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-inventoryRouter.get('/items/:id', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/items/:id', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const item = await InventoryService.getItemById(req.params.id as string, practiceId);
@@ -88,7 +90,7 @@ inventoryRouter.get('/items/:id', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-inventoryRouter.post('/items', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/items', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -116,7 +118,7 @@ inventoryRouter.post('/items', async (req: AuthenticatedRequest, res, next) => {
   }
 });
 
-inventoryRouter.patch('/items/:id', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.patch('/items/:id', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const updated = await InventoryService.updateItem(req.params.id as string, practiceId, req.body);
@@ -130,7 +132,7 @@ inventoryRouter.patch('/items/:id', async (req: AuthenticatedRequest, res, next)
 // Batches & Stock Levels
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/batches', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/batches', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const { itemId, onlyValid, onlyExpired } = req.query;
@@ -150,7 +152,7 @@ inventoryRouter.get('/batches', async (req: AuthenticatedRequest, res, next) => 
 // Opening Stock Entry
 // ------------------------------------------------------------------------------
 
-inventoryRouter.post('/opening-stock', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/opening-stock', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -179,7 +181,7 @@ inventoryRouter.post('/opening-stock', async (req: AuthenticatedRequest, res, ne
 // Stock Transaction Ledger
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/transactions', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/transactions', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const { itemId, batchId, transactionType, startDate, endDate } = req.query;
@@ -201,7 +203,7 @@ inventoryRouter.get('/transactions', async (req: AuthenticatedRequest, res, next
 // Manual Adjustments & Stocktake
 // ------------------------------------------------------------------------------
 
-inventoryRouter.post('/adjust', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/adjust', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -223,7 +225,7 @@ inventoryRouter.post('/adjust', async (req: AuthenticatedRequest, res, next) => 
   }
 });
 
-inventoryRouter.post('/stocktake', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/stocktake', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -253,7 +255,7 @@ inventoryRouter.post('/stocktake', async (req: AuthenticatedRequest, res, next) 
 // Suppliers
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/suppliers', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/suppliers', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -264,7 +266,7 @@ inventoryRouter.get('/suppliers', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-inventoryRouter.post('/suppliers', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/suppliers', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -389,10 +391,10 @@ const parseInvoiceHandler = async (req: AuthenticatedRequest, res: any, next: an
   }
 };
 
-inventoryRouter.post('/purchases/parse-invoice', parseInvoiceHandler);
-inventoryRouter.post('/purchases/extract', parseInvoiceHandler);
+inventoryRouter.post('/purchases/parse-invoice', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), parseInvoiceHandler);
+inventoryRouter.post('/purchases/extract', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), parseInvoiceHandler);
 
-inventoryRouter.post('/purchases/confirm', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/purchases/confirm', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -466,7 +468,7 @@ inventoryRouter.post('/purchases/confirm', async (req: AuthenticatedRequest, res
   }
 });
 
-inventoryRouter.get('/purchases', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/purchases', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const search = req.query.search as string | undefined;
@@ -481,7 +483,7 @@ inventoryRouter.get('/purchases', async (req: AuthenticatedRequest, res, next) =
 // Alerts (Expiring Soon, Expired, Low Stock, Out of Stock)
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/alerts', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/alerts', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const warningDays = req.query.warningDays ? parseInt(req.query.warningDays as string, 10) : 90;
@@ -498,7 +500,7 @@ inventoryRouter.get('/alerts', async (req: AuthenticatedRequest, res, next) => {
 // Prescription Stock Resolution (Internal vs External Quantity)
 // ------------------------------------------------------------------------------
 
-inventoryRouter.post('/prescriptions/resolve-stock', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/prescriptions/resolve-stock', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -544,7 +546,7 @@ inventoryRouter.post('/prescriptions/resolve-stock', async (req: AuthenticatedRe
 // Invoice Stock Deduction & Cancellation Reversal
 // ------------------------------------------------------------------------------
 
-inventoryRouter.post('/invoices/deduct', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/invoices/deduct', requirePracticeAnyPermission(PERMISSIONS.INVENTORY_MANAGE, PERMISSIONS.INVOICE_CREATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -579,7 +581,7 @@ inventoryRouter.post('/invoices/deduct', async (req: AuthenticatedRequest, res, 
   }
 });
 
-inventoryRouter.post('/invoices/reverse', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/invoices/reverse', requirePracticeAnyPermission(PERMISSIONS.INVENTORY_MANAGE, PERMISSIONS.INVOICE_UPDATE, PERMISSIONS.INVOICE_DELETE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -601,7 +603,7 @@ inventoryRouter.post('/invoices/reverse', async (req: AuthenticatedRequest, res,
   }
 });
 
-inventoryRouter.post('/sync-catalogues', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/sync-catalogues', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const result = await InventoryService.syncInventoryCatalogues(practiceId);
@@ -615,7 +617,7 @@ inventoryRouter.post('/sync-catalogues', async (req: AuthenticatedRequest, res, 
 // Phase 6: Stock Locations, Store Stock, Practice Bag & Stock Control Endpoints
 // ------------------------------------------------------------------------------
 
-inventoryRouter.get('/locations', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/locations', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const locations = await InventoryService.listLocations(practiceId);
@@ -625,7 +627,7 @@ inventoryRouter.get('/locations', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-inventoryRouter.post('/locations', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/locations', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -644,7 +646,7 @@ inventoryRouter.post('/locations', async (req: AuthenticatedRequest, res, next) 
   }
 });
 
-inventoryRouter.get('/store-stock', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/store-stock', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const { search, category } = req.query;
@@ -658,7 +660,7 @@ inventoryRouter.get('/store-stock', async (req: AuthenticatedRequest, res, next)
   }
 });
 
-inventoryRouter.get('/practice-bag', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.get('/practice-bag', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const { search, category, locationId } = req.query;
@@ -676,7 +678,7 @@ inventoryRouter.get('/practice-bag', async (req: AuthenticatedRequest, res, next
   }
 });
 
-inventoryRouter.post('/stock-in', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/stock-in', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -706,7 +708,7 @@ inventoryRouter.post('/stock-in', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-inventoryRouter.post('/transfer', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/transfer', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -727,7 +729,7 @@ inventoryRouter.post('/transfer', async (req: AuthenticatedRequest, res, next) =
   }
 });
 
-inventoryRouter.post('/return', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/return', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({
@@ -747,7 +749,7 @@ inventoryRouter.post('/return', async (req: AuthenticatedRequest, res, next) => 
   }
 });
 
-inventoryRouter.post('/reconcile', async (req: AuthenticatedRequest, res, next) => {
+inventoryRouter.post('/reconcile', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
     const schema = z.object({

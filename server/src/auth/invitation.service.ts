@@ -41,14 +41,106 @@ export interface CreateInvitationResult {
 export class InvitationService {
   // In-memory mock store for fast isolated unit testing
   private static mockInvitations: Map<string, InvitationRecord> = new Map();
+  private static invitationOtpStore: Map<
+    string,
+    { code: string; expiresAt: Date; attempts: number; invitationId: string; email: string; practiceId: string }
+  > = new Map();
+  private static invitationOtpRateLimits: Map<string, number[]> = new Map();
 
   static setMockInvitation(invitation: InvitationRecord): void {
     this.mockInvitations.set(invitation.id, invitation);
     this.mockInvitations.set(`hash:${invitation.tokenHash}`, invitation);
   }
 
+  static setMockInvitationOtp(email: string, code: string, expiresAt = new Date(Date.now() + 15 * 60 * 1000)): void {
+    this.invitationOtpStore.set(email.toLowerCase(), {
+      code,
+      expiresAt,
+      attempts: 0,
+      invitationId: 'mock-inv-id',
+      email: email.toLowerCase(),
+      practiceId: 'mock-practice-id',
+    });
+  }
+
   static clearMocks(): void {
     this.mockInvitations.clear();
+    this.invitationOtpStore.clear();
+    this.invitationOtpRateLimits.clear();
+  }
+
+  /**
+   * Generates and dispatches a single-use 6-digit OTP to prove control of the invited email address.
+   */
+  static async requestInvitationVerificationOtp(
+    rawToken: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!rawToken || typeof rawToken !== 'string') {
+      throw new AppError(400, 'INVALID_TOKEN', 'A valid invitation token is required.');
+    }
+
+    const tokenHash = this.hashToken(rawToken);
+    let invitation: InvitationRecord | null = null;
+    if (process.env.VETRX_FAST_TEST === '1') {
+      invitation = this.mockInvitations.get(`hash:${tokenHash}`) || null;
+    } else {
+      const dbInv = await prisma.practiceInvitation.findUnique({
+        where: { tokenHash },
+      });
+      if (dbInv) {
+        invitation = { ...dbInv } as InvitationRecord;
+      }
+    }
+
+    if (!invitation) {
+      throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid.');
+    }
+    if (invitation.status !== InvitationStatus.PENDING || new Date() > new Date(invitation.expiresAt)) {
+      throw new AppError(400, 'INVITATION_EXPIRED', 'This invitation is not pending or has expired.');
+    }
+
+    const normalizedEmail = invitation.email.toLowerCase();
+
+    // Rate Limiting Check (Max 3 requests per 15 minutes)
+    const now = Date.now();
+    const windowMs = 15 * 60 * 1000;
+    const history = (this.invitationOtpRateLimits.get(normalizedEmail) || []).filter(
+      (ts) => now - ts < windowMs
+    );
+    if (history.length >= 3) {
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        'Too many verification code requests. Please wait a few minutes before trying again.'
+      );
+    }
+    history.push(now);
+    this.invitationOtpRateLimits.set(normalizedEmail, history);
+
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const expiresInMinutes = 15;
+    const expiresAt = new Date(now + expiresInMinutes * 60 * 1000);
+
+    this.invitationOtpStore.set(normalizedEmail, {
+      code: otp,
+      expiresAt,
+      attempts: 0,
+      invitationId: invitation.id,
+      email: normalizedEmail,
+      practiceId: invitation.practiceId,
+    });
+
+    await EmailService.sendEmailVerificationOtpEmail({
+      recipientEmail: normalizedEmail,
+      recipientName: normalizedEmail,
+      otpCode: otp,
+      expiresInMinutes,
+    });
+
+    return {
+      success: true,
+      message: 'Verification code sent to invited email address.',
+    };
   }
 
   /**
@@ -239,8 +331,9 @@ export class InvitationService {
    */
   static async acceptInvitation(
     rawToken: string,
-    acceptingUser: { id: string; email: string; name?: string },
-    sessionId?: string | null
+    acceptingUser: { id: string; email: string; name?: string; emailVerified?: boolean },
+    sessionId?: string | null,
+    otpCode?: string
   ): Promise<{ practiceId: string; role: Role; membershipId: string }> {
     if (!rawToken || typeof rawToken !== 'string') {
       throw new AppError(400, 'INVALID_TOKEN', 'A valid invitation token is required.');
@@ -304,6 +397,65 @@ export class InvitationService {
         'INVITATION_EMAIL_MISMATCH',
         `Invitation was issued for ${invitation.email}, but current account is ${acceptingUser.email}.`
       );
+    }
+
+    // Require proof of control of the invited email address
+    if (acceptingUser.emailVerified === false) {
+      if (!otpCode) {
+        // Automatically dispatch OTP if not already sent
+        try {
+          await this.requestInvitationVerificationOtp(rawToken);
+        } catch {
+          // Ignore rate-limit errors on automatic dispatch
+        }
+        throw new AppError(
+          403,
+          'EMAIL_VERIFICATION_REQUIRED',
+          'Please verify your email address to accept this invitation. A one-time verification code has been dispatched to your email.'
+        );
+      }
+
+      const stored = this.invitationOtpStore.get(normalizedUserEmail);
+      if (!stored || new Date() > stored.expiresAt) {
+        throw new AppError(
+          400,
+          'INVALID_OR_EXPIRED_OTP',
+          'Verification code is invalid or has expired. Please request a new code.'
+        );
+      }
+
+      stored.attempts += 1;
+      if (stored.attempts > 5) {
+        this.invitationOtpStore.delete(normalizedUserEmail);
+        throw new AppError(
+          429,
+          'OTP_MAX_ATTEMPTS_EXCEEDED',
+          'Maximum verification attempts exceeded. Please request a new code.'
+        );
+      }
+
+      if (stored.code !== otpCode.trim()) {
+        throw new AppError(
+          400,
+          'INVALID_OR_EXPIRED_OTP',
+          'Verification code is invalid.'
+        );
+      }
+
+      // Single-use: Consume OTP immediately
+      this.invitationOtpStore.delete(normalizedUserEmail);
+
+      // Mark user as emailVerified
+      if (process.env.VETRX_FAST_TEST !== '1') {
+        try {
+          await prisma.user.update({
+            where: { id: acceptingUser.id },
+            data: { emailVerified: true },
+          });
+        } catch {
+          // Non-blocking
+        }
+      }
     }
 
     // Re-verify commercial seat availability at consumption time

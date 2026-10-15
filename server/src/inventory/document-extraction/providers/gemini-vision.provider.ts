@@ -12,6 +12,9 @@ export class GeminiVisionProvider implements IDocumentExtractionProvider {
   name = 'Gemini Vision AI';
 
   isAvailable(): boolean {
+    if (process.env.GEMINI_ENABLED === 'false') {
+      return false;
+    }
     const key =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_AI_API_KEY ||
@@ -20,6 +23,9 @@ export class GeminiVisionProvider implements IDocumentExtractionProvider {
   }
 
   private getApiKey(): string | null {
+    if (process.env.GEMINI_ENABLED === 'false') {
+      return null;
+    }
     return (
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_AI_API_KEY ||
@@ -36,7 +42,7 @@ export class GeminiVisionProvider implements IDocumentExtractionProvider {
   }): Promise<StructuredInvoiceDocument> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('Gemini API key is not configured');
+      throw new Error('Gemini API key is not configured or is disabled');
     }
 
     const mimeType = payload.mimeType || 'image/jpeg';
@@ -121,11 +127,12 @@ Return strict JSON matching this exact structure:
 
     for (const model of uniqueModels) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
         const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
           },
           body: JSON.stringify({
             contents: [
@@ -151,8 +158,8 @@ Return strict JSON matching this exact structure:
         });
 
         if (!response.ok) {
-          const errText = await response.text();
-          throw new Error(`Gemini Vision API (${model}) error ${response.status}: ${errText}`);
+          const errText = (await response.text()).slice(0, 300);
+          throw new Error(`Gemini Vision API (${model}) returned HTTP ${response.status}: ${errText}`);
         }
 
         const data: any = await response.json();
