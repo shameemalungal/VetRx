@@ -193,7 +193,7 @@ export const TermsPage: React.FC = () => {
           or poses a security threat to platform infrastructure.
         </p>
         <p>
-          Upon cancellation or termination of your subscription, your practice data is retained for 90 days, during which you can request account deletion or export your records directly within the application. Following this 90-day retention period, data is scheduled for permanent deletion.
+          Upon expiration, cancellation, or termination of your subscription, account access transitions to a restricted state allowing clinical data review and export. In accordance with applicable statutory medical recordkeeping obligations, veterinary medical ethical regulations, and platform architectural standards, clinical history (patients, medical entries, prescriptions, and official receipts) is preserved in immutable database storage and is not automatically purged. Account holders may export data or request deletion of personal credentials subject to legal and statutory compliance.
         </p>
       </section>
 

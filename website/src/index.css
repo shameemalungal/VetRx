@@ -1,3 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-teal: #0D9186;
+  --color-teal-primary: #0D9186;
+  --color-teal-deep: #075E59;
+  --color-teal-dark: #075E59;
+  --color-teal-bright: #16A79B;
+  --color-teal-soft: #DDF5F2;
+  --color-teal-50: #F0FAF9;
+  --color-teal-100: #DDF5F2;
+  --color-teal-200: #B8EBE5;
+  --color-teal-300: #7DE5D3;
+  --color-teal-400: #19B8A5;
+  --color-teal-500: #0D9186;
+  --color-teal-600: #0B7D74;
+  --color-teal-700: #075E59;
+  --color-teal-800: #064945;
+  --color-teal-900: #043734;
+  --color-teal-950: #02211F;
+
+  --color-aqua: #19B8A5;
+  --color-aqua-light: #E6FAF7;
+  --color-aqua-border: #8CE2D7;
+
+  --color-mint: #7DE5D3;
+  --color-mint-soft: #EAFBF8;
+
+  --color-sky-blue: #4DA8FF;
+  --color-sky-soft: #EBF4FF;
+
+  --color-electric-blue: #356DFF;
+  --color-electric-soft: #EBF1FF;
+
+  --color-violet: #7C5CFF;
+  --color-violet-soft: #F2EFFF;
+
+  --color-warm-accent: #FFB86B;
+  --color-warm-soft: #FFF5EB;
+
+  --color-coral-soft: #FF7F7F;
+
+  --color-surface: #FFFFFF;
+  --color-surface-canvas: #F6FAFA;
+  --color-surface-subtle: #EEF5F4;
+  --color-surface-card: #FFFFFF;
+  --color-surface-dark: #06252A;
+  --color-surface-hero: #062F35;
+
+  --color-content-primary: #112221;
+  --color-content-secondary: #4A605D;
+  --color-content-muted: #7E9491;
+  --color-content-inverse: #F6FAFA;
+
+  --color-clinical-success: #1EA87A;
+  --color-clinical-warning: #E68A00;
+  --color-clinical-border: #DBE9E6;
+  --color-clinical-card: #FFFFFF;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --shadow-subtle: 0 1px 3px rgba(13, 145, 134, 0.05), 0 10px 25px -5px rgba(23, 37, 37, 0.04);
+  --shadow-clinical: 0 12px 34px -10px rgba(13, 145, 134, 0.14), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+  --shadow-floating: 0 20px 40px -15px rgba(7, 94, 89, 0.22);
+  --shadow-card-lift: 0 20px 35px -10px rgba(13, 145, 134, 0.16), 0 6px 14px -3px rgba(6, 47, 53, 0.06);
+  --shadow-hero-glow: 0 0 60px -10px rgba(25, 184, 165, 0.35);
+  --shadow-plan-highlight: 0 20px 45px -10px rgba(13, 145, 134, 0.25), 0 0 0 2px #0D9186;
+}
+
 :root {
   --color-primary-teal: #0D9186;
   --color-deep-teal: #075E59;
