@@ -419,3 +419,24 @@
   color: #92400e;
   font-size: 13.5px;
 }
+
+/* Practice Bag action buttons group */
+.bag-action-buttons-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .bag-action-buttons-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 8px;
+  }
+  .bag-action-buttons-group .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

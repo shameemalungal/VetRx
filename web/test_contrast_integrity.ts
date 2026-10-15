@@ -137,7 +137,9 @@ test('VetRx WCAG AA Contrast Suite', async (t) => {
   });
 
   await t.test('6. CSS Utilities Integrity: Verify critical utilities exist and have compliant values', () => {
-    const cssPath = path.resolve('src/styles/utilities.css');
+    const cssPath = fs.existsSync(path.resolve('src/styles/utilities.css'))
+      ? path.resolve('src/styles/utilities.css')
+      : path.resolve('web/src/styles/utilities.css');
     const cssContent = fs.readFileSync(cssPath, 'utf-8');
 
     // Ensure critical background classes exist

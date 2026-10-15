@@ -81,17 +81,19 @@ export const InventoryRouteGate: React.FC<InventoryRouteGateProps> = ({ children
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ height: '42px', justifyContent: 'center' }}
-            onClick={async () => {
-              await toggleDevEntitlement(true);
-            }}
-            id="btn-enable-inventory-dev"
-          >
-            Enable Inventory Add-on (Dev / Test Mode)
-          </button>
+          {!import.meta.env.PROD && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ height: '42px', justifyContent: 'center' }}
+              onClick={async () => {
+                await toggleDevEntitlement(true);
+              }}
+              id="btn-enable-inventory-dev"
+            >
+              Enable Inventory Add-on (Dev / Test Mode)
+            </button>
+          )}
 
           <button
             type="button"

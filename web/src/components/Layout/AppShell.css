@@ -915,14 +915,14 @@
 
   .page-content {
     padding: var(--space-base) var(--space-base);
-    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-xl));
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 40px);
   }
 }
 
 @media (max-width: 767px) {
   .page-content {
     padding: 12px 10px;
-    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-xl));
+    padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 44px);
   }
 }
 

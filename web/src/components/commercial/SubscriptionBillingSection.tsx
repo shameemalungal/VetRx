@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../ui/Icon';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { useAuth } from '../../context/AuthContext';
 import './SubscriptionBillingSection.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
@@ -66,6 +67,7 @@ interface PaymentRecord {
 }
 
 export const SubscriptionBillingSection: React.FC = () => {
+  const { isPracticeOwner, can } = useAuth();
   const { isEntitled: isInventoryEntitled, toggleDevEntitlement, mockMode } = useInventoryEntitlement();
   const [togglingInventory, setTogglingInventory] = useState(false);
   const [status, setStatus] = useState<CommercialStatus | null>(null);
@@ -809,30 +811,32 @@ export const SubscriptionBillingSection: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              className={`btn ${isInventoryEntitled ? 'btn-secondary' : 'btn-primary'}`}
-              id="btn-toggle-inventory-dev"
-              disabled={togglingInventory}
-              onClick={async () => {
-                setTogglingInventory(true);
-                try {
-                  await toggleDevEntitlement(!isInventoryEntitled);
-                } finally {
-                  setTogglingInventory(false);
-                }
-              }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Icon name={isInventoryEntitled ? 'block' : 'check'} size={16} />
-              <span>
-                {togglingInventory
-                  ? 'Updating...'
-                  : isInventoryEntitled
-                  ? 'Disable Module (Dev Toggle)'
-                  : 'Enable Inventory (Dev / Test Mode)'}
-              </span>
-            </button>
+            {!import.meta.env.PROD && (isPracticeOwner() || can('SUBSCRIPTION_MANAGE')) && (
+              <button
+                type="button"
+                className={`btn ${isInventoryEntitled ? 'btn-secondary' : 'btn-primary'}`}
+                id="btn-toggle-inventory-dev"
+                disabled={togglingInventory}
+                onClick={async () => {
+                  setTogglingInventory(true);
+                  try {
+                    await toggleDevEntitlement(!isInventoryEntitled);
+                  } finally {
+                    setTogglingInventory(false);
+                  }
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Icon name={isInventoryEntitled ? 'block' : 'check'} size={16} />
+                <span>
+                  {togglingInventory
+                    ? 'Updating...'
+                    : isInventoryEntitled
+                    ? 'Disable Module (Dev Toggle)'
+                    : 'Enable Inventory (Dev / Test Mode)'}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -2692,6 +2692,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
             <div className="form-group">
               <ClinicalCombobox
+                id="symptoms"
+                name="symptoms"
                 label="Symptoms / Clinical Presentation"
                 value={symptoms}
                 onChange={(val) => {
@@ -2712,6 +2714,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
             <div className="form-group">
               <ClinicalCombobox
+                id="diagnosis"
+                name="diagnosis"
                 label="Diagnosis"
                 value={diagnosis}
                 onChange={(val) => {

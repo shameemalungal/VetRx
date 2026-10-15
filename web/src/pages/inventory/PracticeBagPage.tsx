@@ -318,7 +318,7 @@ export const PracticeBagPage: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="bag-action-buttons-group">
           <button
             type="button"
             className="btn btn-primary"

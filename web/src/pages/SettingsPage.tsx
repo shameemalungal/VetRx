@@ -993,14 +993,14 @@ function BackupRestoreSection() {
             <span>Data Management (Backup &amp; Restore)</span>
           </div>
           <div className="section-sub">
-            Protect your clinical and billing data. Export complete offline snapshots or restore previous backups.
+            Practice clinical and billing data management, portable data exports, and snapshot archives.
           </div>
         </div>
       </div>
       <div className="card-body">
         <p style={{ fontSize: '13px', color: 'var(--color-on-surface-variant)', marginBottom: '16px', lineHeight: 1.5 }}>
-          VetRx stores all clinical records, patients, prescriptions, medicines, and invoices locally in your browser&apos;s IndexedDB storage.
-          To prevent data loss from browser cache resets or hardware changes, download regular backups.
+          Your practice records are authoritatively persisted and protected in the secure VetRx server database.
+          You can download a portable JSON archive of your practice records for external recordkeeping, audit compliance, or local inspection.
         </p>
 
         {/* Persistence Status pill if available */}

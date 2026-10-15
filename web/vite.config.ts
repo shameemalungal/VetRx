@@ -9,8 +9,13 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
   },
+  css: {
+    transformer: 'postcss',
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
+    cssMinify: 'esbuild',
+    minify: 'esbuild',
   },
 })

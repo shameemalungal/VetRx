@@ -21,6 +21,7 @@ export interface ClinicalComboboxProps {
   iconName?: string;
   helperText?: string;
   id?: string;
+  name?: string;
 }
 
 export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
@@ -36,6 +37,7 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
   iconName,
   helperText,
   id,
+  name,
 }) => {
   const generatedId = useId();
   const inputId = id || `combobox-${generatedId}`;
@@ -189,6 +191,7 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
         {isTextarea ? (
           <textarea
             id={inputId}
+            name={name}
             ref={inputRef as React.RefObject<HTMLTextAreaElement>}
             rows={rows}
             role="combobox"
@@ -215,6 +218,7 @@ export const ClinicalCombobox: React.FC<ClinicalComboboxProps> = ({
         ) : (
           <input
             id={inputId}
+            name={name}
             ref={inputRef as React.RefObject<HTMLInputElement>}
             type="text"
             role="combobox"

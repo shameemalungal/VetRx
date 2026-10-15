@@ -368,6 +368,21 @@ export const PlatformShell: React.FC<PlatformShellProps> = ({ children }) => {
           </div>
         </header>
 
+        {/* Mobile Platform Navigation Bar (visible <= 768px) */}
+        <nav className="platform-mobile-nav" aria-label="Platform mobile navigation">
+          {PLATFORM_NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.path}
+              id={`platform-mobile-nav-${item.path.split('/').pop()}`}
+              to={item.path}
+              className={({ isActive }) => `platform-mobile-nav-link ${isActive ? 'active' : ''}`}
+            >
+              <Icon name={item.icon} size={15} />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
         {/* Viewport Content */}
         <main className="platform-content">
           {children}
