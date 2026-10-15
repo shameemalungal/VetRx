@@ -675,7 +675,7 @@ export const VisitDetailPage: React.FC = () => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-black text-slate-900">
-                        {c.species || 'Animal'}
+                        {c.patientName ? `${c.patientName} (${c.species || 'Animal'})` : (c.species || 'Animal')}
                         {c.patientId ? ` (ID: ${c.patientId})` : ''}
                       </span>
                       {c.procedureCategory && (

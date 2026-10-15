@@ -1220,9 +1220,43 @@ export class CvpService {
     // Sort timeline chronologically
     timelineEvents.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
 
+    // Enrich with owner information if missing from visit record
+    let ownerName = visit.ownerName;
+    let ownerPhone = visit.ownerPhone;
+    let address = visit.address || '';
+    if (visit.ownerId && (!ownerName || !ownerPhone || !address)) {
+      const owner = await db.owners.get(Number(visit.ownerId));
+      if (owner) {
+        ownerName = ownerName || owner.name;
+        ownerPhone = ownerPhone || owner.phone;
+        if (owner.address) address = address || owner.address;
+      }
+    }
+
+    // Enrich cases with patient name/species if missing
+    const rawCases = cases.length > 0 ? cases : (visit.cases || []);
+    const resolvedCases = await Promise.all(
+      rawCases.map(async (c) => {
+        if (!c.patientName && c.patientId) {
+          const pat = await db.patients.get(Number(c.patientId));
+          if (pat) {
+            return {
+              ...c,
+              patientName: pat.name,
+              species: c.species || pat.species,
+            };
+          }
+        }
+        return c;
+      })
+    );
+
     return {
       ...visit,
-      cases: cases.length > 0 ? cases : (visit.cases || []),
+      ownerName,
+      ownerPhone,
+      address: address || visit.address || '',
+      cases: resolvedCases,
       procedures,
       medicineUsages,
       timelineEvents,

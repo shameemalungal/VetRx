@@ -313,17 +313,13 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
             const visitOwner = visitPatient ? await db.owners.get(visitPatient.ownerId) : (matchedVisit.ownerId ? await db.owners.get(Number(matchedVisit.ownerId)) : undefined);
             const visitPatientSubtitle = visitPatient ? formatAnimalSubtitle(visitPatient) : undefined;
 
-            // Load any recorded procedures for this visit from db.visitProcedures
-            const procs = await db.visitProcedures
-              .where('visitId')
-              .equals(matchedVisit.id as any)
-              .toArray();
+            // Load any recorded procedures for this visit from db.visitProcedures safely matching string & number IDs
+            const allProcs = await db.visitProcedures.toArray();
+            const procs = allProcs.filter((p) => String(p.visitId) === String(matchedVisit.id));
 
-            // Load any medicine usage recorded for this visit from db.visitMedicineUsages
-            const usages = await db.visitMedicineUsages
-              .where('visitId')
-              .equals(matchedVisit.id as any)
-              .toArray();
+            // Load any medicine usage recorded for this visit from db.visitMedicineUsages safely matching string & number IDs
+            const allUsages = await db.visitMedicineUsages.toArray();
+            const usages = allUsages.filter((u) => String(u.visitId) === String(matchedVisit.id));
 
             const draftedFromVisit: ItemDraft[] = [];
 
