@@ -180,7 +180,7 @@ export class PaymentService {
 
     if (process.env.VETRX_FAST_TEST === '1') {
       const activeSub = EntitlementService.getMockSubscription(practiceId);
-      const payment = {
+      const payment: any = {
         id: `pay_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         practiceId,
         subscriptionId: activeSub?.id || null,
