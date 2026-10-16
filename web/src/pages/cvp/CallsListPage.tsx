@@ -22,6 +22,7 @@ import {
   Clock,
   X,
   SlidersHorizontal,
+  Compass,
 } from 'lucide-react';
 import './Cvp.css';
 
@@ -196,6 +197,16 @@ export const CallsListPage: React.FC = () => {
           </button>
           <button
             type="button"
+            onClick={() => navigate('/calls/today')}
+            className="px-3 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+            id="btn-today-dashboard"
+          >
+            <Compass className="w-4 h-4 text-teal-700 shrink-0" />
+            <span className="hidden sm:inline">Today&apos;s Dashboard</span>
+            <span className="sm:hidden">Dashboard</span>
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/calls/register')}
             className="btn-cvp-primary"
             id="btn-log-new-call"
@@ -310,6 +321,17 @@ export const CallsListPage: React.FC = () => {
         >
           <Calendar className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
           <span>Follow-ups</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/calls/today')}
+          className="cvp-tab-btn"
+          title="Open Today's Operational Dashboard"
+          style={{ background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', fontWeight: 700 }}
+        >
+          <Compass className="w-3.5 h-3.5 shrink-0 text-teal-700" />
+          <span>Dashboard</span>
         </button>
       </div>
 

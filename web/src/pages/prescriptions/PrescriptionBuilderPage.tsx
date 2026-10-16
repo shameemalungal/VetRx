@@ -65,6 +65,7 @@ interface PrescriptionBuilderPageProps {
 
 interface DraftItem {
   id?: number;
+  sourceUsageId?: string | number;
   medicineId?: number;
   brandName: string;
   genericName?: string;
@@ -89,8 +90,10 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
-  const preselectedPatientId = searchParams.get('patientId')
-    ? parseInt(searchParams.get('patientId')!, 10)
+  const rawPatientId = searchParams.get('patientId');
+  const rawOwnerId = searchParams.get('ownerId');
+  const preselectedPatientId = rawPatientId && /^\d+$/.test(rawPatientId)
+    ? parseInt(rawPatientId, 10)
     : null;
   const cloneFromRxId = searchParams.get('cloneFrom')
     ? parseInt(searchParams.get('cloneFrom')!, 10)
@@ -124,6 +127,31 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     []
   );
   const treatmentPackages = useLiveQuery(() => db.treatmentPackages.toArray(), []);
+
+  // Authoritative Server Context states for connected workflow
+  const [authoritativeOwner, setAuthoritativeOwner] = useState<Owner | null>(null);
+  const [authoritativePatient, setAuthoritativePatient] = useState<any | null>(null);
+  const [isLoadingAuthoritativeContext, setIsLoadingAuthoritativeContext] = useState<boolean>(
+    Boolean(visitIdParam || rawPatientId || rawOwnerId)
+  );
+
+  // Linked Visit and Field Medicine Usages for connected workflow
+  const linkedVisit = useLiveQuery(
+    async () => {
+      if (!visitIdParam) return null;
+      return await cvpService.getVisitById(visitIdParam);
+    },
+    [visitIdParam]
+  );
+
+  const visitMedicineUsages = useLiveQuery(
+    async () => {
+      if (!visitIdParam) return [];
+      const usages = await db.visitMedicineUsages.toArray();
+      return usages.filter((u) => String(u.visitId) === String(visitIdParam));
+    },
+    [visitIdParam]
+  ) || [];
 
   // For Edit Mode
   const existingRx = useLiveQuery(
@@ -533,27 +561,76 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     return merged.length > 0 ? merged : defaultUnits;
   }, [masterUnits, medForm.unit, calcFixedDoseUnit]);
 
-  // Map lookups
+  // Map lookups — index by numeric id, string id, and serverId UUID
   const ownersMap = useMemo(() => {
-    const map = new Map<number, Owner>();
+    const map = new Map<string | number, Owner>();
     if (allOwners) {
       for (const o of allOwners) {
-        if (o.id) map.set(o.id, o);
+        if (o.id !== undefined && o.id !== null) {
+          map.set(o.id, o);
+          map.set(String(o.id), o);
+        }
+        if (o.serverId) {
+          map.set(o.serverId, o);
+        }
+      }
+    }
+    if (authoritativeOwner) {
+      if (authoritativeOwner.id !== undefined && authoritativeOwner.id !== null) {
+        map.set(authoritativeOwner.id, authoritativeOwner);
+        map.set(String(authoritativeOwner.id), authoritativeOwner);
+      }
+      if ((authoritativeOwner as any).serverId) {
+        map.set((authoritativeOwner as any).serverId, authoritativeOwner);
       }
     }
     return map;
-  }, [allOwners]);
+  }, [allOwners, authoritativeOwner]);
 
-  // Selected Patient & Owner
+  // Selected Patient & Owner with authoritative fallback chain
   const selectedPatient = useMemo(() => {
-    if (!selectedPatientId || !allPatients) return null;
-    return allPatients.find((p) => p.id === selectedPatientId) || null;
-  }, [selectedPatientId, allPatients]);
+    if (selectedPatientId && allPatients) {
+      const found = allPatients.find(
+        (p) => p.id === selectedPatientId || String(p.id) === String(selectedPatientId) || (p.serverId && p.serverId === String(selectedPatientId))
+      );
+      if (found) return found;
+    }
+    if (authoritativePatient) {
+      return authoritativePatient;
+    }
+    return null;
+  }, [selectedPatientId, allPatients, authoritativePatient]);
 
   const selectedOwner = useMemo(() => {
-    if (!selectedPatient?.ownerId) return null;
-    return ownersMap.get(selectedPatient.ownerId) || null;
-  }, [selectedPatient, ownersMap]);
+    if (authoritativeOwner) return authoritativeOwner;
+    if (selectedPatient?.ownerId) {
+      const match = ownersMap.get(selectedPatient.ownerId) || ownersMap.get(String(selectedPatient.ownerId));
+      if (match) return match;
+    }
+    if (rawOwnerId) {
+      const match = ownersMap.get(rawOwnerId) || (!isNaN(Number(rawOwnerId)) ? ownersMap.get(Number(rawOwnerId)) : null);
+      if (match) return match;
+    }
+    if (linkedVisit?.owner) {
+      return {
+        id: linkedVisit.owner.id,
+        serverId: linkedVisit.owner.id,
+        name: linkedVisit.owner.name,
+        phone: linkedVisit.owner.phone,
+        address: linkedVisit.owner.address,
+      } as Owner;
+    }
+    if (linkedVisit?.ownerName) {
+      return {
+        id: linkedVisit.ownerId,
+        serverId: linkedVisit.ownerId,
+        name: linkedVisit.ownerName,
+        phone: linkedVisit.ownerPhone || '',
+        address: linkedVisit.address || '',
+      } as Owner;
+    }
+    return null;
+  }, [authoritativeOwner, selectedPatient, ownersMap, rawOwnerId, linkedVisit]);
 
   // Suggestions for Symptoms and Diagnoses from historical prescriptions + Curated Clinical Defaults
   const DEFAULT_SYMPTOMS = [
@@ -712,12 +789,244 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     }
   }, [mode, clonedRxItems]);
 
+  const hasUserEditedClinical = useRef(false);
+
+  // ── Authoritative Server Context Recovery (Defect 2) ───────────
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadAuthoritativeContext = async () => {
+      if (mode !== 'new') {
+        setIsLoadingAuthoritativeContext(false);
+        return;
+      }
+
+      if (!visitIdParam && !rawPatientId && !rawOwnerId) {
+        setIsLoadingAuthoritativeContext(false);
+        return;
+      }
+
+      try {
+        setIsLoadingAuthoritativeContext(true);
+
+        // 1. Recover from Visit if visitIdParam is present
+        if (visitIdParam) {
+          let visitObj = linkedVisit;
+          if (!visitObj) {
+            visitObj = await cvpService.getVisitById(visitIdParam);
+          }
+
+          if (visitObj && !isCancelled) {
+            // Owner recovery
+            if (visitObj.owner) {
+              setAuthoritativeOwner(visitObj.owner as any);
+            } else if (visitObj.ownerName) {
+              setAuthoritativeOwner({
+                id: (visitObj as any).localOwnerId || visitObj.ownerId,
+                serverId: visitObj.ownerId,
+                name: visitObj.ownerName,
+                phone: visitObj.ownerPhone || '',
+                address: visitObj.address || '',
+              } as Owner);
+            }
+
+            // Case & Patient recovery
+            let targetCase: any = null;
+            if (visitCaseIdParam) {
+              targetCase = visitObj.cases?.find((c: any) => String(c.id) === String(visitCaseIdParam));
+            }
+            if (!targetCase && rawPatientId) {
+              targetCase = visitObj.cases?.find((c: any) => String(c.patientId) === String(rawPatientId));
+            }
+            if (!targetCase && visitObj.cases && visitObj.cases.length > 0) {
+              targetCase = visitObj.cases[0];
+            }
+
+            if (targetCase) {
+              if (targetCase.patient) {
+                setAuthoritativePatient(targetCase.patient);
+                if (targetCase.patient.id) {
+                  setSelectedPatientId(targetCase.patient.id);
+                }
+              } else if (targetCase.patientId) {
+                const numPatId = !isNaN(Number(targetCase.patientId)) ? Number(targetCase.patientId) : null;
+                const foundPat = allPatients?.find(
+                  (p) => String(p.id) === String(targetCase.patientId) || p.serverId === String(targetCase.patientId)
+                );
+                if (foundPat) {
+                  setAuthoritativePatient(foundPat);
+                  setSelectedPatientId(foundPat.id!);
+                } else if (numPatId) {
+                  setSelectedPatientId(numPatId);
+                } else {
+                  // Fetch patient from API
+                  try {
+                    const patRes = await fetch(`/api/patients/${targetCase.patientId}`, {
+                      credentials: 'include',
+                      headers: { 'Accept': 'application/json' },
+                    });
+                    if (patRes.ok) {
+                      const serverPat = await patRes.json();
+                      if (serverPat && !isCancelled) {
+                        setAuthoritativePatient(serverPat);
+                        // Cache into Dexie
+                        const localId = await db.patients.add({
+                          serverId: serverPat.id,
+                          ownerId: serverPat.ownerId,
+                          name: serverPat.name,
+                          species: serverPat.species,
+                          breed: serverPat.breed,
+                          weightKg: serverPat.weightKg,
+                          createdAt: new Date(),
+                        } as any);
+                        setSelectedPatientId(localId as number);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Could not fetch patient from API:', e);
+                  }
+                }
+              }
+
+              // Prefill clinical symptoms & assessment without overwriting user edits
+              if (!hasUserEditedClinical.current) {
+                if (targetCase.chiefComplaint) {
+                  setSymptoms((prev) => prev || targetCase.chiefComplaint);
+                }
+                if (targetCase.tentativeDiagnosis) {
+                  setDiagnosis((prev) => prev || targetCase.tentativeDiagnosis);
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Direct Patient recovery if rawPatientId is provided and patient not resolved yet
+        if (rawPatientId && !isCancelled) {
+          const found = allPatients?.find(
+            (p) => String(p.id) === String(rawPatientId) || (p.serverId && p.serverId === rawPatientId)
+          );
+          if (found) {
+            setAuthoritativePatient(found);
+            setSelectedPatientId(found.id!);
+          } else {
+            try {
+              const res = await fetch(`/api/patients/${rawPatientId}`, {
+                credentials: 'include',
+                headers: { 'Accept': 'application/json' },
+              });
+              if (res.ok) {
+                const sPat = await res.json();
+                if (sPat && !isCancelled) {
+                  setAuthoritativePatient(sPat);
+                  if (sPat.owner) {
+                    setAuthoritativeOwner(sPat.owner);
+                  }
+                  // Cache in Dexie
+                  const addedId = await db.patients.add({
+                    serverId: sPat.id,
+                    ownerId: sPat.ownerId,
+                    name: sPat.name,
+                    species: sPat.species,
+                    breed: sPat.breed,
+                    weightKg: sPat.weightKg,
+                    createdAt: new Date(),
+                  } as any);
+                  setSelectedPatientId(addedId as number);
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to load patient from server:', err);
+            }
+          }
+        }
+
+        // 3. Direct Owner recovery if rawOwnerId is provided and owner not resolved yet
+        if (rawOwnerId && !isCancelled) {
+          const foundOwner = allOwners?.find(
+            (o) => String(o.id) === String(rawOwnerId) || o.serverId === String(rawOwnerId)
+          );
+          if (foundOwner) {
+            setAuthoritativeOwner(foundOwner);
+          } else {
+            try {
+              const res = await fetch(`/api/owners/${rawOwnerId}`, {
+                credentials: 'include',
+                headers: { 'Accept': 'application/json' },
+              });
+              if (res.ok) {
+                const sOwner = await res.json();
+                if (sOwner && !isCancelled) {
+                  setAuthoritativeOwner(sOwner);
+                  // Cache in Dexie
+                  await db.owners.add({
+                    serverId: sOwner.id,
+                    name: sOwner.name,
+                    phone: sOwner.phone,
+                    address: sOwner.address,
+                    createdAt: new Date(),
+                  } as any);
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to load owner from server:', err);
+            }
+          }
+        }
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error('Authoritative context load error:', err);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingAuthoritativeContext(false);
+        }
+      }
+    };
+
+    loadAuthoritativeContext();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mode, visitIdParam, visitCaseIdParam, rawPatientId, rawOwnerId, linkedVisit, allPatients, allOwners]);
+
+  // ── Handle Add Visit Medicine To Prescription (Deduplicated) ───
+  const handleAddVisitMedicineToRx = (usage: any) => {
+    if (items.some((itm) => itm.sourceUsageId === usage.id || itm.brandName.toLowerCase() === usage.medicineName.toLowerCase())) {
+      return; // Deduplication preserved!
+    }
+    const matchedMed = availableMedicines?.find(
+      (m) => String(m.id) === String(usage.medicineId) || m.brandName.toLowerCase() === usage.medicineName.toLowerCase()
+    );
+    const newItem: DraftItem = {
+      sourceUsageId: usage.id,
+      medicineId: matchedMed?.id || (typeof usage.medicineId === 'number' ? usage.medicineId : undefined),
+      brandName: usage.medicineName,
+      genericName: matchedMed?.genericName,
+      presentation: matchedMed?.presentation || 'Injection',
+      packSize: matchedMed?.packSize,
+      strength: matchedMed?.strength || matchedMed?.strengthVolume,
+      strengthVolume: matchedMed?.strengthVolume || matchedMed?.strength,
+      dose: String(usage.quantityUsed || 1),
+      doseUnit: usage.unit || 'dose',
+      quantity: Math.max(1, Math.round(Number(usage.quantityUsed) || 1)),
+      unit: usage.unit || matchedMed?.dispenseUnit || 'dose',
+      dispenseUnit: usage.unit || matchedMed?.dispenseUnit || 'dose',
+      frequency: 'Once daily (OD)',
+      durationDays: 3,
+      route: usage.route || matchedMed?.defaultRoute || 'Oral',
+      directions: usage.instructions || 'Administer as directed.',
+    };
+    setItems((prev) => [...prev, newItem]);
+  };
+
   // ── Filtered Patients for Step 1 ──────────────────────────────
   const filteredPatients = useMemo(() => {
     if (!allPatients) return [];
     const q = animalSearch.toLowerCase().trim();
 
-    return allPatients.filter((p) => {
+    const list = allPatients.filter((p) => {
       // Species pill filter
       if (speciesFilter !== 'All' && p.species.toLowerCase() !== speciesFilter.toLowerCase()) {
         return false;
@@ -735,12 +1044,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         (p.microchipNumber && p.microchipNumber.toLowerCase().includes(q)) ||
         (p.ageNote && p.ageNote.toLowerCase().includes(q)) ||
         speciesCode.includes(q) ||
-        (p.id !== undefined && String(p.id) === q) ||
         (owner && owner.name.toLowerCase().includes(q)) ||
         (owner?.phone && owner.phone.toLowerCase().includes(q))
       );
     });
-  }, [allPatients, ownersMap, animalSearch, speciesFilter]);
+
+    if (linkedVisit?.ownerId) {
+      const matchOwnerId = String(linkedVisit.ownerId);
+      list.sort((a, b) => {
+        const aMatches = String(a.ownerId) === matchOwnerId ? -1 : 0;
+        const bMatches = String(b.ownerId) === matchOwnerId ? -1 : 0;
+        return aMatches - bMatches;
+      });
+    }
+
+    return list;
+  }, [allPatients, ownersMap, animalSearch, speciesFilter, linkedVisit]);
 
   // ── Calculated metrics for Optional Dose Calculation Section (UAT 4 + Addendum) ──
   const doseCalcMetrics = useMemo(() => {
@@ -1810,7 +2129,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         return;
       }
 
-      const ownerId = selectedPatient?.ownerId;
+      const ownerId =
+        selectedPatient?.ownerId ||
+        authoritativeOwner?.id ||
+        (authoritativeOwner as any)?.serverId ||
+        selectedOwner?.id ||
+        (selectedOwner as any)?.serverId ||
+        rawOwnerId ||
+        linkedVisit?.ownerId;
+
       if (!ownerId) {
         const msg = 'The selected patient has no valid owner association. Please check the patient record in Patients.';
         console.error('[VetRx] Generate failed: [ERR_PATIENT_MISSING_OWNER]', msg, { patientId: selectedPatient?.id });
@@ -1820,7 +2147,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         return;
       }
 
-      if (!selectedPatientId) {
+      const safePatientId: any = selectedPatientId || selectedPatient?.id || authoritativePatient?.id || rawPatientId;
+      if (!safePatientId) {
         const msg = 'Please select a patient animal before proceeding.';
         console.error('[VetRx] Generate failed:', msg);
         setErrorMsg(msg);
@@ -1828,7 +2156,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         setShowGenerationErrorModal(true);
         return;
       }
-      const safePatientId: number = selectedPatientId;
 
       let rxId: number;
       const isResubmission = existingRx?.status === 'Changes Requested';
@@ -1900,6 +2227,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           ownerId,
           practitionerId,
           visitId: visitIdParam ? String(visitIdParam) : existingRx?.visitId || undefined,
+          visitCaseId: visitCaseIdParam ? String(visitCaseIdParam) : (existingRx as any)?.visitCaseId || undefined,
           symptoms: symptoms.trim() || undefined,
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
@@ -1969,6 +2297,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           ownerId,
           practitionerId,
           visitId: visitIdParam ? String(visitIdParam) : undefined,
+          visitCaseId: visitCaseIdParam ? String(visitCaseIdParam) : undefined,
           symptoms: symptoms.trim() || undefined,
           diagnosis: diagnosis.trim() || undefined,
           instructions: advice.trim() || undefined,
@@ -2079,20 +2408,39 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         }
       }
 
-      // If linked to a visit, update VisitCase and record timeline event
+      // If linked to a visit, update the specific VisitCase for this animal and record timeline event
       if (visitIdParam) {
         try {
           const allCases = await db.visitCases.toArray();
+          let linkedCaseFound = false;
           for (const c of allCases) {
             if (String(c.visitId) === String(visitIdParam) && c.id) {
-              await db.visitCases.update(c.id as any, { prescriptionId: rxId });
+              if (visitCaseIdParam && String(c.id) === String(visitCaseIdParam)) {
+                await db.visitCases.update(c.id as any, { prescriptionId: rxId });
+                linkedCaseFound = true;
+                break;
+              } else if (!visitCaseIdParam && String(c.patientId) === String(safePatientId)) {
+                await db.visitCases.update(c.id as any, { prescriptionId: rxId });
+                linkedCaseFound = true;
+                break;
+              }
             }
           }
+          // Fallback if not matched by specific ID: update first unlinked case for this visit
+          if (!linkedCaseFound) {
+            for (const c of allCases) {
+              if (String(c.visitId) === String(visitIdParam) && c.id && !c.prescriptionId) {
+                await db.visitCases.update(c.id as any, { prescriptionId: rxId });
+                break;
+              }
+            }
+          }
+
           await db.visitTimelineEvents.add({
             visitId: String(visitIdParam),
             eventType: 'PRESCRIPTION_LINKED',
-            title: 'ePrescription Linked',
-            description: `Prescription #${mode === 'edit' ? existingRx?.rxNumber : 'New'} (${targetStatus}) linked to clinical visit.`,
+            title: 'Prescription Linked',
+            description: `Prescription #${mode === 'edit' ? existingRx?.rxNumber : 'New'} (${targetStatus}) linked to animal clinical case.`,
             occurredAt: now,
           });
         } catch (linkErr) {
@@ -2163,7 +2511,19 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   // VIEW 1: STEP 1 - SELECT ANIMAL (if no patient selected)
   // Matches Stitch: vetrx_select_animal_wireframe_flow
   // ============================================================
-  if (!selectedPatientId) {
+  if (isLoadingAuthoritativeContext) {
+    return (
+      <div className="rx-page-container flex flex-col items-center justify-center min-h-[50vh] p-8 text-center">
+        <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-base font-bold text-slate-800">Loading Patient &amp; Owner Context…</h2>
+        <p className="text-xs text-slate-500 mt-1 max-w-sm">
+          Retrieving authoritative clinical records from server…
+        </p>
+      </div>
+    );
+  }
+
+  if (!selectedPatientId && !authoritativePatient) {
     return (
       <div className="rx-page-container">
         {visitIdParam && (
@@ -2183,6 +2543,31 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             >
               Return to Visit
             </button>
+          </div>
+        )}
+
+        {linkedVisit && (
+          <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-950 shadow-sm max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-200 text-amber-900 flex items-center justify-center shrink-0 font-bold">
+                <Icon name="alert-triangle" size={20} />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-amber-950">Patient Record Required for Visit #{visitIdParam}</h4>
+                <p className="text-xs text-amber-900 mt-0.5">
+                  This clinical visit was recorded for client <span className="font-bold text-slate-900">{linkedVisit.ownerName || 'Client'}</span> ({linkedVisit.ownerPhone || 'No phone'}). Please select an existing patient for this client below or complete their animal registration. Do not create a duplicate client.
+                </p>
+              </div>
+            </div>
+            {linkedVisit.ownerName && (
+              <button
+                type="button"
+                onClick={() => setAnimalSearch(linkedVisit.ownerName!)}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs shrink-0 transition-colors border border-amber-400 shadow-sm"
+              >
+                Filter {linkedVisit.ownerName}'s Animals
+              </button>
+            )}
           </div>
         )}
         <div className="rx-select-animal-container">
@@ -2869,6 +3254,74 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               <div className="rx-field-error rx-medicines-error" id="medicines-error" role="alert">
                 <Icon name="warning" size={14} />
                 <span>{errors.medicines}</span>
+              </div>
+            )}
+
+            {/* Visit Administered Medicines (Field Usage History) */}
+            {visitMedicineUsages && visitMedicineUsages.length > 0 && (
+              <div className="mb-6 p-4 bg-slate-900 text-white rounded-2xl border border-slate-700 shadow-md">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center font-bold">
+                      <Icon name="activity" size={18} />
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        Visit Administered Medicines (Field Usage History)
+                        <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 bg-teal-900/60 text-teal-300 rounded border border-teal-700/60">
+                          Field Record
+                        </span>
+                      </h4>
+                      <p className="text-xs text-slate-300">
+                        Administered during field visit #{visitIdParam}. Actual field administration does not automatically create a prescription. Review and optionally add to the take-home regimen below.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {visitMedicineUsages.map((usage, uIdx) => {
+                    const isAlreadyAdded = items.some(
+                      (itm) => itm.sourceUsageId === usage.id || itm.brandName.toLowerCase() === usage.medicineName.toLowerCase()
+                    );
+                    return (
+                      <div
+                        key={`usage-item-${usage.id || uIdx}`}
+                        className="p-3 bg-slate-800/90 rounded-xl border border-slate-700 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-white text-sm truncate">{usage.medicineName}</div>
+                          <div className="text-slate-300 flex items-center gap-2 mt-0.5">
+                            <span className="font-semibold text-teal-300">
+                              Administered: {usage.quantityUsed} {usage.unit || 'dose'}
+                            </span>
+                            {usage.route && <span>• {usage.route}</span>}
+                          </div>
+                          {usage.instructions && (
+                            <div className="text-[11px] text-slate-400 italic mt-0.5 truncate">
+                              "{usage.instructions}"
+                            </div>
+                          )}
+                        </div>
+                        {isAlreadyAdded ? (
+                          <span className="px-3 py-1.5 rounded-lg bg-teal-900/80 text-teal-300 font-bold border border-teal-600/60 shrink-0 flex items-center gap-1.5">
+                            <Icon name="check" size={14} />
+                            <span>In Rx Regimen</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleAddVisitMedicineToRx(usage)}
+                            className="px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold shrink-0 transition-colors flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Icon name="plus" size={14} />
+                            <span>+ Add to Rx</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

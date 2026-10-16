@@ -41,6 +41,10 @@ const envSchema = z.object({
   EMAIL_FROM_NAME: z.string().default('VetRx'),
   BREVO_API_KEY: z.string().optional().default(''),
   APP_BASE_URL: z.string().default('https://vetrx.brightbase.in'),
+
+  // Razorpay Standard Checkout
+  RAZORPAY_KEY_ID: z.string().optional().default(''),
+  RAZORPAY_KEY_SECRET: z.string().optional().default(''),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -571,6 +571,114 @@ export class CvpService {
     };
   }
 
+  // ── Update / Correct Priority Classification ──────────────────────────
+  static async updatePriority(
+    id: number | string,
+    newPriority: CallPriority,
+    options?: { reason?: string; isVisit?: boolean }
+  ): Promise<{ call?: Call; visit?: Visit }> {
+    const isVisitId = Boolean(options?.isVisit);
+    let targetCall: Call | null = null;
+    let targetVisit: Visit | null = null;
+
+    if (isVisitId) {
+      targetVisit = await this.getVisitById(id);
+      if (targetVisit?.callId) {
+        targetCall = await this.getCallById(targetVisit.callId);
+      }
+    } else {
+      targetCall = await this.getCallById(id);
+      if (targetCall) {
+        const visits = await db.visits.toArray();
+        targetVisit = visits.find((v) => String(v.callId) === String(targetCall?.id)) || null;
+      }
+    }
+
+    if (!targetCall && !targetVisit) {
+      throw new Error(`Record ${id} not found.`);
+    }
+
+    if (targetVisit && (targetVisit.status === 'COMPLETED' || targetVisit.status === 'CANCELLED')) {
+      throw new Error(`Cannot change priority of a ${targetVisit.status} visit.`);
+    }
+
+    const now = new Date();
+    const oldPriority = targetCall?.priority || targetVisit?.priority || 'PLANNED';
+
+    // Update Call if found
+    if (targetCall?.id) {
+      const updatedNotes = options?.reason
+        ? `${targetCall.notes ? targetCall.notes + ' | ' : ''}[Priority changed ${oldPriority} -> ${newPriority}: ${options.reason}]`.trim()
+        : targetCall.notes;
+
+      await db.calls.update(targetCall.id as any, {
+        priority: newPriority,
+        notes: updatedNotes,
+        updatedAt: now,
+      });
+      targetCall.priority = newPriority;
+      targetCall.notes = updatedNotes;
+      targetCall.updatedAt = now;
+    }
+
+    // Update Visit if found
+    if (targetVisit?.id) {
+      let duration = targetVisit.estimatedDurationMinutes;
+      if (newPriority === 'EMERGENCY' && duration < 45) {
+        duration = 45;
+      } else if (oldPriority === 'EMERGENCY' && newPriority !== 'EMERGENCY' && duration === 45) {
+        duration = 30;
+      }
+
+      await db.visits.update(targetVisit.id as any, {
+        priority: newPriority,
+        estimatedDurationMinutes: duration,
+        updatedAt: now,
+      });
+
+      // Record timeline event for audit trail
+      await db.visitTimelineEvents.add({
+        visitId: targetVisit.id,
+        eventType: 'PRIORITY_CHANGED',
+        title: `Priority Classification Changed: ${newPriority}`,
+        description: `Operational priority updated from ${oldPriority} to ${newPriority}.${options?.reason ? ` Reason: ${options.reason}` : ''}`,
+        occurredAt: now,
+        metadata: {
+          oldPriority,
+          newPriority,
+          reason: options?.reason,
+        },
+        syncStatus: 'LOCAL_PENDING',
+      } as any);
+
+      targetVisit.priority = newPriority;
+      targetVisit.estimatedDurationMinutes = duration;
+      targetVisit.updatedAt = now;
+    }
+
+    // Backend sync if online
+    if (typeof window !== 'undefined' && navigator.onLine) {
+      try {
+        const serverCallId = (targetCall as any)?.serverId || (targetCall?.id && String(targetCall.id).includes('-') ? targetCall.id : null);
+        if (serverCallId) {
+          await fetch(`/api/calls/${serverCallId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              priority: newPriority,
+              notes: options?.reason ? `Priority updated: ${options.reason}` : undefined,
+            }),
+          });
+        }
+      } catch (syncErr) {
+        console.warn('Backend priority sync failed, updated locally in Dexie:', syncErr);
+      }
+    }
+
+    return { call: targetCall || undefined, visit: targetVisit || undefined };
+  }
+
   // ── Close Call Without Visit ──────────────────────────────────────────
   static async closeCall(
     id: number | string,
@@ -1194,28 +1302,127 @@ export class CvpService {
   // 1. Get Visit by ID with cases, procedures, medicine usage, and timeline
   static async getVisitById(visitId: number | string): Promise<Visit | null> {
     const numId = typeof visitId === 'string' ? parseInt(visitId, 10) : visitId;
-    let visit: Visit | null = (await db.visits.get(numId as any)) || null;
+    let visit: Visit | null = null;
+    if (!isNaN(numId as number)) {
+      visit = (await db.visits.get(numId as any)) || null;
+    }
 
     if (!visit) {
-      // If not in Dexie, try string match or query all
+      // If not in Dexie by numeric id, try string/serverId match
       const allVisits = await db.visits.toArray();
-      visit = allVisits.find((v) => String(v.id) === String(visitId)) || null;
+      visit = allVisits.find((v) => String(v.id) === String(visitId) || (v as any).serverId === String(visitId)) || null;
+    }
+
+    // Authoritative Server Fallback if not found locally or if online
+    if (typeof window !== 'undefined' && navigator.onLine && (!visit || !visit.ownerName || !visit.cases || visit.cases.length === 0)) {
+      try {
+        const res = await fetch(`/api/visits/${visitId}`, {
+          credentials: 'include',
+          headers: { 'Accept': 'application/json' },
+        });
+        if (res.ok) {
+          const serverVisit = await res.json();
+          if (serverVisit && serverVisit.id) {
+            // Map server visit and cache in Dexie
+            const mappedVisit: any = {
+              ...serverVisit,
+              serverId: serverVisit.id,
+              ownerId: serverVisit.ownerId || serverVisit.owner?.id,
+              ownerName: serverVisit.owner?.name || serverVisit.ownerName,
+              ownerPhone: serverVisit.owner?.phone || serverVisit.ownerPhone,
+              address: serverVisit.owner?.address || serverVisit.address || '',
+              cases: serverVisit.cases?.map((c: any) => ({
+                id: c.id,
+                visitId: serverVisit.id,
+                patientId: c.patientId,
+                patientName: c.patient?.name || (c.notes && c.notes.startsWith('Patient: ') ? c.notes.replace('Patient: ', '') : undefined),
+                species: c.species || c.patient?.species,
+                chiefComplaint: c.chiefComplaint,
+                tentativeDiagnosis: c.tentativeDiagnosis,
+                procedureCategory: c.procedureCategory,
+                prescriptionId: c.prescription?.id || c.prescriptionId,
+                notes: c.notes,
+              })) || [],
+            };
+
+            // Cache owner into Dexie if present
+            if (serverVisit.owner) {
+              const allOwners = await db.owners.toArray();
+              const existingOwner = allOwners.find((o) => o.serverId === serverVisit.owner.id || String(o.id) === String(serverVisit.owner.id));
+              if (!existingOwner) {
+                const newOwnerId = await db.owners.add({
+                  serverId: serverVisit.owner.id,
+                  name: serverVisit.owner.name,
+                  phone: serverVisit.owner.phone,
+                  address: serverVisit.owner.address,
+                  createdAt: new Date(),
+                } as any);
+                mappedVisit.localOwnerId = newOwnerId;
+              } else {
+                mappedVisit.localOwnerId = existingOwner.id;
+              }
+
+              // Cache patients
+              if (serverVisit.owner.patients && Array.isArray(serverVisit.owner.patients)) {
+                const allPatients = await db.patients.toArray();
+                for (const pat of serverVisit.owner.patients) {
+                  const exists = allPatients.find((p) => p.serverId === pat.id || String(p.id) === String(pat.id));
+                  if (!exists) {
+                    await db.patients.add({
+                      serverId: pat.id,
+                      ownerId: mappedVisit.localOwnerId || serverVisit.owner.id,
+                      name: pat.name,
+                      species: pat.species,
+                      breed: pat.breed,
+                      ageYears: pat.ageYears,
+                      ageMonths: pat.ageMonths,
+                      weightKg: pat.weightKg,
+                      tagNumber: pat.tagNumber,
+                      microchipNumber: pat.microchipNumber,
+                      createdAt: new Date(),
+                    } as any);
+                  }
+                }
+              }
+            }
+
+            // Cache cases into Dexie visitCases table
+            if (mappedVisit.cases && mappedVisit.cases.length > 0) {
+              const allCases = await db.visitCases.toArray();
+              for (const cs of mappedVisit.cases) {
+                const existingCase = allCases.find((c) => String(c.id) === String(cs.id) || (c as any).serverId === String(cs.id));
+                if (!existingCase) {
+                  await db.visitCases.add({
+                    ...cs,
+                    serverId: cs.id,
+                    syncStatus: 'SYNCED',
+                  } as any);
+                }
+              }
+            }
+
+            visit = mappedVisit;
+          }
+        }
+      } catch (err) {
+        console.warn('Authoritative fetch /api/visits/:id failed, falling back to local Dexie cache:', err);
+      }
     }
 
     if (!visit) return null;
 
     // Load child collections from Dexie safely matching both string and number IDs
     const allCases = await db.visitCases.toArray();
-    const cases = allCases.filter((c) => String(c.visitId) === String(visit!.id));
+    const cases = allCases.filter((c) => String(c.visitId) === String(visit!.id) || (visit as any).serverId && String(c.visitId) === String((visit as any).serverId));
 
     const allProcs = await db.visitProcedures.toArray();
-    const procedures = allProcs.filter((p) => String(p.visitId) === String(visit!.id));
+    const procedures = allProcs.filter((p) => String(p.visitId) === String(visit!.id) || (visit as any).serverId && String(p.visitId) === String((visit as any).serverId));
 
     const allUsages = await db.visitMedicineUsages.toArray();
-    const medicineUsages = allUsages.filter((m) => String(m.visitId) === String(visit!.id));
+    const medicineUsages = allUsages.filter((m) => String(m.visitId) === String(visit!.id) || (visit as any).serverId && String(m.visitId) === String((visit as any).serverId));
 
     const allEvents = await db.visitTimelineEvents.toArray();
-    const timelineEvents = allEvents.filter((e) => String(e.visitId) === String(visit!.id));
+    const timelineEvents = allEvents.filter((e) => String(e.visitId) === String(visit!.id) || (visit as any).serverId && String(e.visitId) === String((visit as any).serverId));
 
     // Sort timeline chronologically
     timelineEvents.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
@@ -1225,7 +1432,8 @@ export class CvpService {
     let ownerPhone = visit.ownerPhone;
     let address = visit.address || '';
     if (visit.ownerId && (!ownerName || !ownerPhone || !address)) {
-      const owner = await db.owners.get(Number(visit.ownerId));
+      const allOwners = await db.owners.toArray();
+      const owner = allOwners.find((o) => String(o.id) === String(visit!.ownerId) || o.serverId === String(visit!.ownerId));
       if (owner) {
         ownerName = ownerName || owner.name;
         ownerPhone = ownerPhone || owner.phone;
@@ -1235,10 +1443,11 @@ export class CvpService {
 
     // Enrich cases with patient name/species if missing
     const rawCases = cases.length > 0 ? cases : (visit.cases || []);
+    const allPatients = await db.patients.toArray();
     const resolvedCases = await Promise.all(
       rawCases.map(async (c) => {
         if (!c.patientName && c.patientId) {
-          const pat = await db.patients.get(Number(c.patientId));
+          const pat = allPatients.find((p) => String(p.id) === String(c.patientId) || p.serverId === String(c.patientId));
           if (pat) {
             return {
               ...c,

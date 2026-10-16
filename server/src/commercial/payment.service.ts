@@ -13,6 +13,8 @@ import { AppError } from '../middleware/errorHandler.js';
 import { AuditService } from '../lib/audit.service.js';
 import { AUTHORITATIVE_PLANS } from './plan.config.js';
 import { PayUAdapter } from './payu.adapter.js';
+import { RazorpayAdapter } from './razorpay.adapter.js';
+import { env } from '../config/env.js';
 import { SubscriptionService } from './subscription.service.js';
 import { EntitlementService } from './entitlement.service.js';
 import type { PaymentGateway } from './payment.provider.interface.js';
@@ -39,7 +41,7 @@ export class PaymentService {
       amountPaisa: payment.amountPaisa,
       currency: payment.currency || 'INR',
       status: payment.status || 'PENDING',
-      paymentProvider: payment.paymentProvider || 'PAYU',
+      paymentProvider: payment.paymentProvider || 'RAZORPAY',
       gatewayTransactionId: payment.gatewayTransactionId || null,
       paymentMethod: payment.paymentMethod || null,
       internalReference: payment.internalReference,
@@ -51,6 +53,9 @@ export class PaymentService {
     if (full.internalReference) {
       this.mockPayments.set(full.internalReference, full);
     }
+    if (full.gatewayTransactionId) {
+      this.mockPayments.set(full.gatewayTransactionId, full);
+    }
   }
 
   static clearMocks(): void {
@@ -59,11 +64,11 @@ export class PaymentService {
   }
 
   /**
-   * Resolves the active payment gateway instance (defaults to PayUAdapter).
+   * Resolves the active payment gateway instance (defaults to RazorpayAdapter).
    */
   static getDefaultGateway(): PaymentGateway {
     if (!defaultGatewayInstance) {
-      defaultGatewayInstance = new PayUAdapter();
+      defaultGatewayInstance = new RazorpayAdapter();
     }
     return defaultGatewayInstance;
   }
@@ -210,10 +215,21 @@ export class PaymentService {
         billingInterval: planConfig.interval,
       });
 
+      if (orderResponse.gatewayTransactionId) {
+        payment.gatewayTransactionId = orderResponse.gatewayTransactionId;
+        this.mockPayments.set(orderResponse.gatewayTransactionId, payment);
+      }
+
       return {
         payment: this.mapToDTO(payment),
         checkoutUrl: orderResponse.redirectUrl || '',
         formParameters: orderResponse.formParameters || {},
+        order_id: orderResponse.gatewayTransactionId || '',
+        key_id: orderResponse.formParameters?.key_id || env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '',
+        amount: planConfig.pricePaisa,
+        currency: planConfig.currency,
+        internalReference,
+        success: true,
       };
     }
 
@@ -278,10 +294,30 @@ export class PaymentService {
       billingInterval: planConfig.interval,
     });
 
+    let updatedPayment = payment;
+    if (orderResponse.gatewayTransactionId) {
+      updatedPayment = await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          gatewayTransactionId: orderResponse.gatewayTransactionId,
+          gatewayResponseRaw: {
+            ...((payment.gatewayResponseRaw as any) || {}),
+            orderId: orderResponse.gatewayTransactionId,
+          },
+        },
+      });
+    }
+
     return {
-      payment: this.mapToDTO(payment),
+      payment: this.mapToDTO(updatedPayment),
       checkoutUrl: orderResponse.redirectUrl || '',
       formParameters: orderResponse.formParameters || {},
+      order_id: orderResponse.gatewayTransactionId || '',
+      key_id: orderResponse.formParameters?.key_id || env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '',
+      amount: planConfig.pricePaisa,
+      currency: planConfig.currency,
+      internalReference,
+      success: true,
     };
   }
 
@@ -303,7 +339,7 @@ export class PaymentService {
     gateway?: PaymentGateway;
   }): Promise<InitiatePaymentResponseDTO> {
     const { practiceId, userId, planCode, instrumentType } = params;
-    const gateway = params.gateway || this.getDefaultGateway();
+    const gateway = params.gateway || new PayUAdapter();
 
     const planConfig = AUTHORITATIVE_PLANS[planCode];
     if (!planConfig) {
@@ -423,7 +459,8 @@ export class PaymentService {
   }
 
   /**
-   * Verifies an inbound browser return/callback from PayU and applies subscription effects.
+   * Verifies an inbound payment callback / return and applies subscription effects.
+   * Supports both Razorpay Standard Web Checkout and legacy PayU transactions.
    */
   static async verifyPaymentReturn(params: {
     practiceId: string;
@@ -431,20 +468,46 @@ export class PaymentService {
     gateway?: PaymentGateway;
   }): Promise<PaymentVerificationResponseDTO> {
     const { practiceId, payload } = params;
-    const gateway = params.gateway || this.getDefaultGateway();
 
-    const txnid = (payload.txnid as string) || '';
+    const txnid =
+      (payload.txnid as string) ||
+      (payload.internalReference as string) ||
+      (payload.razorpay_order_id as string) ||
+      (payload.order_id as string) ||
+      (payload.razorpay_payment_id as string) ||
+      (payload.payment_id as string) ||
+      '';
+
     if (!txnid) {
-      throw new AppError(400, 'BAD_REQUEST', 'Missing transaction reference (txnid) in return payload.');
+      throw new AppError(400, 'BAD_REQUEST', 'Missing payment reference (order_id, payment_id, or txnid) in return payload.');
     }
 
     // 1. Locate internal payment record
     let payment: any;
     if (process.env.VETRX_FAST_TEST === '1') {
       payment = this.mockPayments.get(txnid);
+      if (!payment) {
+        for (const p of this.mockPayments.values()) {
+          if (
+            p.gatewayTransactionId === txnid ||
+            p.internalReference === txnid ||
+            p.id === txnid ||
+            p.gatewayResponseRaw?.orderId === txnid
+          ) {
+            payment = p;
+            break;
+          }
+        }
+      }
     } else {
-      payment = await prisma.payment.findUnique({
-        where: { internalReference: txnid },
+      payment = await prisma.payment.findFirst({
+        where: {
+          OR: [
+            { internalReference: txnid },
+            { gatewayTransactionId: txnid },
+            { id: txnid },
+          ],
+        },
         include: { subscription: true },
       });
     }
@@ -470,8 +533,24 @@ export class PaymentService {
       };
     }
 
-    // 3. Cryptographically verify callback payload (reverse SHA-512)
+    // Determine the appropriate gateway adapter
+    let gateway = params.gateway;
+    if (!gateway) {
+      if (payment.paymentProvider === 'PAYU' || (payload.hash && !payload.razorpay_signature)) {
+        gateway = new PayUAdapter();
+      } else {
+        gateway = this.getDefaultGateway();
+      }
+    }
+
+    // 3. Cryptographically verify callback payload
     const verification = await gateway.verifyCallback(payload);
+
+    if (!verification.isVerified || verification.status !== 'SUCCESS') {
+      if (verification.errorMessage?.includes('SIGNATURE_MISMATCH') || verification.errorMessage?.includes('TAMPERED_OR_INVALID_HASH')) {
+        throw new AppError(400, 'SIGNATURE_MISMATCH', verification.errorMessage);
+      }
+    }
 
     // 4. Amount tampering protection: verify returned amount matches expected price
     if (

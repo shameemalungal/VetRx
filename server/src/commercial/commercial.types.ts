@@ -204,6 +204,12 @@ export interface InitiatePaymentResponseDTO {
   payment: PaymentDTO;
   checkoutUrl: string;
   formParameters: Record<string, string>;
+  order_id?: string;
+  key_id?: string;
+  amount?: number;
+  currency?: string;
+  internalReference?: string;
+  success?: boolean;
 }
 
 export interface PaymentVerificationResponseDTO {

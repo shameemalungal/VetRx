@@ -22,6 +22,7 @@ import {
   Wifi,
   WifiOff,
   Briefcase,
+  ArrowLeft,
 } from 'lucide-react';
 import './Cvp.css';
 
@@ -184,14 +185,33 @@ export const FieldModePage: React.FC = () => {
     <div className="cvp-container max-w-3xl mx-auto px-3 sm:px-6 py-4 pb-28 font-sans text-slate-800">
       {/* Header Context Bar */}
       <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
-            <Compass className="w-4 h-4" />
-            <span>Active Field Execution Mode</span>
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/calls/today');
+              }
+            }}
+            className="p-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 shrink-0 min-h-[40px]"
+            aria-label="Back to previous screen"
+            title="Back to previous screen"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-700" />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-teal-700">
+              <Compass className="w-4 h-4 shrink-0" />
+              <span className="truncate">Active Field Execution Mode</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+              Traveling &amp; Stop Execution
+            </h1>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
-            Traveling & Stop Execution
-          </h1>
         </div>
 
         <div className="flex items-center gap-2">

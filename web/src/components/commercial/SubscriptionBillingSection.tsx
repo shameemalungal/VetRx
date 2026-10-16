@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { Icon } from '../ui/Icon';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import { useAuth } from '../../context/AuthContext';
+import { launchRazorpayCheckout } from '../../services/razorpayService';
 import './SubscriptionBillingSection.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
@@ -179,25 +180,28 @@ export const SubscriptionBillingSection: React.FC = () => {
           throw new Error(payData.message || 'Payment order initiation failed.');
         }
 
-        if (payData.checkoutUrl && payData.formParameters) {
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = payData.checkoutUrl;
-          for (const [k, v] of Object.entries(payData.formParameters)) {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = k;
-            input.value = String(v);
-            form.appendChild(input);
-          }
-          document.body.appendChild(form);
-          form.submit();
-          return;
-        }
-
-        setActionSuccess('Payment initiated successfully.');
-        setConfirmModal(null);
-        await fetchCommercialData();
+        // Razorpay Standard Web Checkout
+        await launchRazorpayCheckout({
+          order_id: payData.order_id,
+          key_id: payData.key_id,
+          amount: payData.amount,
+          currency: payData.currency || 'INR',
+          name: 'VetRx Practitioner Platform',
+          description: `VetRx ${confirmModal.planName} Plan (${billingInterval})`,
+          onSuccess: async () => {
+            setActionSuccess(`Payment verified successfully! Your ${confirmModal.planName} subscription is now active.`);
+            setConfirmModal(null);
+            setSubmittingAction(false);
+            await fetchCommercialData();
+          },
+          onError: (err) => {
+            setActionError(err.description || 'Payment processing was cancelled or failed.');
+            setSubmittingAction(false);
+          },
+          onDismiss: () => {
+            setSubmittingAction(false);
+          },
+        });
         return;
       }
 
@@ -415,7 +419,7 @@ export const SubscriptionBillingSection: React.FC = () => {
         <div className="payment-req-banner">
           <Icon name="info" size={16} />
           <span>
-            <strong>Payment Method Notice:</strong> Subscriptions are processed securely in INR through PayU payment gateway. PayU may process a small authorization transaction during recurring mandate registration (₹2 for Cards/UPI, ₹0 for Net Banking). This is an authorization verification transaction and is not your VetRx subscription fee. No subscription fee is charged during the 14-day trial.
+            <strong>Payment Method Notice:</strong> Subscriptions are processed securely in INR through Razorpay payment gateway. Razorpay Standard Checkout supports UPI, Credit/Debit Cards, and Net Banking with instant server-side verification and activation. No subscription fee is charged during the 14-day trial.
           </span>
         </div>
 
@@ -845,7 +849,7 @@ export const SubscriptionBillingSection: React.FC = () => {
       <div className="payment-history-card">
         <h3 className="payment-history-title">Payment & Billing History</h3>
         <p className="payment-history-subtitle">
-          Record of all commercial subscription transactions processed through PayU.
+          Record of all commercial subscription transactions processed through Razorpay and historical gateways.
         </p>
         {payments && payments.length > 0 ? (
           <div style={{ overflowX: 'auto' }}>
@@ -923,7 +927,7 @@ export const SubscriptionBillingSection: React.FC = () => {
 
             <p className="billing-modal-body">
               {confirmModal.type === 'UPGRADE'
-                ? `You will proceed to secure PayU checkout for the ${confirmModal.planName} plan (${billingInterval === 'ANNUAL' ? 'Annual: ₹' + (confirmModal.planName === 'Clinic' ? '14,999' : '5,999') + '/yr' : 'Monthly: ₹' + (confirmModal.planName === 'Clinic' ? '1,499' : '599') + '/mo'}).`
+                ? `You will proceed to secure Razorpay checkout for the ${confirmModal.planName} plan (${billingInterval === 'ANNUAL' ? 'Annual: ₹' + (confirmModal.planName === 'Clinic' ? '14,999' : '5,999') + '/yr' : 'Monthly: ₹' + (confirmModal.planName === 'Clinic' ? '1,499' : '599') + '/mo'}).`
                 : confirmModal.type === 'DOWNGRADE'
                 ? `Your plan will downgrade to ${confirmModal.planName} at the end of your current billing period. Please ensure your active veterinarian seats do not exceed the plan limit.`
                 : confirmModal.type === 'CANCEL' && status?.isTrial
@@ -970,7 +974,7 @@ export const SubscriptionBillingSection: React.FC = () => {
                 {submittingAction
                   ? 'Processing…'
                   : confirmModal.type === 'UPGRADE'
-                  ? 'Proceed to PayU'
+                  ? 'Proceed to Razorpay Checkout'
                   : confirmModal.type === 'CANCEL' && status?.isTrial
                   ? confirmDataDeletion
                     ? 'Cancel & Delete Practice'

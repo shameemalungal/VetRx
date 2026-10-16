@@ -27,6 +27,7 @@ import { ScheduleVisitModal } from '../../components/cvp/ScheduleVisitModal';
 import { CloseCallModal } from '../../components/cvp/CloseCallModal';
 import { PostponeModal } from '../../components/cvp/PostponeModal';
 import { CreateFollowUpModal } from '../../components/cvp/CreateFollowUpModal';
+import { ChangePriorityModal } from '../../components/cvp/ChangePriorityModal';
 import './Cvp.css';
 
 export const CaseDetailPage: React.FC = () => {
@@ -42,6 +43,7 @@ export const CaseDetailPage: React.FC = () => {
   const [isCloseOpen, setIsCloseOpen] = useState<boolean>(false);
   const [isPostponeOpen, setIsPostponeOpen] = useState<boolean>(false);
   const [isFollowUpOpen, setIsFollowUpOpen] = useState<boolean>(false);
+  const [isChangePriorityOpen, setIsChangePriorityOpen] = useState<boolean>(false);
 
   // Notification Banner
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -131,6 +133,27 @@ export const CaseDetailPage: React.FC = () => {
     if (!call?.id) return;
     try {
       const today = new Date().toISOString().split('T')[0];
+      const casesToSchedule =
+        call.selectedPatients && call.selectedPatients.length > 0
+          ? call.selectedPatients.map((p) => ({
+              patientId: p.id,
+              patientName: p.name,
+              species: p.species || call.species || 'Bovine',
+              chiefComplaint: call.symptoms,
+              procedureCategory: 'EMERGENCY',
+              tentativeDiagnosis: call.tentativeAssessment,
+            }))
+          : [
+              {
+                patientId: call.patientIds && call.patientIds.length > 0 ? call.patientIds[0] : undefined,
+                patientName: call.tempPatientName || undefined,
+                species: call.species || 'Bovine',
+                chiefComplaint: call.symptoms,
+                procedureCategory: 'EMERGENCY',
+                tentativeDiagnosis: call.tentativeAssessment,
+              },
+            ];
+
       await cvpService.scheduleCall(call.id, {
         scheduledDate: today,
         priority: 'EMERGENCY',
@@ -140,21 +163,29 @@ export const CaseDetailPage: React.FC = () => {
         latitude: call.latitude,
         longitude: call.longitude,
         addToTodayPlan: true,
-        cases: [
-          {
-            chiefComplaint: call.symptoms,
-            procedureCategory: 'EMERGENCY',
-            species: call.species || 'Bovine',
-            patientName: call.tempPatientName || undefined,
-            tentativeDiagnosis: call.tentativeAssessment,
-          },
-        ],
+        cases: casesToSchedule,
       });
       showToast('Emergency visit created and inserted into Today’s Plan!');
       await loadCallData(String(call.id));
     } catch (err: any) {
       console.error('Emergency dispatch error:', err);
       alert('Could not dispatch emergency visit: ' + err.message);
+    }
+  };
+
+  const handlePriorityUpdate = async (newPriority: any, reason?: string) => {
+    if (!call?.id) return;
+    try {
+      await cvpService.updatePriority(call.id, newPriority, {
+        reason,
+        isVisit: false,
+      });
+      showToast(`Triage priority updated to ${newPriority}`);
+      setIsChangePriorityOpen(false);
+      await loadCallData(String(call.id));
+    } catch (err: any) {
+      console.error('Failed to update priority:', err);
+      alert('Could not update priority: ' + err.message);
     }
   };
 
@@ -219,10 +250,16 @@ export const CaseDetailPage: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-2">
-          <span className={`px-3 py-1 rounded-full text-xs font-black border flex items-center gap-1.5 ${priorityBadge.bg}`}>
+          <button
+            type="button"
+            onClick={() => setIsChangePriorityOpen(true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-black border flex items-center gap-1.5 shadow-sm hover:ring-2 hover:ring-offset-1 transition-all ${priorityBadge.bg}`}
+            title="Click to edit triage priority"
+          >
             <span>{priorityBadge.icon}</span>
             <span>{priorityBadge.label}</span>
-          </span>
+            <span className="text-[10px] underline ml-1 font-semibold opacity-90">Change</span>
+          </button>
           <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
             {call.status === 'LOGGED'
               ? '📥 Logged'
@@ -347,15 +384,15 @@ export const CaseDetailPage: React.FC = () => {
       {/* Operational Next-Action Workflow Section */}
       <div className="mb-4">
         {call.status === 'LOGGED' && (
-          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-teal-900 via-teal-800 to-slate-900 text-white shadow-xl space-y-4">
+          <div className="p-5 sm:p-6 rounded-3xl bg-slate-900 border border-slate-800 text-white shadow-xl space-y-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-teal-300">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-400">
                 Next Operational Decision
               </span>
-              <h2 className="text-lg font-black mt-0.5">
+              <h2 className="text-lg font-black mt-0.5 text-white">
                 Ready to Schedule Field Visit?
               </h2>
-              <p className="text-xs text-teal-100/80 leading-relaxed max-w-xl">
+              <p className="text-xs text-slate-200 leading-relaxed max-w-xl font-medium">
                 This call is logged in triage. Select an action below to confirm a scheduled visit, dispatch emergency care, or resolve the request.
               </p>
             </div>
@@ -365,9 +402,9 @@ export const CaseDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsScheduleOpen(true)}
-                className="min-h-[44px] px-5 py-2.5 rounded-2xl bg-teal-500 hover:bg-teal-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-teal-500/25 flex items-center gap-2 transition-all"
+                className="min-h-[44px] px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-900 font-black text-xs sm:text-sm shadow-md flex items-center gap-2 transition-all border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-900"
               >
-                <Calendar className="w-4 h-4 stroke-[2.5]" />
+                <Calendar className="w-4 h-4 text-slate-900 stroke-[2.5]" />
                 <span>Schedule Visit</span>
               </button>
 
@@ -376,20 +413,31 @@ export const CaseDetailPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleEmergencyDispatch}
-                  className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-lg shadow-red-600/30 flex items-center gap-2 transition-all"
+                  className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-red-600 hover:bg-red-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md flex items-center gap-2 transition-all border border-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-slate-900"
                 >
-                  <AlertTriangle className="w-4 h-4" />
+                  <AlertTriangle className="w-4 h-4 text-white stroke-[2.5]" />
                   <span>Immediate Emergency (Today)</span>
                 </button>
               )}
+
+              {/* Edit Priority / Change Classification */}
+              <button
+                type="button"
+                onClick={() => setIsChangePriorityOpen(true)}
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-900 font-bold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-900"
+                title="Change emergency or planned classification"
+              >
+                <RefreshCw className="w-4 h-4 text-slate-900 stroke-[2.5]" />
+                <span>Change Priority</span>
+              </button>
 
               {/* Postpone */}
               <button
                 type="button"
                 onClick={() => setIsPostponeOpen(true)}
-                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-colors border border-white/10"
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-900 font-bold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-900"
               >
-                <Clock className="w-4 h-4" />
+                <Clock className="w-4 h-4 text-slate-900 stroke-[2.5]" />
                 <span>Postpone</span>
               </button>
 
@@ -397,9 +445,9 @@ export const CaseDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCloseOpen(true)}
-                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center gap-1.5 transition-colors border border-white/10"
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-900 font-bold text-xs sm:text-sm shadow-sm flex items-center gap-2 transition-all border border-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-900"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 text-slate-900 stroke-[2.5]" />
                 <span>Close Case (No Visit)</span>
               </button>
             </div>
@@ -446,19 +494,29 @@ export const CaseDetailPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => navigate('/calls/plan')}
-                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                onClick={() => setIsChangePriorityOpen(true)}
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200"
+                title="Change priority classification"
               >
-                <Activity className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4 text-teal-700" />
+                <span>Change Priority</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/calls/plan')}
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200"
+              >
+                <Activity className="w-4 h-4 text-slate-600" />
                 <span>View Route Planning</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsFollowUpOpen(true)}
-                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                className="min-h-[44px] px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors border border-slate-200"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 text-slate-600" />
                 <span>Add Follow-up</span>
               </button>
             </div>
@@ -555,6 +613,14 @@ export const CaseDetailPage: React.FC = () => {
         onCreated={() => {
           showToast('Follow-up scheduled successfully!');
         }}
+      />
+
+      <ChangePriorityModal
+        isOpen={isChangePriorityOpen}
+        currentPriority={call.priority}
+        entityName={call.ownerName || call.tempOwnerName || `Case #${call.id}`}
+        onClose={() => setIsChangePriorityOpen(false)}
+        onConfirm={handlePriorityUpdate}
       />
     </div>
   );

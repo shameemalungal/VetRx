@@ -178,4 +178,41 @@ test('VetRx WCAG AA Contrast Suite', async (t) => {
       );
     }
   });
+
+  await t.test('7. Android Call Intake Banner Contrast: WCAG AA >= 4.5:1 verification', () => {
+    const bannerItems = [
+      { name: 'Banner Heading (Slate-900 on White)', bg: '#ffffff', text: '#0f172a' },
+      { name: 'Banner Description (Teal-950 on White)', bg: '#ffffff', text: '#042f2e' },
+      { name: 'Banner Caller Badge (Teal-950 on Teal-100)', bg: '#ccfbf1', text: '#042f2e' },
+      { name: 'Banner Alert Badge (Amber-950 on Amber-100)', bg: '#fef3c7', text: '#451a03' },
+      { name: 'Secondary Supporting Text (Slate-600 on White)', bg: '#ffffff', text: '#475569' },
+    ];
+
+    for (const item of bannerItems) {
+      const ratio = getContrastRatio(item.bg, item.text);
+      assert.ok(
+        ratio >= 4.5,
+        `Android banner "${item.name}" has contrast ${ratio.toFixed(2)}:1, which is below WCAG AA 4.5:1`
+      );
+    }
+  });
+
+  await t.test('8. Next Operational Decision Panel Contrast: WCAG AA >= 4.5:1 verification', () => {
+    const decisionItems = [
+      { name: 'Card Title (White on Slate-900)', bg: '#0f172a', text: '#ffffff' },
+      { name: 'Card Label (Teal-400 on Slate-900)', bg: '#0f172a', text: '#2dd4bf' },
+      { name: 'Card Supporting Description (Slate-200 on Slate-900)', bg: '#0f172a', text: '#e2e8f0' },
+      { name: 'Immediate Emergency Action (White on Red-600)', bg: '#dc2626', text: '#ffffff' },
+      { name: 'Schedule Visit Action (Teal-950 on Teal-400)', bg: '#2dd4bf', text: '#042f2e' },
+      { name: 'Secondary Button (Slate-200 on Slate-800)', bg: '#1e293b', text: '#e2e8f0' },
+    ];
+
+    for (const item of decisionItems) {
+      const ratio = getContrastRatio(item.bg, item.text);
+      assert.ok(
+        ratio >= 4.5,
+        `Operational Decision "${item.name}" has contrast ${ratio.toFixed(2)}:1, which is below WCAG AA 4.5:1`
+      );
+    }
+  });
 });

@@ -237,16 +237,16 @@ export const PricingSection: React.FC = () => {
           </div>
         </div>
 
-        {/* Transparent Trial Disclosure & PayU Authorization Information */}
+        {/* Transparent Trial Disclosure & Razorpay Payment Information */}
         <div className="max-w-3xl mx-auto text-center mt-12 p-5 rounded-2xl bg-teal-50/80 border border-teal-200/60 text-xs text-content-secondary shadow-xs space-y-2">
           <p className="font-heading font-bold text-content-primary text-sm">
             14 days free. Your selected plan begins after the trial unless you cancel beforehand.
           </p>
           <p className="leading-relaxed">
-            Your selected payment method will be authorized during signup for recurring billing. No subscription fee is charged during the 14-day trial. Any authorization/verification amount displayed by the payment provider is handled according to the payment provider&apos;s trial authorization process.
+            Your selected payment method will be authorized during signup for recurring billing. No subscription fee is charged during the 14-day trial. Subscriptions are securely processed in INR via Razorpay Standard Checkout supporting UPI, Cards, and Net Banking.
           </p>
           <p className="text-[11px] text-content-muted leading-relaxed">
-            For PayU free-trial Hosted Checkout recurring registration: Cards (₹2 authorization transaction), UPI (₹2 authorization transaction), Net Banking (₹0 authorization transaction). This is an authorization verification transaction and is not your VetRx subscription fee. Applicable taxes, if any, will be reflected in the applicable invoice.
+            Razorpay Standard Checkout provides secure 256-bit encrypted domestic payment processing. Applicable taxes, if any, will be reflected in the official tax invoice.
           </p>
         </div>
       </div>

@@ -25,6 +25,7 @@
     "helmet": "^8.0.0",
     "pdfjs-dist": "^4.10.38",
     "prisma": "^6.4.1",
+    "razorpay": "^2.9.8",
     "sharp": "^0.33.5",
     "tesseract.js": "^7.0.0",
     "vetrx-monorepo": "file:..",

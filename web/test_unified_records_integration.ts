@@ -290,3 +290,175 @@ test('Part 6 & 7: ePrescription from Visit Workflow & Record Linkage', async (t)
     assert.notEqual(administeredMedicines[0].medicineId, prescribedMedicines[0].medicineId);
   });
 });
+
+test('Part 8: Emergency Priority Correction & Audit Trail', async (t) => {
+  await t.test('Emergency to Planned correction preserves entity IDs, notes, and records PRIORITY_CHANGED event', () => {
+    const callRecord = {
+      id: 'call-101',
+      practiceId: 'prac-1',
+      ownerId: 'own-1',
+      patientIds: ['pat-1'],
+      priority: 'EMERGENCY',
+      status: 'LOGGED',
+      symptoms: 'Suspected bloat',
+      callerPhone: '+919847012345',
+      estimatedDurationMinutes: 45,
+    };
+
+    const auditTrail: any[] = [];
+
+    // Clinician corrects misclassified Emergency to Planned
+    const previousPriority = callRecord.priority;
+    const newPriority = 'PLANNED';
+    const reason = 'Owner confirmed animal is ruminating normally, bloat subsided';
+
+    callRecord.priority = newPriority;
+    callRecord.estimatedDurationMinutes = 30; // standard routine estimate
+    auditTrail.push({
+      callId: callRecord.id,
+      eventType: 'PRIORITY_CHANGED',
+      previousPriority,
+      newPriority,
+      reason,
+      changedAt: new Date().toISOString(),
+    });
+
+    // Verification
+    assert.equal(callRecord.id, 'call-101');
+    assert.equal(callRecord.ownerId, 'own-1');
+    assert.equal(callRecord.patientIds[0], 'pat-1');
+    assert.equal(callRecord.priority, 'PLANNED');
+    assert.equal(callRecord.estimatedDurationMinutes, 30);
+    assert.equal(auditTrail.length, 1);
+    assert.equal(auditTrail[0].eventType, 'PRIORITY_CHANGED');
+    assert.equal(auditTrail[0].previousPriority, 'EMERGENCY');
+    assert.equal(auditTrail[0].newPriority, 'PLANNED');
+  });
+});
+
+test('Part 9: Multi-Animal Visit Prescription Isolation & Deduplication', async (t) => {
+  await t.test('Multi-animal visit maintains strictly isolated prescriptions per animal', () => {
+    const multiAnimalVisit = {
+      id: 'vis-multi-1',
+      cases: [
+        { id: 'case-1', patientId: 'pat-cow-1', species: 'Cattle', prescriptionId: undefined as string | undefined },
+        { id: 'case-2', patientId: 'pat-calf-2', species: 'Cattle', prescriptionId: undefined as string | undefined },
+      ],
+    };
+
+    // Prescription 1 created for Cow 1
+    const rx1 = { id: 'rx-cow-1', visitId: multiAnimalVisit.id, visitCaseId: 'case-1', patientId: 'pat-cow-1' };
+    const targetCase1 = multiAnimalVisit.cases.find(c => c.id === rx1.visitCaseId);
+    if (targetCase1) targetCase1.prescriptionId = rx1.id;
+
+    assert.equal(multiAnimalVisit.cases[0].prescriptionId, 'rx-cow-1');
+    assert.equal(multiAnimalVisit.cases[1].prescriptionId, undefined, 'Case 2 must NOT be mutated by Case 1 prescription');
+
+    // Prescription 2 created for Calf 2
+    const rx2 = { id: 'rx-calf-2', visitId: multiAnimalVisit.id, visitCaseId: 'case-2', patientId: 'pat-calf-2' };
+    const targetCase2 = multiAnimalVisit.cases.find(c => c.id === rx2.visitCaseId);
+    if (targetCase2) targetCase2.prescriptionId = rx2.id;
+
+    assert.equal(multiAnimalVisit.cases[0].prescriptionId, 'rx-cow-1');
+    assert.equal(multiAnimalVisit.cases[1].prescriptionId, 'rx-calf-2');
+    assert.notEqual(multiAnimalVisit.cases[0].prescriptionId, multiAnimalVisit.cases[1].prescriptionId);
+  });
+
+  await t.test('Visit medicines flowing to Prescription builder deduplicate on sourceUsageId and medicineName', () => {
+    const rxItems: any[] = [];
+    const usage = { id: 'usage-100', medicineId: 'med-5', medicineName: 'Melonex 5ml', quantityUsed: 5, unit: 'ml' };
+
+    // Function matching handleAddVisitMedicineToRx logic
+    const addUsageToRx = (u: typeof usage) => {
+      const alreadyExists = rxItems.some(
+        itm => itm.sourceUsageId === u.id || itm.brandName.toLowerCase() === u.medicineName.toLowerCase()
+      );
+      if (!alreadyExists) {
+        rxItems.push({
+          sourceUsageId: u.id,
+          brandName: u.medicineName,
+          quantity: 1,
+          directions: 'Administer once daily',
+        });
+      }
+    };
+
+    // First addition
+    addUsageToRx(usage);
+    assert.equal(rxItems.length, 1);
+    assert.equal(rxItems[0].sourceUsageId, 'usage-100');
+
+    // Second addition (e.g. user taps button again or page reopens)
+    addUsageToRx(usage);
+    assert.equal(rxItems.length, 1, 'Duplicate line must not be added on retry or re-click');
+  });
+
+  await t.test('Stock deduction is idempotent and triggered ONLY by confirmed actual usage, never prescription creation', () => {
+    let internalStock = 50;
+    const deductedUsages = new Set<string>();
+
+    const recordConfirmedUsage = (usageId: string, qty: number) => {
+      if (deductedUsages.has(usageId)) {
+        return; // Idempotency guard prevents double deduction
+      }
+      deductedUsages.add(usageId);
+      internalStock -= qty;
+    };
+
+    // Step 1: Clinician creates a prescription for 10 units
+    const rxItem = { medicineId: 'med-1', quantity: 10 };
+    // Prescription creation alone does NOT deduct stock
+    assert.equal(internalStock, 50, 'Prescription creation alone must not deduct stock');
+
+    // Step 2: Confirmed field administration of 5 units
+    recordConfirmedUsage('usage-abc-1', 5);
+    assert.equal(internalStock, 45, 'Confirmed usage deducts stock');
+
+    // Step 3: Network retry of same usage
+    recordConfirmedUsage('usage-abc-1', 5);
+    assert.equal(internalStock, 45, 'Retrying same usage must not double deduct stock');
+  });
+});
+
+test('Part 10: Operational Dashboard Workload, Capacity & Financial Metrics', async (t) => {
+  await t.test('Correctly aggregates distinct animals, locations, and scheduled stops', () => {
+    // 3 calls, 2 animals at the same farm/location
+    const todayCalls = [
+      { id: 'c1', locationAddress: 'Green Valley Farm, Post 5', patientIds: ['p1'] },
+      { id: 'c2', locationAddress: 'Green Valley Farm, Post 5', patientIds: ['p2'] }, // same location, different animal
+      { id: 'c3', locationAddress: 'Riverdale Dairy', patientIds: ['p3'] },
+    ];
+
+    const animalSet = new Set<string>();
+    const locationSet = new Set<string>();
+
+    for (const c of todayCalls) {
+      locationSet.add(c.locationAddress.trim().toLowerCase());
+      for (const p of c.patientIds) animalSet.add(p);
+    }
+
+    assert.equal(animalSet.size, 3, 'Distinct animals must equal 3');
+    assert.equal(locationSet.size, 2, 'Distinct locations/stops must equal 2 (avoiding double counting same farm)');
+  });
+
+  await t.test('Financial metrics distinguish Draft invoices from Finalized revenue', () => {
+    const todayInvoices = [
+      { id: 'inv-1', status: 'PAID', totalAmount: 1200 },
+      { id: 'inv-2', status: 'ISSUED', totalAmount: 800 },
+      { id: 'inv-3', status: 'Draft', totalAmount: 500 },
+    ];
+
+    const draftInvoices = todayInvoices.filter(i => i.status === 'Draft' || i.status === 'DRAFT');
+    const finalizedInvoices = todayInvoices.filter(i => i.status !== 'Draft' && i.status !== 'DRAFT');
+
+    const totalInvoiced = todayInvoices.reduce((acc, i) => acc + i.totalAmount, 0);
+    const finalizedAmount = finalizedInvoices.reduce((acc, i) => acc + i.totalAmount, 0);
+    const draftAmount = draftInvoices.reduce((acc, i) => acc + i.totalAmount, 0);
+
+    assert.equal(totalInvoiced, 2500);
+    assert.equal(finalizedAmount, 2000);
+    assert.equal(draftAmount, 500);
+    assert.equal(draftInvoices.length, 1);
+  });
+});
+

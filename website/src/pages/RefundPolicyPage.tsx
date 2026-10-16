@@ -64,7 +64,7 @@ export const RefundPolicyPage: React.FC = () => {
           <ul className="list-disc pl-6 space-y-2 text-content-secondary">
             <li>Practitioners receive full access to their chosen plan features (Individual or Clinic).</li>
             <li>No subscription fee is charged during the 14-day trial period (subscription fee is ₹0).</li>
-            <li>Your chosen payment method is authorized during signup for recurring billing via PayU. For PayU Hosted Checkout free-trial registration: Cards (₹2 authorization transaction), UPI (₹2 authorization transaction), and Net Banking (₹0 authorization transaction). This is an authorization verification transaction and is not your VetRx subscription fee.</li>
+            <li>Your chosen payment method is authorized during signup for recurring billing via Razorpay Standard Checkout. Subscriptions are processed in INR supporting UPI, Debit/Credit Cards, and Net Banking. No subscription fee is charged during the 14-day trial.</li>
             <li>Practitioners may configure practice profiles, add staff, manage appointments, and generate clinical case records without immediate billing.</li>
           </ul>
           <div className="p-4 rounded-lg bg-surface-card border border-clinical-border text-sm text-content-secondary italic">

@@ -93,7 +93,7 @@ export const PrivacyPage: React.FC = () => {
           <div className="p-3 bg-white rounded-lg border border-clinical-border">
             <strong className="text-content-primary block font-heading font-bold">5. Subscription &amp; Transaction Metadata</strong>
             <p className="text-content-secondary mt-1 text-xs">
-              Selected plan tier, renewal cycle dates, PayU transaction references, and generated electronic invoices.
+              Selected plan tier, renewal cycle dates, Razorpay order/payment identifiers, and generated electronic invoices.
             </p>
           </div>
           <div className="p-3 bg-white rounded-lg border border-clinical-border">
@@ -160,7 +160,7 @@ export const PrivacyPage: React.FC = () => {
         <p>We only share data with verified infrastructure service providers who support our core operations under strict data protection covenants:</p>
         <ul className="list-disc pl-5 space-y-1.5 text-xs sm:text-sm">
           <li><strong>Cloud Infrastructure &amp; Database Hosting:</strong> Production application instances and PostgreSQL databases hosted on secure cloud infrastructure located in India with network-level container isolation.</li>
-          <li><strong>Payment Processing:</strong> Domestic subscription transactions are processed by our authorized payment aggregator, PayU. Payment card and banking credentials are handled directly by the gateway.</li>
+          <li><strong>Payment Processing:</strong> Domestic subscription transactions are processed by our authorized payment aggregator, Razorpay. Payment card and banking credentials are handled directly by the gateway.</li>
           <li><strong>Transactional Email Services:</strong> Automated system notifications and verification links delivered via transactional email APIs using encrypted endpoints.</li>
           <li><strong>Automated Document Processing (Optional):</strong> When enabled by practice administrators for inventory purchase bill parsing, document image data restricted solely to invoice line items and medicine catalog fields may be processed via Google Cloud Vertex / Gemini API endpoints. No owner, animal patient, or clinical prescription records are transmitted, and processing is subject to Google Cloud enterprise data privacy terms where customer data is not used for model training. A manual entry fallback is always provided.</li>
           <li><strong>Law Enforcement &amp; Legal Duty:</strong> We may disclose data if mandated by a formal warrant, court order, or binding directive issued by an Indian statutory body with competent legal jurisdiction.</li>

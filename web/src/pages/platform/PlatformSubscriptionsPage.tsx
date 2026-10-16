@@ -177,7 +177,7 @@ export const PlatformSubscriptionsPage: React.FC = () => {
                         </span>
                       ) : (
                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          Commercial / PayU
+                          Commercial / Razorpay
                         </span>
                       )}
                     </td>

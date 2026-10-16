@@ -329,6 +329,21 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     return morePaths.some((p) => location.pathname.startsWith(p));
   }, [location.pathname]);
 
+  // Exact or route-aware matching so sibling/nested routes (e.g. /inventory and /inventory/bag) do not double-highlight
+  const isRouteActive = React.useCallback((itemPath: string, currentPath: string): boolean => {
+    if (itemPath === '/dashboard') {
+      return currentPath === '/dashboard' || currentPath === '/';
+    }
+    if (itemPath === '/inventory') {
+      // Active on /inventory, /inventory/items etc. EXCEPT /inventory/bag which is Practice Bag
+      return currentPath === '/inventory' || (currentPath.startsWith('/inventory/') && !currentPath.startsWith('/inventory/bag'));
+    }
+    if (itemPath === '/inventory/bag') {
+      return currentPath.startsWith('/inventory/bag');
+    }
+    return currentPath === itemPath || currentPath.startsWith(itemPath + '/');
+  }, []);
+
   // ── Derive current page label for mobile header ──────────────
   const allPermittedNavItems = React.useMemo(() => {
     const list = [...navItems];
@@ -378,15 +393,14 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
         {/* Nav links */}
         <nav className="sidebar-nav" aria-label="Sections">
-          {navItems.map(({ label, path, icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === '/dashboard'}
-              className={({ isActive }) =>
-                `sidebar-nav-item${isActive ? ' active' : ''}`
-              }
-            >
+          {navItems.map(({ label, path, icon }) => {
+            const active = isRouteActive(path, location.pathname);
+            return (
+              <NavLink
+                key={path}
+                to={path}
+                className={`sidebar-nav-item${active ? ' active' : ''}`}
+              >
               <Icon name={icon} size={18} />
               <span style={{ flex: 1 }}>{label}</span>
               {path === '/calls' && todayCallsCount > 0 && (
@@ -422,7 +436,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 </span>
               )}
             </NavLink>
-          ))}
+          );
+        })}
         </nav>
 
         {/* Footer — Settings + practitioner */}
@@ -1052,7 +1067,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <div className="more-menu-section-label">Clinical &amp; Financial</div>
             <div className="more-menu-grid">
               {secondaryNavItems.map(({ label, path, icon, subtitle }) => {
-                const isActive = location.pathname.startsWith(path);
+                const isActive = isRouteActive(path, location.pathname);
                 return (
                   <NavLink
                     key={path}

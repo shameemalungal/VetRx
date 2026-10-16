@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { Role, PlatformRole } from '@prisma/client';
 import { getPayUConfig } from '../src/commercial/payu.config.js';
 import { PayUCrypto } from '../src/commercial/payu.crypto.js';
+import { PayUAdapter } from '../src/commercial/payu.adapter.js';
 import { PaymentService } from '../src/commercial/payment.service.js';
 import { PlatformAdminService } from '../src/platform/platform-admin.service.js';
 import { AuthorizationService } from '../src/auth/authorization.service.js';
@@ -156,6 +157,7 @@ describe('Phase 15: Context Switching & PayU Comprehensive Validation Suite', ()
         practiceId,
         userId: superAdminUserId,
         planCode: 'INDIVIDUAL_MONTHLY',
+        gateway: new PayUAdapter(),
       });
 
       assert.ok(result.payment.id, 'Payment record must be created');

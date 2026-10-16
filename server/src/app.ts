@@ -17,6 +17,7 @@ import { commercialRouter } from './commercial/commercial.controller.js';
 import { webhookRouter, publicPaymentsRouter } from './commercial/webhook.controller.js';
 import { inventoryRouter } from './inventory/inventory.controller.js';
 import { cvpRouter } from './cvp/cvp.controller.js';
+import { razorpayRouter } from './payments/razorpay.controller.js';
 import { EmailService } from './email/email.service.js';
 import type { AuthenticatedRequest } from './types/index.js';
 
@@ -42,11 +43,12 @@ export function createApp() {
           ? {
               directives: {
                 defaultSrc: ["'self'"],
-                scriptSrc: ["'self'"],
+                scriptSrc: ["'self'", 'https://checkout.razorpay.com'],
                 styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
                 fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
                 imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-                connectSrc: ["'self'", 'https://app.vetrx.brightbase.in'],
+                connectSrc: ["'self'", 'https://app.vetrx.brightbase.in', 'https://api.razorpay.com', 'https://lumberjack.razorpay.com'],
+                frameSrc: ["'self'", 'https://api.razorpay.com'],
                 objectSrc: ["'none'"],
                 baseUri: ["'self'"],
                 frameAncestors: ["'none'"],
@@ -120,6 +122,7 @@ export function createApp() {
   // Mount API Endpoints
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api', razorpayRouter);
   app.use('/api/commercial/webhooks', webhookRouter);
   app.use('/api/commercial/payments/return', publicPaymentsRouter);
   app.use('/api/practice', practiceMemberRouter);

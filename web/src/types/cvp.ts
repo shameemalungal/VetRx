@@ -154,7 +154,8 @@ export type VisitTimelineEventType =
   | 'PRESCRIPTION_LINKED'
   | 'INVOICE_GENERATED'
   | 'VISIT_COMPLETED'
-  | 'VISIT_RESUMED';
+  | 'VISIT_RESUMED'
+  | 'PRIORITY_CHANGED';
 
 export interface VisitTimelineEvent {
   id?: number | string;
@@ -203,6 +204,7 @@ export interface Visit {
   procedures?: VisitProcedure[];
   medicineUsages?: VisitMedicineUsage[];
   timelineEvents?: VisitTimelineEvent[];
+  owner?: any;
   createdAt: Date | string;
   updatedAt?: Date | string;
 }

@@ -200,8 +200,8 @@ export const BillingPage: React.FC = () => {
           <ul className="list-disc pl-6 space-y-2 text-content-secondary">
             <li><strong>Official Trial Policy:</strong> <em>&ldquo;14 days free. Your selected plan begins after the trial unless you cancel beforehand.&rdquo;</em></li>
             <li><strong>Zero Subscription Fee During Trial:</strong> The VetRx subscription trial price is ₹0. No subscription charge is levied during the 14-day evaluation.</li>
-            <li><strong>Payment Method Authorization:</strong> Your chosen payment method is registered and authorized during signup for recurring billing through our authorized gateway (PayU).</li>
-            <li><strong>PayU Free-Trial Authorization Amounts:</strong> PayU Hosted Checkout recurring registration adjusts the authorization transaction to ₹2.00 for Credit/Debit Cards and UPI, and ₹0.00 for Net Banking. This is an authorization verification transaction handled according to payment provider rules and is NOT a VetRx subscription fee.</li>
+            <li><strong>Payment Method Authorization:</strong> Your chosen payment method is registered and authorized during signup for recurring billing through our authorized gateway (Razorpay).</li>
+            <li><strong>Razorpay Standard Checkout:</strong> Subscriptions are processed in INR via Razorpay Standard Web Checkout supporting UPI, Debit/Credit Cards, and Net Banking. No subscription fee is charged during the 14-day evaluation period.</li>
             <li><strong>Day 12 Reminder:</strong> Exactly two days before trial conclusion, an automated transactional email is sent to your registered billing email disclosing the scheduled first subscription debit, authorized payment method, and simple cancellation links.</li>
             <li><strong>Cancellation Before Expiration:</strong> You may cancel anytime before the trial concludes under <strong>Settings &rarr; Subscription &amp; Billing</strong> without paying the subscription fee.</li>
           </ul>
@@ -227,7 +227,7 @@ export const BillingPage: React.FC = () => {
             5. Supported Payment Methods
           </h2>
           <p className="text-content-secondary leading-relaxed">
-            Subscription payments and recurring mandate registrations are processed securely through our authorized payment partner, PayU, supporting standard Indian domestic payment instruments:
+            Subscription payments and recurring mandate registrations are processed securely through our authorized payment partner, Razorpay, supporting standard Indian domestic payment instruments:
           </p>
           <ul className="list-disc pl-6 space-y-2 text-content-secondary text-sm">
             <li>Unified Payments Interface (UPI AutoPay / Mandates)</li>

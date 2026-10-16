@@ -7,7 +7,6 @@ import { inventoryApi, type StockLocation } from '../../services/inventoryApi';
 import type {
   Visit,
   VisitStatus,
-  Medicine,
   TreatmentPackage,
   Prescription,
   Invoice,
@@ -37,6 +36,8 @@ import {
   Receipt,
 } from 'lucide-react';
 import { CreateFollowUpModal } from '../../components/cvp/CreateFollowUpModal';
+import { ChangePriorityModal } from '../../components/cvp/ChangePriorityModal';
+import { MedicineSelectorModal, type SelectedMedicineData } from '../../components/common/MedicineSelectorModal';
 import type { FollowUp } from '../../types/cvp';
 import './Cvp.css';
 
@@ -74,11 +75,6 @@ export const VisitDetailPage: React.FC = () => {
     },
     [id]
   ) || null;
-
-  // Load medicines catalog for autocomplete
-  const medicines: Medicine[] = useLiveQuery(async () => {
-    return await db.medicines.toArray();
-  }) || [];
 
   // Load treatment packages from database
   const treatmentPackages: TreatmentPackage[] = useLiveQuery(async () => {
@@ -133,6 +129,7 @@ export const VisitDetailPage: React.FC = () => {
   const [isApplyPackageModalOpen, setIsApplyPackageModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
+  const [isChangePriorityOpen, setIsChangePriorityOpen] = useState(false);
 
   // Procedure form state
   const [procPatientName, setProcPatientName] = useState('');
@@ -144,16 +141,6 @@ export const VisitDetailPage: React.FC = () => {
 
   // Medicine usage form state
   const [medPatientName, setMedPatientName] = useState('');
-  const [medSearch, setMedSearch] = useState('');
-  const [selectedMedId, setSelectedMedId] = useState<number | string | null>(null);
-  const [selectedMedRecord, setSelectedMedRecord] = useState<Medicine | null>(null);
-  const [isMedDropdownOpen, setIsMedDropdownOpen] = useState(false);
-  const [medQty, setMedQty] = useState(1);
-  const [medUnit, setMedUnit] = useState('ml');
-  const [medRoute, setMedRoute] = useState('IM');
-  const [medBatch, setMedBatch] = useState('');
-  const [medInstructions, setMedInstructions] = useState('');
-  const [isSubmittingMed, setIsSubmittingMed] = useState(false);
 
   // Treatment package application state
   const [pkgSelectedId, setPkgSelectedId] = useState<number | null>(null);
@@ -331,42 +318,45 @@ export const VisitDetailPage: React.FC = () => {
     }
   };
 
-  // Record Medicine Usage Handler (CVP-24)
-  const handleSaveMedicineUsage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!visit.id || !medSearch.trim()) return;
+  const handlePriorityUpdate = async (newPriority: any, reason?: string) => {
+    if (!visit?.id) return;
+    try {
+      await cvpService.updatePriority(visit.id, newPriority, {
+        reason,
+        isVisit: true,
+      });
+      setIsChangePriorityOpen(false);
+    } catch (err: any) {
+      console.error('Failed to update visit priority:', err);
+      alert('Could not update priority: ' + err.message);
+    }
+  };
 
-    setIsSubmittingMed(true);
-    const idempotencyKey = `use_${visit.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
+  const handleUnifiedMedicineSelect = async (medData: SelectedMedicineData) => {
+    if (!visit?.id) return;
     const chosenKit = fieldKits.find((k) => k.id === selectedKitId);
+    const idempotencyKey = `use_${visit.id}_${medData.brandName}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     try {
+      const activeCase = visit.cases?.find((c) => c.species === medPatientName || c.patientName === medPatientName) || visit.cases?.[0];
       await cvpService.recordMedicineUsage(visit.id, {
-        patientName: medPatientName,
-        medicineId: selectedMedId || 0,
-        medicineName: medSearch.trim(),
-        quantityUsed: Number(medQty) || 1,
-        unit: medUnit,
-        route: medRoute,
-        batchNumber: medBatch.trim() || undefined,
-        instructions: medInstructions.trim() || undefined,
+        patientName: medPatientName || activeCase?.species || 'Animal',
+        patientId: activeCase?.patientId,
+        visitCaseId: activeCase?.id,
+        medicineId: medData.medicineId || 0,
+        medicineName: medData.brandName,
+        quantityUsed: Number(medData.quantity) || 1,
+        unit: medData.unit,
+        route: medData.route,
+        batchNumber: medData.batchNumber?.trim() || undefined,
+        instructions: medData.instructions?.trim() || undefined,
         locationId: selectedKitId || undefined,
         locationName: chosenKit?.name || undefined,
         idempotencyKey,
       });
-      setMedSearch('');
-      setSelectedMedId(null);
-      setSelectedMedRecord(null);
-      setIsMedDropdownOpen(false);
-      setMedQty(1);
-      setMedBatch('');
-      setMedInstructions('');
       setIsMedicineModalOpen(false);
     } catch (err) {
       console.error('Failed to record medicine usage:', err);
-    } finally {
-      setIsSubmittingMed(false);
     }
   };
 
@@ -513,11 +503,21 @@ export const VisitDetailPage: React.FC = () => {
 
         <div className="flex items-center gap-2">
           {renderStatusBadge(visit.status)}
-          {visit.priority === 'EMERGENCY' && (
-            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-red-600 text-white">
-              EMERGENCY
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsChangePriorityOpen(true)}
+            className={`px-3 py-1.5 rounded-full text-xs font-black border flex items-center gap-1.5 shadow-sm hover:ring-2 hover:ring-offset-1 transition-all ${
+              visit.priority === 'EMERGENCY'
+                ? 'bg-red-600 hover:bg-red-700 text-white border-red-700'
+                : visit.priority === 'URGENT'
+                ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-700'
+                : 'bg-teal-700 hover:bg-teal-800 text-white border-teal-800'
+            }`}
+            title="Click to edit triage priority"
+          >
+            <span>{visit.priority === 'EMERGENCY' ? '🚨 EMERGENCY' : visit.priority === 'URGENT' ? '⚡ URGENT' : '📅 ROUTINE'}</span>
+            <span className="text-[10px] underline ml-1 font-semibold opacity-90">Change</span>
+          </button>
         </div>
       </div>
 
@@ -647,6 +647,17 @@ export const VisitDetailPage: React.FC = () => {
               )}
             </button>
           )}
+
+          {/* Edit Priority Classification Action */}
+          <button
+            type="button"
+            onClick={() => setIsChangePriorityOpen(true)}
+            className="py-2.5 px-3 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all flex items-center justify-center gap-1.5 min-h-[44px]"
+            title="Change Priority Classification"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-teal-700" />
+            <span>Change Priority</span>
+          </button>
         </div>
       </div>
 
@@ -696,7 +707,7 @@ export const VisitDetailPage: React.FC = () => {
                           navigate(`/prescriptions/new?visitId=${visit?.id}&ownerId=${ownerId}&patientId=${patId}&visitCaseId=${c.id || ''}`);
                         }}
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-[11px] border border-teal-200 transition-colors shadow-sm"
-                        title="Create separate ePrescription for this animal"
+                        title="Create separate Prescription for this animal"
                       >
                         <Plus className="w-3 h-3 text-teal-700" />
                         <span>Prescribe for {c.patientName || c.species || `Animal #${idx + 1}`}</span>
@@ -777,12 +788,7 @@ export const VisitDetailPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedMedId(null);
-                    setSelectedMedRecord(null);
-                    setMedSearch('');
-                    setIsMedicineModalOpen(true);
-                  }}
+                  onClick={() => setIsMedicineModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs shadow-sm transition-all"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -845,20 +851,28 @@ export const VisitDetailPage: React.FC = () => {
             </h2>
 
             {visit.timelineEvents && visit.timelineEvents.length > 0 ? (
-              <div className="relative pl-6 space-y-4 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+              <div className="space-y-1">
                 {visit.timelineEvents.map((ev, idx) => {
                   const evDate = new Date(ev.occurredAt);
                   const timeStr = evDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  const isLast = idx === visit.timelineEvents!.length - 1;
 
                   return (
-                    <div key={ev.id || idx} className="relative text-xs">
-                      {/* Timeline Dot */}
-                      <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-teal-700 ring-4 ring-teal-50" />
-                      <div className="font-black text-slate-900">{ev.title}</div>
-                      <div className="text-[10px] text-slate-400 font-semibold">{timeStr}</div>
-                      {ev.description && (
-                        <p className="text-[11px] text-slate-600 mt-0.5 break-words">{ev.description}</p>
-                      )}
+                    <div key={ev.id || idx} className="flex items-stretch gap-3 text-xs">
+                      {/* Left: Dedicated Marker Column */}
+                      <div className="flex flex-col items-center shrink-0 w-4">
+                        <span className="w-3 h-3 rounded-full bg-teal-700 ring-4 ring-teal-50 shrink-0 mt-1" />
+                        {!isLast && <div className="w-0.5 bg-slate-200 flex-1 my-1" />}
+                      </div>
+
+                      {/* Right: Dedicated Text Column */}
+                      <div className="flex-1 min-w-0 pb-4">
+                        <div className="font-black text-slate-900 leading-tight">{ev.title}</div>
+                        <div className="text-[10px] text-slate-400 font-semibold mt-0.5">{timeStr}</div>
+                        {ev.description && (
+                          <p className="text-[11px] text-slate-600 mt-1 leading-relaxed break-words">{ev.description}</p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -870,22 +884,24 @@ export const VisitDetailPage: React.FC = () => {
             )}
           </section>
 
-          {/* Linked ePrescriptions Card */}
+          {/* Linked Prescriptions Card */}
           <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-teal-700" />
-                Linked ePrescriptions ({linkedPrescriptions.length})
+                Linked Prescriptions ({linkedPrescriptions.length})
               </h2>
               <button
                 type="button"
                 onClick={() => {
-                  const firstPatId = visit.cases?.[0]?.patientId || '';
+                  const firstCase = visit.cases?.[0];
+                  const firstPatId = firstCase?.patientId || '';
                   const ownerId = visit.ownerId || '';
-                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}`);
+                  const caseId = firstCase?.id || '';
+                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}&visitCaseId=${caseId}`);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold text-[11px] border border-teal-200 transition-colors"
-                title="Create new ePrescription linked to this visit"
+                title="Create new Prescription linked to this visit"
               >
                 <Plus className="w-3 h-3 text-teal-700" />
                 <span>New Rx</span>
@@ -943,7 +959,7 @@ export const VisitDetailPage: React.FC = () => {
               </div>
             ) : (
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center text-xs text-slate-500">
-                No ePrescription created yet for this visit.
+                No Prescription created yet for this visit.
               </div>
             )}
           </section>
@@ -960,15 +976,17 @@ export const VisitDetailPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const firstPatId = visit.cases?.[0]?.patientId || '';
+                  const firstCase = visit.cases?.[0];
+                  const firstPatId = firstCase?.patientId || '';
                   const ownerId = visit.ownerId || '';
-                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}`);
+                  const caseId = firstCase?.id || '';
+                  navigate(`/prescriptions/new?visitId=${visit.id}&ownerId=${ownerId}&patientId=${firstPatId}&visitCaseId=${caseId}`);
                 }}
                 className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center justify-between shadow-sm"
               >
                 <span className="flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-teal-600" />
-                  <span>{linkedPrescriptions.length > 0 ? 'Create Additional ePrescription' : 'Create ePrescription'}</span>
+                  <span>{linkedPrescriptions.length > 0 ? 'Create Additional Prescription' : 'Create Prescription'}</span>
                 </span>
                 <ChevronRight className="w-4 h-4 text-teal-600" />
               </button>
@@ -1166,257 +1184,14 @@ export const VisitDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Modal: Record Actual Medicine Usage (CVP-24) ────────────────────── */}
-      {isMedicineModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
-                <Pill className="w-4 h-4 text-teal-700" />
-                Record Medicine Administered
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsMedicineModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveMedicineUsage} className="mt-4 space-y-3.5 text-xs">
-              {/* Target Animal */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Target Animal / Patient</label>
-                <select
-                  value={medPatientName}
-                  onChange={(e) => setMedPatientName(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                >
-                  {cases.map((c, i) => (
-                    <option key={i} value={c.species || `Animal #${i + 1}`}>
-                      {c.species || `Animal #${i + 1}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Medicine Name using Canonical Medicine Catalogue */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Medicine Name (from Formulary Catalogue) *
-                </label>
-                {selectedMedRecord ? (
-                  <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                        <Pill className="w-3.5 h-3.5 text-teal-700 shrink-0" />
-                        <span className="truncate">{selectedMedRecord.brandName}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-600 truncate mt-0.5">
-                        {selectedMedRecord.genericName || selectedMedRecord.presentation} • {selectedMedRecord.strengthVolume || selectedMedRecord.strength || selectedMedRecord.packSize || 'Standard pack'}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedMedRecord(null);
-                        setSelectedMedId(null);
-                        setMedSearch('');
-                        setIsMedDropdownOpen(true);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-[11px] shrink-0"
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Search medicine brand or generic name..."
-                      value={medSearch}
-                      onFocus={() => setIsMedDropdownOpen(true)}
-                      onChange={(e) => {
-                        setMedSearch(e.target.value);
-                        setIsMedDropdownOpen(true);
-                      }}
-                      className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                    />
-
-                    {isMedDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-2xl border border-slate-200 shadow-xl max-h-56 overflow-y-auto z-50 divide-y divide-slate-100">
-                        {medicines
-                          .filter((m) => {
-                            if (!medSearch.trim()) return true;
-                            const q = medSearch.toLowerCase();
-                            return (
-                              (m.brandName || '').toLowerCase().includes(q) ||
-                              (m.genericName || '').toLowerCase().includes(q)
-                            );
-                          })
-                          .slice(0, 25)
-                          .map((m) => (
-                            <button
-                              key={m.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedMedId(m.id || 0);
-                                setSelectedMedRecord(m);
-                                setMedSearch(m.brandName);
-                                if (m.defaultUnit) setMedUnit(m.defaultUnit);
-                                if (m.defaultRoute) setMedRoute(m.defaultRoute);
-                                setIsMedDropdownOpen(false);
-                              }}
-                              className="w-full text-left p-2.5 hover:bg-teal-50/70 transition-colors flex items-start justify-between gap-2"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="font-bold text-slate-900 text-xs truncate">
-                                  {m.brandName}
-                                </div>
-                                <div className="text-[11px] text-slate-500 truncate">
-                                  {m.genericName || 'No generic name'}
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
-                                  {m.presentation}
-                                </span>
-                                {(m.strengthVolume || m.strength) && (
-                                  <div className="text-[10px] text-teal-700 font-bold mt-0.5">
-                                    {m.strengthVolume || m.strength}
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          ))}
-
-                        {medicines.filter((m) => {
-                          if (!medSearch.trim()) return true;
-                          const q = medSearch.toLowerCase();
-                          return (
-                            (m.brandName || '').toLowerCase().includes(q) ||
-                            (m.genericName || '').toLowerCase().includes(q)
-                          );
-                        }).length === 0 && (
-                          <div className="p-3 text-center text-xs text-slate-500">
-                            No catalogue medicine matches &quot;{medSearch}&quot;.
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Source Field Kit / Vehicle Selector (CVP-28 & Multi-Kit) */}
-              {fieldKits.length > 0 && (
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Deduct From Field Kit / Vehicle *
-                  </label>
-                  <select
-                    value={selectedKitId}
-                    onChange={(e) => setSelectedKitId(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                    id="med-select-kit"
-                  >
-                    {fieldKits.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.name} {k.vehicleNumber ? `(Reg: ${k.vehicleNumber})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Quantity & Unit */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Quantity Used *</label>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="any"
-                    required
-                    value={medQty}
-                    onChange={(e) => setMedQty(Number(e.target.value))}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Unit</label>
-                  <input
-                    type="text"
-                    value={medUnit}
-                    onChange={(e) => setMedUnit(e.target.value)}
-                    placeholder="ml, vial, tablet"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Route & Batch */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Route</label>
-                  <select
-                    value={medRoute}
-                    onChange={(e) => setMedRoute(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                  >
-                    {ADMINISTRATION_ROUTES.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Batch Number (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. B2401"
-                    value={medBatch}
-                    onChange={(e) => setMedBatch(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Instructions */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Usage Notes / Dosage</label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Deep IM, repeat after 48h if required"
-                  value={medInstructions}
-                  onChange={(e) => setMedInstructions(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-medium text-xs focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsMedicineModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingMed}
-                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-black shadow-md shadow-teal-700/20"
-                >
-                  {isSubmittingMed ? 'Recording…' : 'Record Medicine'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ── Modal: Record Actual Medicine Usage (Shared Unified Selector) ── */}
+      <MedicineSelectorModal
+        isOpen={isMedicineModalOpen}
+        onClose={() => setIsMedicineModalOpen(false)}
+        onSelect={handleUnifiedMedicineSelect}
+        mode="usage"
+        targetAnimalName={medPatientName || visit.cases?.[0]?.species || 'Animal'}
+      />
 
       {/* ── Modal: Apply Treatment Package in Actual Medicine Administered ── */}
       {isApplyPackageModalOpen && (
@@ -1779,6 +1554,15 @@ export const VisitDetailPage: React.FC = () => {
           originVisitId={visit.id}
         />
       )}
+
+      {/* ── Modal: Change Priority / Classification ────────────────────────── */}
+      <ChangePriorityModal
+        isOpen={isChangePriorityOpen}
+        currentPriority={visit.priority || 'PLANNED'}
+        entityName={visit.ownerName || `Visit #${visit.id}`}
+        onClose={() => setIsChangePriorityOpen(false)}
+        onConfirm={handlePriorityUpdate}
+      />
     </div>
   );
 };

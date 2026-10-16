@@ -400,10 +400,10 @@ export const CallRegistrationPage: React.FC = () => {
       )}
 
       {/* Android Call-Capture Lifecycle & Privacy Banner */}
-      <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-teal-50 via-slate-50 to-indigo-50 border border-teal-200/80 shadow-xs">
+      <div className="mb-4 p-3.5 rounded-2xl bg-white border-2 border-teal-200/90 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-start gap-2.5">
-            <span className="p-2 rounded-xl bg-teal-600 text-white shrink-0 mt-0.5">
+            <span className="p-2 rounded-xl bg-teal-700 text-white shrink-0 mt-0.5 shadow-xs">
               <Smartphone className="w-4 h-4" />
             </span>
             <div>
@@ -411,18 +411,18 @@ export const CallRegistrationPage: React.FC = () => {
                 <span className="text-xs font-black text-slate-900">
                   Android Call Intake
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 text-[10px] font-black tracking-wide uppercase">
+                <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-950 text-[10px] font-black tracking-wide uppercase border border-teal-300">
                   {callSource === 'ANDROID_SHARE'
                     ? 'Android Share Target'
                     : callSource === 'CLIPBOARD_IMPORT'
                     ? 'Dialer Paste'
                     : 'Manual Intake'}
                 </span>
-                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 text-[10px] font-black border border-amber-300">
                   Intake Stage: Draft Event (Not confirmed visit)
                 </span>
               </div>
-              <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+              <p className="text-[11px] text-slate-800 font-medium mt-1 leading-relaxed">
                 Privacy-first telephony integration. Phone events remain draft call intakes until registered and explicitly scheduled into a visit.
               </p>
             </div>
@@ -432,11 +432,11 @@ export const CallRegistrationPage: React.FC = () => {
             <button
               type="button"
               onClick={handlePasteFromDialer}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-teal-50 text-teal-800 text-xs font-bold border border-teal-300 shadow-xs transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-950 text-xs font-black border border-teal-300 shadow-xs transition-all active:scale-95"
               id="android-btn-paste-dialer-top"
               title="Paste copied caller number from Android dialer"
             >
-              <Clipboard className="w-3.5 h-3.5 text-teal-700" />
+              <Clipboard className="w-3.5 h-3.5 text-teal-800" />
               <span>Paste from Dialer</span>
             </button>
           </div>
