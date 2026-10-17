@@ -43,8 +43,8 @@ const envSchema = z.object({
   APP_BASE_URL: z.string().default('https://vetrx.brightbase.in'),
 
   // Razorpay Standard Checkout
-  RAZORPAY_KEY_ID: z.string().optional().default(''),
-  RAZORPAY_KEY_SECRET: z.string().optional().default(''),
+  RAZORPAY_KEY_ID: z.string().optional().default('').transform((v) => v.replace(/^["']|["']$/g, '').trim()),
+  RAZORPAY_KEY_SECRET: z.string().optional().default('').transform((v) => v.replace(/^["']|["']$/g, '').trim()),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

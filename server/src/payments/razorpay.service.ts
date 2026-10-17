@@ -34,8 +34,8 @@ export class RazorpayService {
    * Returns or initializes the Razorpay SDK instance.
    */
   public static getClient(): Razorpay {
-    const keyId = env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID;
-    const keySecret = env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    const keyId = (env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '').replace(/^["']|["']$/g, '').trim();
+    const keySecret = (env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').replace(/^["']|["']$/g, '').trim();
 
     if (!keyId || !keySecret) {
       throw new Error('RAZORPAY_CREDENTIALS_MISSING');
@@ -124,7 +124,7 @@ export class RazorpayService {
       };
     }
 
-    const keySecret = env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    const keySecret = (env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').replace(/^["']|["']$/g, '').trim();
     if (!keySecret) {
       logger.error('Cannot verify payment signature: RAZORPAY_KEY_SECRET is not configured');
       return {

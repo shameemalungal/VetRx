@@ -28,8 +28,8 @@ export class RazorpayAdapter implements PaymentGateway {
   private client: Razorpay | null = null;
 
   constructor(customConfig?: RazorpayAdapterConfig) {
-    this.keyId = customConfig?.keyId || env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
-    this.keySecret = customConfig?.keySecret || env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
+    this.keyId = (customConfig?.keyId || env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '').replace(/^["']|["']$/g, '').trim();
+    this.keySecret = (customConfig?.keySecret || env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '').replace(/^["']|["']$/g, '').trim();
 
     if (this.keyId && this.keySecret && this.keyId !== 'MOCK_KEY') {
       try {
