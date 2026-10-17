@@ -500,12 +500,16 @@ export class PaymentService {
         }
       }
     } else {
+      const altPaymentId = (payload.razorpay_payment_id as string) || (payload.payment_id as string) || '';
+      const orderIdPayload = (payload.razorpay_order_id as string) || (payload.order_id as string) || '';
       payment = await prisma.payment.findFirst({
         where: {
           OR: [
             { internalReference: txnid },
             { gatewayTransactionId: txnid },
+            ...(altPaymentId ? [{ gatewayTransactionId: altPaymentId }] : []),
             { id: txnid },
+            ...(orderIdPayload ? [{ gatewayResponseRaw: { path: ['orderId'], equals: orderIdPayload } }] : []),
           ],
         },
         include: { subscription: true },
