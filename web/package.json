@@ -12,12 +12,13 @@
     "test:cvp8": "tsx test_cvp_phase8_followup_duration.ts",
     "test:browser": "node ../scripts/run_browser_uat.mjs",
     "test:browser:smoke": "node ../scripts/browser_smoke.mjs",
-    "cap:sync": "npm run build:android && cap sync android",
+    "cap:sync": "npm run build:android && cap sync android && npm run android:configure",
     "cap:open": "cap open android",
     "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug",
     "android:release": "npm run cap:sync && cd android && gradlew.bat bundleRelease",
     "cap:add:android": "cap add android",
-    "build:android": "tsc -p tsconfig.app.json --noEmit && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --mode android"
+    "build:android": "tsc -p tsconfig.app.json --noEmit && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --mode android",
+    "android:configure": "node scripts/patch-android-native.mjs"
   },
   "dependencies": {
     "@types/html2canvas": "^0.5.35",
