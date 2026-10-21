@@ -29,7 +29,7 @@ This behavior is useful for offline capture but does not satisfy the strict shar
 
 ### 5. Authentication is cookie-based
 
-The frontend uses credentialed requests and the backend issues an HTTP-only session cookie with `SameSite=Lax`. Android's packaged WebView origin differs from the hosted web app, so the native app's API origin and cookie/session behavior must be verified before authentication is considered Android-ready. The Android build currently points API-aware clients to the configured production host; relative API requests still require an audit and migration to a shared API-base helper.
+The frontend uses credentialed requests and the backend issues an HTTP-only session cookie. The Android build sets `VITE_API_URL=https://app.vetrx.brightbase.in`; a native-only fetch bridge routes relative `/api/*` requests to that host and includes credentials. The backend allows the packaged `https://localhost` origin and sets `SameSite=None; Secure` only for that native origin. A post-generation Android script enables third-party cookies in the WebView so the existing HTTP-only cookie session can be used. These changes are implemented but still require live Android login/session/logout tests before release.
 
 ## Implementation sequence
 
@@ -43,6 +43,6 @@ The frontend uses credentialed requests and the backend issues an HTTP-only sess
 ## Current status
 
 - Capacitor config is located in `web/`, beside the Vite app.
-- Android-specific build mode and an Android debug-build GitHub Actions workflow have been added.
+- Android-specific build mode, native back-button handling, API routing, cookie configuration, and an Android debug-build GitHub Actions workflow have been added.
 - The workflow is a packaging/build check only. It does not establish feature parity or shared-database correctness.
 - Do not release until Android authentication and all entity sync tests pass.
