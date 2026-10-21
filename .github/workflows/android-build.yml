@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-debug-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-debug:
     name: Build Android debug APK
