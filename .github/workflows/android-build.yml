@@ -1,0 +1,66 @@
+name: VetRx Android Debug Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/android-app-foundation-ui
+    paths:
+      - 'web/**'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android-debug:
+    name: Build Android debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Build Android web assets
+        working-directory: web
+        run: npm run build:android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Capacitor Android project
+        working-directory: web
+        run: npx cap add android
+
+      - name: Sync native plugins and assets
+        working-directory: web
+        run: npx cap sync android
+
+      - name: Assemble debug APK
+        working-directory: web/android
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VetRx-android-debug
+          path: web/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
