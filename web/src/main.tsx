@@ -14,19 +14,25 @@ if (Capacitor.isNativePlatform() && nativeApiBase) {
   const originalFetch = window.fetch.bind(window)
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     let target: RequestInfo | URL = input
+    let isApiRequest = false
 
     if (typeof input === 'string' && input.startsWith('/api/')) {
       target = `${nativeApiBase}${input}`
+      isApiRequest = true
     } else if (input instanceof URL && input.origin === window.location.origin && input.pathname.startsWith('/api/')) {
       target = `${nativeApiBase}${input.pathname}${input.search}`
+      isApiRequest = true
     } else if (input instanceof Request) {
       const url = new URL(input.url)
       if (url.origin === window.location.origin && url.pathname.startsWith('/api/')) {
         target = new Request(`${nativeApiBase}${url.pathname}${url.search}`, input)
+        isApiRequest = true
       }
     }
 
-    return originalFetch(target, init)
+    // Relative API calls become cross-origin after routing, so explicitly include the HTTP-only session cookie.
+    const requestInit = isApiRequest ? { ...init, credentials: init?.credentials ?? 'include' } : init
+    return originalFetch(target, requestInit)
   }) as typeof window.fetch
 }
 
