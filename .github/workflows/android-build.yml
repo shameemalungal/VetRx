@@ -26,10 +26,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: web
+      - name: Install workspace dependencies
         run: npm install
 
       - name: Build Android web assets
