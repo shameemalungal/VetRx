@@ -63,3 +63,11 @@ uat_*
 test_assets/
 *.dump
 scripts/pending_cvp_migration.sql
+
+# Capacitor-generated Android project (source Android project is tracked after generation)
+# Keep generated build outputs out of version control.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
