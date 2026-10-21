@@ -4,8 +4,8 @@ const config: CapacitorConfig = {
   appId: 'com.vetrx.app',
   appName: 'VetRx',
   webDir: 'dist',
-  // Keep the packaged WebView origin separate from the production API host.
-  // The Android build uses VITE_API_URL from .env.android.
+  // Keep the packaged WebView origin on Capacitor's local HTTPS origin.
+  // Android API routing and cookie behavior must be validated before release.
   server: {
     androidScheme: 'https',
   },
