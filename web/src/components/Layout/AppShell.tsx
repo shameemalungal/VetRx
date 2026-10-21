@@ -7,6 +7,8 @@
 // =============================================================
 
 import React, { useState, useEffect, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
@@ -124,6 +126,34 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate]);
+
+  // ── Android system back button ────────────────────────────────
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let removeListener: (() => void) | undefined;
+    void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      // Close transient UI before navigating away from the current screen.
+      if (isSearchOpen || isNotificationsOpen || isProfileMenuOpen) {
+        setIsSearchOpen(false);
+        setIsNotificationsOpen(false);
+        setIsProfileMenuOpen(false);
+        return;
+      }
+
+      if (location.pathname !== '/dashboard') {
+        if (canGoBack) navigate(-1);
+        else navigate('/dashboard');
+        return;
+      }
+
+      CapacitorApp.exitApp();
+    }).then((listener) => {
+      removeListener = () => { void listener.remove(); };
+    });
+
+    return () => removeListener?.();
+  }, [navigate, location.pathname, isSearchOpen, isNotificationsOpen, isProfileMenuOpen]);
 
   // ── Close popovers on click outside ──────────────────────────
   useEffect(() => {
