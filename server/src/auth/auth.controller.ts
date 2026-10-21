@@ -134,7 +134,7 @@ authRouter.post('/logout', async (req, res, next) => {
       await SessionService.revokeSession(rawToken);
     }
 
-    SessionService.clearCookie(res);
+    SessionService.clearCookie(res, req.headers.origin);
     res.status(200).json({ message: 'Successfully logged out.' });
   } catch (error) {
     next(error);
