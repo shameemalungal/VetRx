@@ -272,11 +272,18 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       const next = [...prev];
       const updated = { ...next[index], [field]: val };
 
+      // Ensure discountPercent and schemeDiscountPercent remain strictly synchronized
+      if (field === 'discountPercent' || field === 'schemeDiscountPercent') {
+        const numDisc = Number(val) || 0;
+        updated.discountPercent = numDisc;
+        updated.schemeDiscountPercent = numDisc;
+      }
+
       // Auto-recalculate taxable value when quantity, purchaseRate, or discount changes
       if (field === 'quantity' || field === 'purchaseRate' || field === 'discountPercent' || field === 'schemeDiscountPercent') {
         const q = Number(field === 'quantity' ? val : updated.quantity) || 0;
         const r = Number(field === 'purchaseRate' ? val : updated.purchaseRate) || 0;
-        const d = Number(field === 'discountPercent' || field === 'schemeDiscountPercent' ? val : (updated.discountPercent || updated.schemeDiscountPercent)) || 0;
+        const d = Number(field === 'discountPercent' || field === 'schemeDiscountPercent' ? val : (updated.discountPercent ?? updated.schemeDiscountPercent ?? 0)) || 0;
         updated.taxableValue = Math.round(q * r * (1 - d / 100) * 100) / 100;
       }
 
@@ -320,7 +327,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
     items.reduce((sum, it) => {
       const q = Number(it.quantity || 0);
       const r = Number(it.purchaseRate || 0);
-      const disc = Number(it.discountPercent || it.schemeDiscountPercent || 0);
+      const disc = Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0);
       const rowTaxable =
         Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
           ? Number(it.taxableValue)
@@ -332,7 +339,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
     items.reduce((sum, it) => {
       const q = Number(it.quantity || 0);
       const r = Number(it.purchaseRate || 0);
-      const disc = Number(it.discountPercent || it.schemeDiscountPercent || 0);
+      const disc = Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0);
       const rowTaxable =
         Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
           ? Number(it.taxableValue)
@@ -401,6 +408,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           quantity: Number(it.quantity),
           purchaseRate: Number(it.purchaseRate) || 0,
           mrp: Number(it.mrp) || Math.round((Number(it.purchaseRate) || 0) * 1.35),
+          discountPercent: Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0),
+          schemeDiscountPercent: Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0),
+          gstPercent: Number(it.gstPercent || 0),
+          taxableValue: Number(it.taxableValue || 0),
           matchedMedicineId: it.matchedMedicineId ? Number(it.matchedMedicineId) : undefined,
           createNewMedicineMaster: it.createNewMedicineMaster,
         })),
@@ -1097,8 +1108,8 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           step="0.1"
                           min="0"
                           className="inv-clean-input"
-                          value={it.schemeDiscountPercent || it.discountPercent || 0}
-                          onChange={(e) => updateItemField(idx, 'schemeDiscountPercent', Number(e.target.value))}
+                          value={it.discountPercent ?? it.schemeDiscountPercent ?? 0}
+                          onChange={(e) => updateItemField(idx, 'discountPercent', Number(e.target.value))}
                           style={{ textAlign: 'right' }}
                         />
                       </td>
@@ -1196,7 +1207,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                 onClick={() => setStep('UPLOAD')}
                 disabled={isConfirming}
               >
-                ← Back to Upload
+                Back to Upload
               </button>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isConfirming}>

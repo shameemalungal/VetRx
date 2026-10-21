@@ -2753,7 +2753,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         onClick={() => setSelectedPatientId(patient.id!)}
                       >
                         <span>Select &amp; Start Rx</span>
-                        <Icon name="arrow-forward" size={16} />
                       </button>
                     </div>
                   );
@@ -2835,7 +2834,6 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                   }}
                 >
                   <span>Continue Registration</span>
-                  <Icon name="arrow-forward" size={16} />
                 </button>
               </div>
             </div>
@@ -3684,10 +3682,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                       <span>Submitting for Approval…</span>
                     </>
                   ) : (
-                    <>
-                      <Icon name="arrow-forward" size={18} />
-                      <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit for Veterinarian Approval' : 'Send for Veterinarian Approval'}</span>
-                    </>
+                    <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit for Veterinarian Approval' : 'Send for Veterinarian Approval'}</span>
                   )}
                 </button>
               )}
@@ -4871,10 +4866,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 <span>Submitting...</span>
               </>
             ) : (
-              <>
-                <Icon name="arrow-forward" size={16} />
-                <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit' : 'Send for Approval'}</span>
-              </>
+              <span>{existingRx?.status === 'Changes Requested' ? 'Resubmit' : 'Send for Approval'}</span>
             )}
           </button>
         )}

@@ -868,7 +868,7 @@ export const VisitDetailPage: React.FC = () => {
                       {/* Right: Dedicated Text Column */}
                       <div className="flex-1 min-w-0 pb-4">
                         <div className="font-black text-slate-900 leading-tight">{ev.title}</div>
-                        <div className="text-[10px] text-slate-400 font-semibold mt-0.5">{timeStr}</div>
+                        <div className="text-[11px] text-slate-600 font-medium mt-0.5">{timeStr}</div>
                         {ev.description && (
                           <p className="text-[11px] text-slate-600 mt-1 leading-relaxed break-words">{ev.description}</p>
                         )}

@@ -808,7 +808,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
               <Link to="/prescriptions" className="section-view-all-link">
-                <span>View All Records →</span>
+                <span>View All Records</span>
               </Link>
             </div>
 
@@ -894,7 +894,7 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
               <Link to="/invoices" className="section-view-all-link">
-                <span>View All Documents →</span>
+                <span>View All Documents</span>
               </Link>
             </div>
 
@@ -981,7 +981,7 @@ export const DashboardPage: React.FC = () => {
             </div>
 
             <div className="formulary-input-relative">
-              <Icon name="pill" size={16} className="formulary-icon-inside" />
+              <Icon name="search" size={16} className="formulary-icon-inside" />
               <input
                 id="dashboard-formulary-search"
                 type="text"

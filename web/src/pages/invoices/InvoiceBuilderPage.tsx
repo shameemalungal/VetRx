@@ -40,6 +40,7 @@ interface ItemDraft {
   unit: string;
   unitPricePaisa: number;
   discountAmtPaisa: number;
+  discountPct?: number;
   isGovPrescribed?: boolean;
   govOrderNote?: string;
   govOrderNumber?: string;
@@ -94,7 +95,8 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const [invoiceDate, setInvoiceDate] = useState<string>(
     formatLocalDateInput()
   );
-  const [doctorDiscountPaisa, setDoctorDiscountPaisa] = useState<number>(0);
+  const [doctorDiscountMode, setDoctorDiscountMode] = useState<'FIXED' | 'PERCENT'>('FIXED');
+  const [doctorDiscountInput, setDoctorDiscountInput] = useState<string>('0');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<InvoiceStatus>('Draft');
   const [editRecordLoaded, setEditRecordLoaded] = useState(mode !== 'edit');  // Items in invoice
@@ -119,6 +121,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const [modalQuantity, setModalQuantity] = useState(1);
   const [modalUnit, setModalUnit] = useState('Per unit');
   const [modalUnitPriceRupees, setModalUnitPriceRupees] = useState('0');
+  const [modalDiscountType, setModalDiscountType] = useState<'FIXED' | 'PERCENT'>('FIXED');
   const [modalDiscountRupees, setModalDiscountRupees] = useState('0');
   const [modalIsGovPrescribed, setModalIsGovPrescribed] = useState(false);
   const [modalGovOrderNumber, setModalGovOrderNumber] = useState('G.O.(Rt) No.589/2023/AHD');
@@ -193,7 +196,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           setSelectedPatientId(inv.patientId);
           setPrescriptionId(inv.prescriptionId);
           setInvoiceDate(formatLocalDateInput(inv.invoiceDate));
-          setDoctorDiscountPaisa(inv.discountTotal || 0);
+          const docDisc = inv.discountTotal || 0;
+          setDoctorDiscountInput((docDisc / 100).toString());
+          setDoctorDiscountMode('FIXED');
           setNotes(inv.notes || '');
           setStatus(inv.status);
 
@@ -212,6 +217,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
               unit: it.unit || 'unit',
               unitPricePaisa: it.unitPricePaisa,
               discountAmtPaisa: it.discountAmtPaisa || 0,
+              discountPct: it.discountPct || 0,
               isGovPrescribed: it.isGovPrescribed,
               govOrderNote: it.govOrderNote,
               govOrderNumber: it.govOrderNumber,
@@ -675,15 +681,25 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     });
 
     const netBeforeDoctorDiscount = Math.max(0, grossSubtotalPaisa - itemDiscountsPaisa);
-    const finalTotalPaisa = Math.max(0, netBeforeDoctorDiscount - doctorDiscountPaisa);
+
+    let effectiveDoctorDiscountPaisa = 0;
+    const rawDocVal = parseFloat(doctorDiscountInput) || 0;
+    if (doctorDiscountMode === 'PERCENT') {
+      const pct = Math.min(100, Math.max(0, rawDocVal));
+      effectiveDoctorDiscountPaisa = Math.round(netBeforeDoctorDiscount * (pct / 100));
+    } else {
+      effectiveDoctorDiscountPaisa = Math.min(netBeforeDoctorDiscount, Math.round(Math.max(0, rawDocVal) * 100));
+    }
+
+    const finalTotalPaisa = Math.max(0, netBeforeDoctorDiscount - effectiveDoctorDiscountPaisa);
 
     return {
       grossSubtotalPaisa,
       itemDiscountsPaisa,
-      doctorDiscountPaisa,
+      doctorDiscountPaisa: effectiveDoctorDiscountPaisa,
       finalTotalPaisa,
     };
-  }, [items, doctorDiscountPaisa]);
+  }, [items, doctorDiscountInput, doctorDiscountMode]);
 
   // Open Modal to Add
   const handleOpenAddItem = (prefillCategory?: InvoiceItemCategory) => {
@@ -693,6 +709,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     setModalQuantity(1);
     setModalUnit('Per unit');
     setModalUnitPriceRupees('0');
+    setModalDiscountType('FIXED');
     setModalDiscountRupees('0');
     setModalIsGovPrescribed(false);
     setModalGovOrderNumber('G.O.(Rt) No.589/2023/AHD');
@@ -713,7 +730,13 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
     setModalQuantity(item.quantity);
     setModalUnit(item.unit || 'Per unit');
     setModalUnitPriceRupees(((item.unitPricePaisa || 0) / 100).toFixed(2));
-    setModalDiscountRupees(((item.discountAmtPaisa || 0) / 100).toFixed(2));
+    if (item.discountPct && item.discountPct > 0) {
+      setModalDiscountType('PERCENT');
+      setModalDiscountRupees(item.discountPct.toString());
+    } else {
+      setModalDiscountType('FIXED');
+      setModalDiscountRupees(((item.discountAmtPaisa || 0) / 100).toString());
+    }
     setModalIsGovPrescribed(!!item.isGovPrescribed);
     setModalGovOrderNumber(item.govOrderNumber || 'G.O.(Rt) No.589/2023/AHD');
     setModalGovOrderDate(item.govOrderDate || '13-12-2023');
@@ -796,10 +819,19 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       setModalError('Please enter a valid unit price.');
       return;
     }
-    const discountRupees = parseFloat(modalDiscountRupees) || 0;
-
     const unitPricePaisa = Math.round(unitPriceRupees * 100);
-    const discountAmtPaisa = Math.round(discountRupees * 100);
+    const lineSubtotalPaisa = Math.round(Math.max(1, modalQuantity) * unitPricePaisa);
+    const rawDisc = parseFloat(modalDiscountRupees) || 0;
+
+    let discountAmtPaisa = 0;
+    let discountPct = 0;
+    if (modalDiscountType === 'PERCENT') {
+      discountPct = Math.min(100, Math.max(0, rawDisc));
+      discountAmtPaisa = Math.round(lineSubtotalPaisa * (discountPct / 100));
+    } else {
+      discountAmtPaisa = Math.min(lineSubtotalPaisa, Math.round(Math.max(0, rawDisc) * 100));
+      discountPct = lineSubtotalPaisa > 0 ? Math.round((discountAmtPaisa / lineSubtotalPaisa) * 1000) / 10 : 0;
+    }
 
     // Exact statutory note if government prescribed
     const govNote = modalIsGovPrescribed
@@ -815,6 +847,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
       unit: modalUnit.trim() || 'Per unit',
       unitPricePaisa,
       discountAmtPaisa,
+      discountPct,
       isGovPrescribed: modalIsGovPrescribed,
       govOrderNumber: modalIsGovPrescribed ? modalGovOrderNumber.trim() : undefined,
       govOrderDate: modalIsGovPrescribed ? modalGovOrderDate.trim() : undefined,
@@ -895,7 +928,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
           visitId: currentVisitId,
           invoiceDate: new Date(invoiceDate),
-          discountTotal: doctorDiscountPaisa,
+          discountTotal: calculations.doctorDiscountPaisa,
           taxTotal: 0,
           grandTotal: calculations.finalTotalPaisa,
           status: saveStatus,
@@ -917,7 +950,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           prescriptionIds: combinedRxIds.length > 0 ? combinedRxIds : undefined,
           visitId: currentVisitId,
           invoiceDate: new Date(invoiceDate),
-          discountTotal: doctorDiscountPaisa,
+          discountTotal: calculations.doctorDiscountPaisa,
           taxTotal: 0,
           grandTotal: calculations.finalTotalPaisa,
           status: saveStatus,
@@ -940,7 +973,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           quantity: item.quantity,
           unit: item.unit,
           unitPricePaisa: item.unitPricePaisa,
-          discountPct: 0,
+          discountPct: item.discountPct || 0,
           taxPct: 0,
           subtotalPaisa: lineSubtotal,
           discountAmtPaisa: item.discountAmtPaisa || 0,
@@ -1164,7 +1197,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                       <input
                         type="text"
                         className="form-input"
-                        style={{ paddingLeft: '36px', paddingRight: patientSearchQuery ? '36px' : '12px' }}
+                        style={{ paddingLeft: '38px', paddingRight: patientSearchQuery ? '36px' : '12px' }}
                         placeholder="Search client name, phone, pet name, species..."
                         value={patientSearchQuery}
                         onChange={(e) => setPatientSearchQuery(e.target.value)}
@@ -1275,7 +1308,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                                   </span>
                                 )}
                                 <span style={{ color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600 }}>
-                                  Select →
+                                  Select
                                 </span>
                               </div>
                             </div>
@@ -1522,6 +1555,16 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                             </span>
                           </div>
 
+                          {item.discountAmtPaisa > 0 && (
+                            <div className="invoice-item-price-block">
+                              <span className="invoice-item-price-label">Disc</span>
+                              <span style={{ fontFamily: 'var(--font-data)', color: 'var(--color-primary)', fontWeight: 600 }}>
+                                -{formatINR(item.discountAmtPaisa)}
+                                {item.discountPct ? ` (${item.discountPct}%)` : ''}
+                              </span>
+                            </div>
+                          )}
+
                           <div className="invoice-item-price-block" style={{ minWidth: '80px' }}>
                             <span className="invoice-item-price-label">Amount</span>
                             <span className="invoice-item-amount">{formatINR(netLineAmount)}</span>
@@ -1607,22 +1650,62 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
               {/* Doctor / Courtesy Discount Field */}
               <div className="invoice-summary-row" style={{ alignItems: 'center' }}>
-                <label htmlFor="doc-discount" style={{ fontSize: '13px' }}>
-                  Doctor Discount (₹)
-                </label>
-                <input
-                  id="doc-discount"
-                  type="number"
-                  min="0"
-                  step="1"
-                  className="form-input font-mono"
-                  style={{ width: '100px', height: '32px', textAlign: 'right', fontSize: '12px' }}
-                  value={doctorDiscountPaisa / 100}
-                  onChange={(e) => {
-                    const num = Math.max(0, parseFloat(e.target.value) || 0);
-                    setDoctorDiscountPaisa(Math.round(num * 100));
-                  }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label htmlFor="doc-discount" style={{ fontSize: '13px', margin: 0 }}>
+                    Doctor Discount
+                  </label>
+                  <div className="discount-mode-toggle" style={{ display: 'inline-flex', borderRadius: '4px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      className={`btn-mode ${doctorDiscountMode === 'FIXED' ? 'active' : ''}`}
+                      onClick={() => setDoctorDiscountMode('FIXED')}
+                      style={{
+                        padding: '1px 6px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        border: 'none',
+                        background: doctorDiscountMode === 'FIXED' ? 'var(--color-primary)' : 'var(--color-surface-container-low)',
+                        color: doctorDiscountMode === 'FIXED' ? '#ffffff' : 'var(--color-text)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ₹
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-mode ${doctorDiscountMode === 'PERCENT' ? 'active' : ''}`}
+                      onClick={() => setDoctorDiscountMode('PERCENT')}
+                      style={{
+                        padding: '1px 6px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        border: 'none',
+                        background: doctorDiscountMode === 'PERCENT' ? 'var(--color-primary)' : 'var(--color-surface-container-low)',
+                        color: doctorDiscountMode === 'PERCENT' ? '#ffffff' : 'var(--color-text)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      %
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input
+                    id="doc-discount"
+                    type="number"
+                    min="0"
+                    step={doctorDiscountMode === 'PERCENT' ? '0.5' : '1'}
+                    className="form-input font-mono"
+                    style={{ width: '90px', height: '32px', textAlign: 'right', fontSize: '12px' }}
+                    value={doctorDiscountInput}
+                    onChange={(e) => setDoctorDiscountInput(e.target.value)}
+                  />
+                  {doctorDiscountMode === 'PERCENT' && calculations.doctorDiscountPaisa > 0 && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-outline)' }}>
+                      (-{formatINR(calculations.doctorDiscountPaisa)})
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="invoice-summary-row">
@@ -1913,13 +1996,49 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
                   </div>
 
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" htmlFor="modal-disc">
-                      Disc (₹)
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <label className="form-label" htmlFor="modal-disc" style={{ margin: 0 }}>
+                        Disc
+                      </label>
+                      <div className="discount-mode-toggle" style={{ display: 'inline-flex', borderRadius: '4px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
+                        <button
+                          type="button"
+                          className={`btn-mode ${modalDiscountType === 'FIXED' ? 'active' : ''}`}
+                          onClick={() => setModalDiscountType('FIXED')}
+                          style={{
+                            padding: '1px 5px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            border: 'none',
+                            background: modalDiscountType === 'FIXED' ? 'var(--color-primary)' : 'var(--color-surface-container-low)',
+                            color: modalDiscountType === 'FIXED' ? '#ffffff' : 'var(--color-text)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ₹
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-mode ${modalDiscountType === 'PERCENT' ? 'active' : ''}`}
+                          onClick={() => setModalDiscountType('PERCENT')}
+                          style={{
+                            padding: '1px 5px',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            border: 'none',
+                            background: modalDiscountType === 'PERCENT' ? 'var(--color-primary)' : 'var(--color-surface-container-low)',
+                            color: modalDiscountType === 'PERCENT' ? '#ffffff' : 'var(--color-text)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          %
+                        </button>
+                      </div>
+                    </div>
                     <input
                       id="modal-disc"
                       type="number"
-                      step="1"
+                      step={modalDiscountType === 'PERCENT' ? '0.5' : '1'}
                       min="0"
                       className="form-input font-mono"
                       value={modalDiscountRupees}

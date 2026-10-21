@@ -27,6 +27,7 @@ export async function requirePractice(
           userId: req.user.id,
           practiceId: sessionPracticeId,
           isActive: true,
+          practice: { isActive: true },
         },
         include: {
           practice: true,
@@ -34,12 +35,13 @@ export async function requirePractice(
       });
     }
 
-    // Fallback: If session had no practiceId or practiceId was invalidated, resolve valid active membership
+    // Fallback: If session had no practiceId or practiceId was invalidated/deactivated, resolve valid active membership
     if (!membership) {
       membership = await prisma.practiceMember.findFirst({
         where: {
           userId: req.user.id,
           isActive: true,
+          practice: { isActive: true },
         },
         include: {
           practice: true,

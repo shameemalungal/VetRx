@@ -1290,6 +1290,119 @@ export class PlatformAdminService {
     return updated;
   }
 
+  /**
+   * Authoritatively updates a user's login email address from Platform Access.
+   * Enforces normalization, uniqueness, session invalidation, and strict audit logging.
+   * Preserves user ID, passwords, practice memberships, roles, subscriptions, and clinical data.
+   */
+  static async changeUserLoginEmail(
+    actorUserId: string,
+    targetUserId: string,
+    newEmail: string,
+    reason?: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    user: { id: string; email: string; previousEmail: string };
+  }> {
+    await AuthorizationService.requirePlatformSuperAdmin(actorUserId);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newEmail || !emailRegex.test(newEmail.trim())) {
+      throw new AppError(400, 'INVALID_EMAIL', 'A valid email address is required.');
+    }
+
+    const trimmedNewEmail = newEmail.trim();
+    const normalizedNewEmail = trimmedNewEmail.toLowerCase();
+
+    let targetUser: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.user) {
+      targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+      });
+    } else {
+      targetUser = this.mockUsers.get(targetUserId);
+    }
+
+    if (!targetUser) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'Target user account not found.');
+    }
+
+    const previousEmail = targetUser.email;
+    if (previousEmail.toLowerCase().trim() === normalizedNewEmail) {
+      throw new AppError(400, 'EMAIL_UNCHANGED', 'The new login email is identical to the current email address.');
+    }
+
+    // Check collision across existing accounts
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.user) {
+      const existing = await prisma.user.findUnique({
+        where: { normalizedEmail: normalizedNewEmail },
+      });
+      if (existing && existing.id !== targetUserId) {
+        throw new AppError(
+          409,
+          'EMAIL_ALREADY_EXISTS',
+          `An account with email "${trimmedNewEmail}" already exists. Login emails must be globally unique.`
+        );
+      }
+
+      // Update User authoritative login record and revoke sessions
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: targetUserId },
+          data: {
+            email: trimmedNewEmail,
+            normalizedEmail: normalizedNewEmail,
+            emailVerified: true,
+          },
+        });
+
+        // Invalidate sessions so the user must re-authenticate with the new email
+        await tx.session.deleteMany({
+          where: { userId: targetUserId },
+        });
+      });
+    } else {
+      // In-memory mock check
+      for (const [uid, u] of this.mockUsers.entries()) {
+        if (uid !== targetUserId && u.email?.toLowerCase().trim() === normalizedNewEmail) {
+          throw new AppError(
+            409,
+            'EMAIL_ALREADY_EXISTS',
+            `An account with email "${trimmedNewEmail}" already exists. Login emails must be globally unique.`
+          );
+        }
+      }
+      targetUser.email = trimmedNewEmail;
+      targetUser.normalizedEmail = normalizedNewEmail;
+      this.mockUsers.set(targetUserId, targetUser);
+    }
+
+    // Record audit log
+    void AuditService.record({
+      userId: actorUserId,
+      action: 'USER_LOGIN_EMAIL_CHANGED',
+      resource: 'User',
+      resourceId: targetUserId,
+      details: {
+        previousEmail,
+        newEmail: trimmedNewEmail,
+        reason: reason || 'Administrative login email change via Platform Access',
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    return {
+      success: true,
+      message: `Login email for account successfully updated to ${trimmedNewEmail}. All previous sessions have been signed out.`,
+      user: {
+        id: targetUserId,
+        email: trimmedNewEmail,
+        previousEmail,
+      },
+    };
+  }
+
   // ============================================================================
   // 4. Practice Membership Administration
   // ============================================================================

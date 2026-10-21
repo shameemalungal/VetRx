@@ -50,9 +50,14 @@ export interface SafePracticeSettingsDTO {
   registrationNumber: string | null;
   doctorName: string | null;
   doctorRegistrationNumber: string | null;
+  doctorQualifications?: string | null;
+  doctorPhone?: string | null;
+  doctorEmail?: string | null;
+  doctorAddress?: string | null;
   doctorPhotoUrl: string | null;
   doctorSignatureUrl: string | null;
   clinicLogoUrl: string | null;
+  clinicLicenseNumber?: string | null;
   ownerSpecialInstructionEnabled: boolean;
   mykgvoaMemberId: string | null;
 }
@@ -60,9 +65,17 @@ export interface SafePracticeSettingsDTO {
 export interface PracticeMembershipSummaryDTO {
   practiceId: string;
   practiceName: string;
+  practiceType?: 'INDEPENDENT' | 'CLINIC' | 'ENTERPRISE';
   role: UserRole;
   isClinicalApprover: boolean;
   isCurrent: boolean;
+  subscription?: {
+    status: string;
+    planName?: string;
+    planCode?: string;
+    trialEndsAt?: string | null;
+    currentPeriodEnd?: string | null;
+  } | null;
 }
 
 export interface AuthMeResponse {
@@ -72,6 +85,7 @@ export interface AuthMeResponse {
   permissions: string[];
   settings: SafePracticeSettingsDTO | null;
   practices?: PracticeMembershipSummaryDTO[];
+  needsPracticeSelection?: boolean;
 }
 
 export interface ApiErrorResponse {

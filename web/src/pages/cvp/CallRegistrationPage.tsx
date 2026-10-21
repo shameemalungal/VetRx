@@ -36,7 +36,6 @@ import {
   AlertCircle,
   Navigation,
   Check,
-  ChevronRight,
   Clipboard,
   Smartphone,
   ShieldCheck,
@@ -876,7 +875,6 @@ export const CallRegistrationPage: React.FC = () => {
                   className="btn-cvp-primary w-full sm:w-auto"
                 >
                   <span>Next: Animals</span>
-                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -1014,7 +1012,6 @@ export const CallRegistrationPage: React.FC = () => {
                   className="btn-cvp-primary"
                 >
                   <span>Next: Clinical Triage</span>
-                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -1217,7 +1214,6 @@ export const CallRegistrationPage: React.FC = () => {
                   className="btn-cvp-primary"
                 >
                   <span>Next: Farm Location</span>
-                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -1268,7 +1264,6 @@ export const CallRegistrationPage: React.FC = () => {
                   className="btn-cvp-primary"
                 >
                   <span>Review Call Summary</span>
-                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>

@@ -218,12 +218,14 @@
 }
 
 .platform-search-input {
-  border: none;
-  background: transparent;
-  outline: none;
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
   font-size: 0.875rem;
   width: 100%;
   color: #0f172a;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
 .platform-search-shortcut {

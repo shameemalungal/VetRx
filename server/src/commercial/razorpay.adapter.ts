@@ -54,8 +54,8 @@ export class RazorpayAdapter implements PaymentGateway {
 
     const amountPaisa = Math.round(order.amountPaisa);
 
-    // Fast-test or mock credential mode (when offline or running unit test suites)
-    if (process.env.VETRX_FAST_TEST === '1' || !this.client || this.keyId === 'MOCK_KEY' || !this.keyId) {
+    // Mock orders are permitted only in explicit test mode.
+    if (process.env.VETRX_FAST_TEST === '1') {
       const mockOrderId = `order_mock_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
       return {
         internalReference: txnid,
@@ -70,6 +70,25 @@ export class RazorpayAdapter implements PaymentGateway {
           description: order.productInfo || `VetRx ${order.planCode || 'Subscription'}`,
         },
       };
+    }
+
+    if (
+      !this.client ||
+      !this.keyId ||
+      !this.keySecret ||
+      this.keyId === 'MOCK_KEY'
+    ) {
+      logger.error('Razorpay production configuration is incomplete', {
+        clientInitialized: Boolean(this.client),
+        keyIdPresent: Boolean(this.keyId),
+        keySecretPresent: Boolean(this.keySecret),
+      });
+
+      throw new AppError(
+        503,
+        'RAZORPAY_NOT_CONFIGURED',
+        'Online payments are temporarily unavailable. Please contact support.'
+      );
     }
 
     try {

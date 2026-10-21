@@ -16,6 +16,7 @@ import {
   requestPersistentStorage,
   type BackupValidationResult,
 } from '../utils/backupRestore';
+import { resizeImageFile } from '../utils/imageResize';
 import { useAuth } from '../context/AuthContext';
 import { SubscriptionBillingSection } from '../components/commercial/SubscriptionBillingSection';
 import { UsersPermissionsSection } from '../components/settings/UsersPermissionsSection';
@@ -63,6 +64,7 @@ interface PractitionerFormData {
 
 function PractitionerSection() {
   const { practitioner, savePractitioner } = useSettingsStore();
+  const { refreshSession } = useAuth();
   const [form, setForm] = useState<PractitionerFormData>({
     name: '',
     registrationNumber: '',
@@ -74,6 +76,8 @@ function PractitionerSection() {
     signatureDataUrl: undefined,
   });
   const [saved, setSaved] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (practitioner) {
@@ -94,21 +98,25 @@ function PractitionerSection() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.type)) {
       alert('Please select a JPG, JPEG, PNG, or WEBP image.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
-      const result = loadEvt.target?.result as string;
-      if (result) {
-        setForm((f) => ({ ...f, photoDataUrl: result }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await resizeImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.88,
+        outputFormat: 'image/jpeg',
+      });
+      setForm((f) => ({ ...f, photoDataUrl: dataUrl }));
+    } catch (err) {
+      console.error('Failed to process doctor photo:', err);
+      alert('Could not process this image. Please choose another file.');
+    }
     e.target.value = '';
   };
 
@@ -116,21 +124,25 @@ function PractitionerSection() {
     setForm((f) => ({ ...f, photoDataUrl: undefined }));
   };
 
-  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.type)) {
       alert('Please select a JPG, JPEG, PNG, or WEBP image.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
-      const result = loadEvt.target?.result as string;
-      if (result) {
-        setForm((f) => ({ ...f, signatureDataUrl: result }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await resizeImageFile(file, {
+        maxWidth: 800,
+        maxHeight: 300,
+        quality: 0.9,
+        outputFormat: 'image/png',
+      });
+      setForm((f) => ({ ...f, signatureDataUrl: dataUrl }));
+    } catch (err) {
+      console.error('Failed to process doctor signature:', err);
+      alert('Could not process this signature image. Please choose another file.');
+    }
     e.target.value = '';
   };
 
@@ -140,9 +152,19 @@ function PractitionerSection() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await savePractitioner(form);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setErrorMsg(null);
+    setIsSaving(true);
+    try {
+      await savePractitioner(form);
+      await refreshSession();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      console.error('Save practitioner failed:', err);
+      setErrorMsg(err?.message || 'Failed to save practitioner profile. Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -157,6 +179,25 @@ function PractitionerSection() {
         <Icon name="patients" size={20} />
       </div>
       <form onSubmit={handleSave} className="card-body settings-form" noValidate>
+        {errorMsg && (
+          <div
+            style={{
+              padding: '10px 14px',
+              background: 'rgba(186, 26, 26, 0.1)',
+              color: 'var(--color-error)',
+              border: '1px solid rgba(186, 26, 26, 0.25)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '13px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <Icon name="alert-triangle" size={16} />
+            <span>{errorMsg}</span>
+          </div>
+        )}
         <div className="settings-grid">
           <FormGroup label="Full name" htmlFor="prac-name">
             <input
@@ -421,8 +462,10 @@ function PractitionerSection() {
         </div>
 
         <div className="settings-actions">
-          <button type="submit" className="btn btn-primary">
-            {saved ? (
+          <button type="submit" className="btn btn-primary" disabled={isSaving}>
+            {isSaving ? (
+              <span>Saving...</span>
+            ) : saved ? (
               <>
                 <Icon name="check" size={16} />
                 Saved
@@ -470,6 +513,9 @@ const EMPTY_ORG: OrgFormData = {
 
 function OrganisationSection() {
   const { organisation, saveOrganisation, setClinicActive } = useSettingsStore();
+  const { refreshSession } = useAuth();
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(
     organisation ? organisation.isActive !== false : false
   );
@@ -514,21 +560,25 @@ function OrganisationSection() {
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.type)) {
       alert('Please select a JPG, JPEG, PNG, or WEBP image.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (loadEvt) => {
-      const result = loadEvt.target?.result as string;
-      if (result) {
-        setForm((f) => ({ ...f, logoDataUrl: result }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const dataUrl = await resizeImageFile(file, {
+        maxWidth: 600,
+        maxHeight: 600,
+        quality: 0.9,
+        outputFormat: file.type === 'image/png' ? 'image/png' : 'image/jpeg',
+      });
+      setForm((f) => ({ ...f, logoDataUrl: dataUrl }));
+    } catch (err) {
+      console.error('Failed to process clinic logo:', err);
+      alert('Could not process this logo image. Please choose another file.');
+    }
     e.target.value = '';
   };
 
@@ -539,21 +589,41 @@ function OrganisationSection() {
   const handleToggle = async () => {
     const nextState = !enabled;
     setEnabled(nextState);
-    if (organisation?.id) {
-      // Toggle active flag only - NEVER delete the record or clear the form
-      await setClinicActive(nextState);
-    } else if (nextState && form.name.trim()) {
-      await saveOrganisation({ ...form, isActive: true });
+    setErrorMsg(null);
+    try {
+      if (organisation?.id) {
+        // Toggle active flag only - NEVER delete the record or clear the form
+        await setClinicActive(nextState);
+      } else if (nextState && form.name.trim()) {
+        await saveOrganisation({ ...form, isActive: true });
+        await refreshSession();
+      }
+    } catch (err: any) {
+      console.error('Toggle clinic failed:', err);
+      setErrorMsg(err?.message || 'Failed to update clinic status.');
     }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
-    await saveOrganisation({ ...form, isActive: true });
-    setEnabled(true);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    if (!form.name.trim()) {
+      setErrorMsg('Please enter a practice / clinic name, or disable Clinic Identity above if practicing independently.');
+      return;
+    }
+    setErrorMsg(null);
+    setIsSaving(true);
+    try {
+      await saveOrganisation({ ...form, name: form.name.trim(), isActive: true });
+      await refreshSession();
+      setEnabled(true);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err: any) {
+      console.error('Save organisation failed:', err);
+      setErrorMsg(err?.message || 'Failed to save clinic details. Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -580,6 +650,25 @@ function OrganisationSection() {
 
       {enabled && (
         <form onSubmit={handleSave} className="card-body settings-form" noValidate>
+          {errorMsg && (
+            <div
+              style={{
+                padding: '10px 14px',
+                background: 'rgba(186, 26, 26, 0.1)',
+                color: 'var(--color-error)',
+                border: '1px solid rgba(186, 26, 26, 0.25)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '13px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Icon name="alert-triangle" size={16} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           <div className="settings-grid">
             <FormGroup label="Practice / clinic name" htmlFor="org-name">
               <input
@@ -752,8 +841,10 @@ function OrganisationSection() {
           </div>
 
           <div className="settings-actions">
-            <button type="submit" className="btn btn-primary" disabled={!form.name.trim()}>
-              {saved ? (
+            <button type="submit" className="btn btn-primary" disabled={!form.name.trim() || isSaving}>
+              {isSaving ? (
+                <span>Saving...</span>
+              ) : saved ? (
                 <>
                   <Icon name="check" size={16} />
                   Saved

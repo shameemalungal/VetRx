@@ -466,7 +466,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
                     id="existing-owner-search"
                     type="text"
                     className="form-input"
-                    style={{ paddingLeft: '36px', paddingRight: ownerSearchQuery ? '36px' : '12px' }}
+                    style={{ paddingLeft: '38px', paddingRight: ownerSearchQuery ? '36px' : '12px' }}
                     placeholder="Search client by name or mobile number..."
                     value={ownerSearchQuery}
                     onChange={(e) => setOwnerSearchQuery(e.target.value)}

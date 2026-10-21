@@ -410,7 +410,7 @@ export const PracticeBagPage: React.FC = () => {
               id="bag-search-input"
               style={{
                 width: '100%',
-                paddingLeft: '36px',
+                paddingLeft: '38px',
                 borderRadius: '8px',
                 fontSize: '13px',
               }}

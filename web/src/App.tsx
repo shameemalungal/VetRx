@@ -32,6 +32,7 @@ import { CaseDetailPage } from './pages/cvp/CaseDetailPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { AcceptInvitationPage } from './pages/auth/AcceptInvitationPage';
+import { ChoosePracticePage } from './pages/auth/ChoosePracticePage';
 import { RolePermissionManagementPage } from './pages/platform/RolePermissionManagementPage';
 import { PlatformShell } from './components/Layout/PlatformShell';
 import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
@@ -367,6 +368,7 @@ function PublicAuthRoutes() {
       <Route path="/invite/:token" element={<AcceptInvitationPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/choose-practice" element={<ChoosePracticePage />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
@@ -455,6 +457,11 @@ function MainContent() {
     );
   }
 
+  // Choose Practice Route for authenticated users
+  if (user && location.pathname === '/choose-practice') {
+    return <ChoosePracticePage />;
+  }
+
   // If user is authenticated as Platform Super Admin without a practice, take to platform console
   if (user && isPlatformAdmin?.() && !practice) {
     return <Navigate to="/platform/dashboard" replace />;
@@ -463,6 +470,11 @@ function MainContent() {
   // If user is authenticated, render protected clinical routes scoped by practice
   if (user && practice) {
     return <AuthenticatedAppRoutes key={practice.id} />;
+  }
+
+  // If user is authenticated but has no active practice, show practice selection
+  if (user && !practice) {
+    return <ChoosePracticePage />;
   }
 
   // Otherwise render public login / registration routes

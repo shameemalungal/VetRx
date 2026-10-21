@@ -12,6 +12,8 @@ import { OpeningStockModal } from './OpeningStockModal';
 import { StockAdjustmentModal } from './StockAdjustmentModal';
 import { StocktakeModal } from './StocktakeModal';
 import { InvoiceImporterModal } from './InvoiceImporterModal';
+import { ClearStockModal } from './components/ClearStockModal';
+import { ReviewEntriesByDateModal } from './components/ReviewEntriesByDateModal';
 import {
   inventoryApi,
   type InventoryItem,
@@ -48,6 +50,8 @@ export const InventoryStockPage: React.FC = () => {
   const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
   const [isStocktakeOpen, setIsStocktakeOpen] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [isClearStockOpen, setIsClearStockOpen] = useState(false);
+  const [isReviewEntriesOpen, setIsReviewEntriesOpen] = useState(false);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -125,6 +129,8 @@ export const InventoryStockPage: React.FC = () => {
           setIsAdjustmentOpen(true);
         }}
         onOpenInvoiceImporter={() => setIsImporterOpen(true)}
+        onOpenReviewEntries={() => setIsReviewEntriesOpen(true)}
+        onOpenClearStock={() => setIsClearStockOpen(true)}
       />
 
       <InventorySubnav />
@@ -153,7 +159,7 @@ export const InventoryStockPage: React.FC = () => {
             <input
               type="text"
               className="form-input"
-              style={{ paddingLeft: '36px' }}
+              style={{ paddingLeft: '38px' }}
               placeholder="Search by product name, generic formula, barcode, or brand..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -460,6 +466,18 @@ export const InventoryStockPage: React.FC = () => {
       <InvoiceImporterModal
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
+        onSuccess={() => void fetchItems()}
+      />
+
+      <ClearStockModal
+        isOpen={isClearStockOpen}
+        onClose={() => setIsClearStockOpen(false)}
+        onSuccess={() => void fetchItems()}
+      />
+
+      <ReviewEntriesByDateModal
+        isOpen={isReviewEntriesOpen}
+        onClose={() => setIsReviewEntriesOpen(false)}
         onSuccess={() => void fetchItems()}
       />
     </div>

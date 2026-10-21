@@ -189,7 +189,7 @@ export const FieldModePage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              if (window.history.length > 1) {
+              if (window.history.state && typeof window.history.state.idx === 'number' && window.history.state.idx > 0) {
                 navigate(-1);
               } else {
                 navigate('/calls/today');
@@ -200,7 +200,7 @@ export const FieldModePage: React.FC = () => {
             title="Back to previous screen"
           >
             <ArrowLeft className="w-4 h-4 text-slate-700" />
-            <span className="hidden sm:inline">Back</span>
+            <span>Back</span>
           </button>
 
           <div className="min-w-0">

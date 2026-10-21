@@ -25,6 +25,14 @@ export const PlatformUserDetailsPage: React.FC = () => {
     platformRole: '',
   });
 
+  // Dedicated Change Login Email State & Modal
+  const [isChangeEmailOpen, setIsChangeEmailOpen] = useState(false);
+  const [newLoginEmail, setNewLoginEmail] = useState('');
+  const [changeEmailReason, setChangeEmailReason] = useState('');
+  const [confirmChangeEmail, setConfirmChangeEmail] = useState(false);
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [changeEmailError, setChangeEmailError] = useState<string | null>(null);
+
   const loadUserDetails = async () => {
     if (!id) return;
     try {
@@ -64,6 +72,39 @@ export const PlatformUserDetailsPage: React.FC = () => {
       alert(`Update failed: ${err.message}`);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleChangeLoginEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!newLoginEmail.trim() || !newLoginEmail.includes('@')) {
+      setChangeEmailError('Please enter a valid email address.');
+      return;
+    }
+    if (!confirmChangeEmail) {
+      setChangeEmailError('Please check the confirmation box to proceed.');
+      return;
+    }
+
+    try {
+      setIsChangingEmail(true);
+      setChangeEmailError(null);
+      const res = await platformAdminApi.changeUserLoginEmail(
+        user.id,
+        newLoginEmail.trim(),
+        changeEmailReason.trim() || undefined
+      );
+      alert(res.message || `Login email updated to ${res.newEmail}. All previous sessions have been revoked.`);
+      setIsChangeEmailOpen(false);
+      setNewLoginEmail('');
+      setChangeEmailReason('');
+      setConfirmChangeEmail(false);
+      await loadUserDetails();
+    } catch (err: any) {
+      setChangeEmailError(err.message || 'Failed to change login email.');
+    } finally {
+      setIsChangingEmail(false);
     }
   };
 
@@ -166,6 +207,27 @@ export const PlatformUserDetailsPage: React.FC = () => {
           >
             <Icon name="edit" size={15} />
             <span>Edit Profile</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            id="btn-change-login-email"
+            onClick={() => {
+              setNewLoginEmail('');
+              setChangeEmailReason('');
+              setConfirmChangeEmail(false);
+              setChangeEmailError(null);
+              setIsChangeEmailOpen(true);
+            }}
+            style={{
+              borderColor: '#0284c7',
+              color: '#0369a1',
+              background: '#f0f9ff',
+            }}
+            title="Update authoritative login email used to sign in"
+          >
+            <Icon name="mail" size={15} />
+            <span>Change Login Email</span>
           </button>
           <button
             type="button"
@@ -391,6 +453,150 @@ export const PlatformUserDetailsPage: React.FC = () => {
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
                   {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Login Email Modal */}
+      {isChangeEmailOpen && (
+        <div className="platform-modal-overlay">
+          <div className="platform-modal" style={{ maxWidth: 480 }}>
+            <div className="platform-modal-header" style={{ borderBottom: '1px solid #e0f2fe', background: '#f0f9ff' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1.125rem', color: '#0369a1' }}>
+                  Change User Login Email
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#0284c7' }}>
+                  Authoritative Authentication Record
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0369a1' }}
+                onClick={() => setIsChangeEmailOpen(false)}
+                disabled={isChangingEmail}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangeLoginEmail}>
+              <div className="platform-modal-body">
+                {changeEmailError && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      color: '#b91c1c',
+                      fontSize: '0.8125rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <Icon name="alert-circle" size={16} />
+                    <span>{changeEmailError}</span>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    background: '#f0fdfa',
+                    border: '1px solid #ccfbf1',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    color: '#0f766e',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <strong>Security Note:</strong> Changing this email alters the authoritative address used by the user to sign in. All active sessions will be revoked, requiring re-authentication. Practice memberships, roles, prescriptions, and patients remain intact.
+                </div>
+
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  <div style={{ color: '#64748b' }}>Account: <strong>{user.name}</strong></div>
+                  <div style={{ color: '#64748b', marginTop: 2 }}>
+                    Current Login Email: <strong style={{ color: '#0f172a' }}>{user.email}</strong>
+                  </div>
+                  <div style={{ color: '#64748b', marginTop: 2 }}>
+                    User ID: <span className="data-mono">{user.id}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label">New Login Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    className="form-control"
+                    placeholder="user@example.com"
+                    value={newLoginEmail}
+                    onChange={(e) => setNewLoginEmail(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Must be a valid, unique email not used by another account.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="form-label">Reason / Justification (Audit Log) *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-control"
+                    placeholder="e.g., Requested by practice owner due to domain change"
+                    value={changeEmailReason}
+                    onChange={(e) => setChangeEmailReason(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: 6 }}>
+                  <input
+                    type="checkbox"
+                    id="confirm-change-email-chk"
+                    checked={confirmChangeEmail}
+                    onChange={(e) => setConfirmChangeEmail(e.target.checked)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <label htmlFor="confirm-change-email-chk" style={{ fontSize: '0.8125rem', color: '#334155', cursor: 'pointer' }}>
+                    I confirm that I am changing the login credentials for <strong>{user.name}</strong>, and understand this will invalidate their current sessions.
+                  </label>
+                </div>
+              </div>
+
+              <div className="platform-modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={isChangingEmail}
+                  onClick={() => setIsChangeEmailOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={!confirmChangeEmail || isChangingEmail}
+                  style={{
+                    background: confirmChangeEmail ? '#0284c7' : '#94a3b8',
+                    borderColor: confirmChangeEmail ? '#0284c7' : '#94a3b8',
+                  }}
+                >
+                  {isChangingEmail ? 'Updating Credentials...' : 'Save New Login Email'}
                 </button>
               </div>
             </form>

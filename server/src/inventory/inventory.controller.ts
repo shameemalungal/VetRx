@@ -479,6 +479,72 @@ inventoryRouter.get('/purchases', requirePracticePermission(PERMISSIONS.INVENTOR
   }
 });
 
+inventoryRouter.post('/purchases/:id/reverse', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const invoiceId = req.params.id as string;
+    const { reason } = z.object({ reason: z.string().optional() }).parse(req.body || {});
+    const result = await InventoryService.reversePurchaseInvoice(practiceId, invoiceId, req.user?.id, reason);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ------------------------------------------------------------------------------
+// Inventory Stock Clearing & Date-Based Entry Corrections
+// ------------------------------------------------------------------------------
+
+inventoryRouter.get('/clear-stock-summary', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const summary = await InventoryService.getClearStockSummary(practiceId);
+    res.status(200).json(summary);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/clear-stock', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const { reason } = z.object({ reason: z.string().min(3, 'A reason of at least 3 characters is required') }).parse(req.body);
+    const result = await InventoryService.clearAllStock(practiceId, req.user?.id, reason);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.get('/entries-by-date', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const dateStr = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const result = await InventoryService.getEntriesByDate(practiceId, dateStr);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/entries-by-date/correct', requirePracticePermission(PERMISSIONS.INVENTORY_MANAGE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      transactionIds: z.array(z.string()).min(1, 'At least one transaction ID is required'),
+      reason: z.string().min(3, 'A reason of at least 3 characters is required'),
+    });
+    const body = schema.parse(req.body);
+    const result = await InventoryService.correctEntriesByDate(practiceId, {
+      ...body,
+      performedByUserId: req.user?.id,
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ------------------------------------------------------------------------------
 // Alerts (Expiring Soon, Expired, Low Stock, Out of Stock)
 // ------------------------------------------------------------------------------

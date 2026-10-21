@@ -12,6 +12,10 @@ const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173
 interface ServerSettingsPayload {
   doctorName?: string | null;
   doctorRegistrationNumber?: string | null;
+  doctorQualifications?: string | null;
+  doctorPhone?: string | null;
+  doctorEmail?: string | null;
+  doctorAddress?: string | null;
   doctorPhotoUrl?: string | null;
   doctorSignatureUrl?: string | null;
   clinicName?: string | null;
@@ -19,6 +23,7 @@ interface ServerSettingsPayload {
   phone?: string | null;
   email?: string | null;
   registrationNumber?: string | null;
+  clinicLicenseNumber?: string | null;
   clinicLogoUrl?: string | null;
   ownerSpecialInstructionEnabled?: boolean;
 }
@@ -79,43 +84,55 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       db.organisations.toCollection().first(),
     ]);
 
-    // If local tenant DB does not have practitioner yet, initialize from server settings / user
-    if (!practitioner && (serverSettings || user)) {
-      const initialPractitioner: Omit<Practitioner, 'id'> = {
-        name: serverSettings?.doctorName || user?.name || '',
-        registrationNumber: serverSettings?.doctorRegistrationNumber || '',
-        qualifications: '',
-        phone: serverSettings?.phone || '',
-        email: serverSettings?.email || user?.email || '',
-        address: serverSettings?.address || '',
-        photoDataUrl: serverSettings?.doctorPhotoUrl || user?.avatarUrl || undefined,
-        signatureDataUrl: serverSettings?.doctorSignatureUrl || undefined,
-        createdAt: now,
+    // Authoritative backend synchronization:
+    // If serverSettings or user is present, ensure Dexie and store have the authoritative data
+    if (serverSettings || user) {
+      const practitionerData: Omit<Practitioner, 'id'> = {
+        name: serverSettings?.doctorName || practitioner?.name || user?.name || '',
+        registrationNumber: serverSettings?.doctorRegistrationNumber || practitioner?.registrationNumber || '',
+        qualifications: serverSettings?.doctorQualifications || practitioner?.qualifications || '',
+        phone: serverSettings?.doctorPhone || practitioner?.phone || '',
+        email: serverSettings?.doctorEmail || practitioner?.email || user?.email || '',
+        address: serverSettings?.doctorAddress || practitioner?.address || '',
+        photoDataUrl: serverSettings?.doctorPhotoUrl || practitioner?.photoDataUrl || user?.avatarUrl || undefined,
+        signatureDataUrl: serverSettings?.doctorSignatureUrl || practitioner?.signatureDataUrl || undefined,
+        createdAt: practitioner?.createdAt ?? now,
         updatedAt: now,
       };
-      const id = await db.practitioners.add(initialPractitioner as Practitioner);
-      practitioner = { id: id as number, ...initialPractitioner };
-    }
 
-    // If local tenant DB does not have organisation yet, initialize from server settings
-    if (!organisation && serverSettings && serverSettings.clinicName) {
-      const initialOrg: Omit<Organisation, 'id'> = {
-        name: serverSettings.clinicName || '',
-        address: serverSettings.address || '',
-        state: '',
-        city: '',
-        pincode: '',
-        phone: serverSettings.phone || '',
-        email: serverSettings.email || '',
-        registrationNumber: serverSettings.registrationNumber || '',
-        licenseNumber: '',
-        logoDataUrl: serverSettings.clinicLogoUrl || undefined,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-      const id = await db.organisations.add(initialOrg as Organisation);
-      organisation = { id: id as number, ...initialOrg };
+      if (practitioner?.id) {
+        await db.practitioners.update(practitioner.id, practitionerData);
+        practitioner = { id: practitioner.id, ...practitionerData };
+      } else {
+        const id = await db.practitioners.add(practitionerData as Practitioner);
+        practitioner = { id: id as number, ...practitionerData };
+      }
+
+      if (serverSettings?.clinicName || organisation) {
+        const orgData: Omit<Organisation, 'id'> = {
+          name: serverSettings?.clinicName || organisation?.name || '',
+          address: serverSettings?.address || organisation?.address || '',
+          state: organisation?.state || '',
+          city: organisation?.city || '',
+          pincode: organisation?.pincode || '',
+          phone: serverSettings?.phone || organisation?.phone || '',
+          email: serverSettings?.email || organisation?.email || '',
+          registrationNumber: serverSettings?.registrationNumber || organisation?.registrationNumber || '',
+          licenseNumber: serverSettings?.clinicLicenseNumber || organisation?.licenseNumber || '',
+          logoDataUrl: serverSettings?.clinicLogoUrl || organisation?.logoDataUrl || undefined,
+          isActive: organisation?.isActive !== undefined ? organisation.isActive : true,
+          createdAt: organisation?.createdAt ?? now,
+          updatedAt: now,
+        };
+
+        if (organisation?.id) {
+          await db.organisations.update(organisation.id, orgData);
+          organisation = { id: organisation.id, ...orgData };
+        } else if (serverSettings?.clinicName) {
+          const id = await db.organisations.add(orgData as Organisation);
+          organisation = { id: id as number, ...orgData };
+        }
+      }
     }
 
     set({
@@ -136,21 +153,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       set({ practitioner: { id: id as number, ...data, createdAt: now, updatedAt: now } });
     }
 
-    // Sync to backend practice settings asynchronously
-    try {
-      await fetch(`${API_BASE}/api/practice/settings`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          doctorName: data.name,
-          doctorRegistrationNumber: data.registrationNumber,
-          doctorPhotoUrl: data.photoDataUrl || null,
-          doctorSignatureUrl: data.signatureDataUrl || null,
-        }),
-      });
-    } catch (err) {
-      console.warn('Failed to sync practitioner settings to backend:', err);
+    // Sync to backend practice settings
+    const res = await fetch(`${API_BASE}/api/practice/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        doctorName: data.name,
+        doctorRegistrationNumber: data.registrationNumber,
+        doctorQualifications: data.qualifications,
+        doctorPhone: data.phone,
+        doctorEmail: data.email,
+        doctorAddress: data.address,
+        doctorPhotoUrl: data.photoDataUrl || null,
+        doctorSignatureUrl: data.signatureDataUrl || null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `Failed to save practitioner profile to server (HTTP ${res.status}).`);
     }
   },
 
@@ -193,23 +215,34 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       set({ organisation: { id: id as number, ...newOrg } });
     }
 
-    // Sync to backend practice settings asynchronously
-    try {
-      await fetch(`${API_BASE}/api/practice/settings`, {
+    // Sync to backend practice settings
+    const res = await fetch(`${API_BASE}/api/practice/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        clinicName: data.name || null,
+        address: data.address || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        registrationNumber: data.registrationNumber || null,
+        clinicLicenseNumber: data.licenseNumber || null,
+        clinicLogoUrl: data.logoDataUrl || null,
+      }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `Failed to save clinic details to server (HTTP ${res.status}).`);
+    }
+
+    if (data.name && data.name.trim()) {
+      void fetch(`${API_BASE}/api/practice`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          clinicName: data.name || null,
-          address: data.address || null,
-          phone: data.phone || null,
-          email: data.email || null,
-          registrationNumber: data.registrationNumber || null,
-          clinicLogoUrl: data.logoDataUrl || null,
-        }),
-      });
-    } catch (err) {
-      console.warn('Failed to sync organisation settings to backend:', err);
+        body: JSON.stringify({ name: data.name.trim() }),
+      }).catch(() => null);
     }
   },
 

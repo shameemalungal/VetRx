@@ -47,9 +47,14 @@ export interface AuthPracticeSettings {
   registrationNumber: string | null;
   doctorName: string | null;
   doctorRegistrationNumber: string | null;
+  doctorQualifications?: string | null;
+  doctorPhone?: string | null;
+  doctorEmail?: string | null;
+  doctorAddress?: string | null;
   doctorPhotoUrl: string | null;
   doctorSignatureUrl: string | null;
   clinicLogoUrl: string | null;
+  clinicLicenseNumber?: string | null;
   ownerSpecialInstructionEnabled: boolean;
   mykgvoaMemberId: string | null;
 }
@@ -57,9 +62,17 @@ export interface AuthPracticeSettings {
 export interface AuthPracticeSummary {
   practiceId: string;
   practiceName: string;
+  practiceType?: 'INDEPENDENT' | 'CLINIC' | 'ENTERPRISE';
   role: string;
   isClinicalApprover: boolean;
   isCurrent: boolean;
+  subscription?: {
+    status: string;
+    planName?: string;
+    planCode?: string;
+    trialEndsAt?: string | null;
+    currentPeriodEnd?: string | null;
+  } | null;
 }
 
 export interface RegisterParams {
@@ -88,7 +101,7 @@ interface AuthContextType {
   hasRole: (role: string) => boolean;
   isPracticeOwner: () => boolean;
   isPlatformAdmin: () => boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ needsPracticeSelection?: boolean; practices?: AuthPracticeSummary[] }>;
   register: (
     nameOrParams: string | RegisterParams,
     email?: string,
@@ -119,9 +132,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const can = useCallback(
     (permission: string) => {
-      return permissions.includes(permission);
+      return (
+        permissions.includes(permission) ||
+        permissions.includes('all') ||
+        permissions.includes('*') ||
+        membership?.role === 'PRACTICE_OWNER'
+      );
     },
-    [permissions]
+    [permissions, membership]
   );
 
   const hasRole = useCallback(
@@ -163,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await ensureSeeded();
         void useSettingsStore.getState().loadSettings(data.settings, data.user);
       } else {
-        const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const isDev = (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
         if (isDev) {
           const demoUser: AuthUser = {
             id: 'demo-user-1',
@@ -211,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err) {
       console.warn('Session check could not reach backend, starting in offline dev/guest mode:', err);
-      const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const isDev = (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
       if (isDev) {
         const demoUser: AuthUser = {
           id: 'demo-user-1',
@@ -288,6 +306,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     switchTenantDb(data.practice?.id);
     await ensureSeeded();
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
+    return {
+      needsPracticeSelection: Boolean(data.needsPracticeSelection || (data.practices && data.practices.length > 1)),
+      practices: data.practices || [],
+    };
   };
 
   const register = async (
@@ -390,6 +412,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setSettings(data);
+    if (data.clinicName && data.clinicName.trim()) {
+      const newName = data.clinicName.trim();
+      setPractice((prev) => (prev ? { ...prev, name: newName } : prev));
+      setPractices((prev) =>
+        prev.map((p) => (p.practiceId === data.practiceId ? { ...p, practiceName: newName } : p))
+      );
+    }
   };
 
   return (

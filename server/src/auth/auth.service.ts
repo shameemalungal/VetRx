@@ -303,7 +303,7 @@ export class AuthService {
         practices: [
           {
             practiceId: result.practice.id,
-            practiceName: result.practice.name,
+            practiceName: result.settings?.clinicName?.trim() || result.practice.name,
             role: result.membership.role as any,
             isClinicalApprover: Boolean(result.membership.isClinicalApprover || result.membership.role === Role.VETERINARIAN),
             isCurrent: true,
@@ -319,9 +319,14 @@ export class AuthService {
           registrationNumber: result.settings.registrationNumber,
           doctorName: result.settings.doctorName,
           doctorRegistrationNumber: result.settings.doctorRegistrationNumber,
+          doctorQualifications: (result.settings as any).doctorQualifications || null,
+          doctorPhone: (result.settings as any).doctorPhone || null,
+          doctorEmail: (result.settings as any).doctorEmail || null,
+          doctorAddress: (result.settings as any).doctorAddress || null,
           doctorPhotoUrl: result.settings.doctorPhotoUrl,
           doctorSignatureUrl: result.settings.doctorSignatureUrl,
           clinicLogoUrl: result.settings.clinicLogoUrl,
+          clinicLicenseNumber: (result.settings as any).clinicLicenseNumber || null,
           ownerSpecialInstructionEnabled: result.settings.ownerSpecialInstructionEnabled,
           mykgvoaMemberId: result.settings.mykgvoaMemberId,
         },
@@ -341,6 +346,7 @@ export class AuthService {
     const { email, password, ipAddress, userAgent } = params;
     const normalizedEmail = email.toLowerCase().trim();
 
+    // 2. Load user with active memberships and active practices
     const user = await prisma.user.findUnique({
       where: { normalizedEmail },
       include: {
@@ -350,6 +356,12 @@ export class AuthService {
             practice: {
               include: {
                 settings: true,
+                subscriptions: {
+                  where: { status: { in: ['ACTIVE', 'TRIAL', 'GRACE_PERIOD', 'PAST_DUE'] } },
+                  include: { plan: true },
+                  take: 1,
+                  orderBy: { createdAt: 'desc' },
+                },
               },
             },
           },
@@ -378,12 +390,16 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    // Resolve primary practice & membership
-    const primaryMembership = user.memberships[0];
-    if (!primaryMembership || !primaryMembership.practice) {
-      throw new AppError(403, 'NO_ACTIVE_PRACTICE', 'No active practice associated with this account.');
+    // Resolve eligible active practices (must be active and not suspended)
+    const eligibleMemberships = user.memberships.filter(
+      (m) => m.isActive && m.practice?.isActive && m.practice.status === 'ACTIVE'
+    );
+
+    if (eligibleMemberships.length === 0) {
+      throw new AppError(403, 'NO_ACTIVE_PRACTICE', 'No active practice associated with this account. Please contact support or your practice administrator.');
     }
 
+    const primaryMembership = eligibleMemberships[0];
     const practice = primaryMembership.practice;
     const settings = practice.settings;
 
@@ -393,6 +409,28 @@ export class AuthService {
       ipAddress,
       userAgent,
     });
+
+    const eligiblePractices = eligibleMemberships.map((m) => {
+      const sub = (m.practice as any).subscriptions?.[0];
+      return {
+        practiceId: m.practiceId,
+        practiceName: m.practice.settings?.clinicName?.trim() || m.practice.name,
+        practiceType: m.practice.practiceType,
+        role: m.role as any,
+        isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
+        isCurrent: m.practiceId === practice.id,
+        subscription: sub
+          ? {
+              status: sub.status,
+              planName: sub.plan?.name,
+              planCode: sub.plan?.code,
+              trialEndsAt: sub.trialEndsAt?.toISOString() || null,
+              currentPeriodEnd: sub.currentPeriodEnd?.toISOString() || null,
+            }
+          : null,
+      };
+    });
+
     // Record audit log asynchronously
     void AuditService.record({
       practiceId: practice.id,
@@ -417,7 +455,7 @@ export class AuthService {
         },
         practice: {
           id: practice.id,
-          name: practice.name,
+          name: practice.settings?.clinicName?.trim() || practice.name,
           slug: practice.slug,
           ownerUserId: practice.ownerUserId,
           isActive: practice.isActive,
@@ -432,6 +470,8 @@ export class AuthService {
           permissions: getPermissionsForRole(primaryMembership.role),
         },
         permissions: getPermissionsForRole(primaryMembership.role),
+        practices: eligiblePractices,
+        needsPracticeSelection: eligiblePractices.length > 1,
         settings: settings
           ? {
               id: settings.id,
@@ -443,9 +483,14 @@ export class AuthService {
               registrationNumber: settings.registrationNumber,
               doctorName: settings.doctorName,
               doctorRegistrationNumber: settings.doctorRegistrationNumber,
+              doctorQualifications: (settings as any).doctorQualifications || null,
+              doctorPhone: (settings as any).doctorPhone || null,
+              doctorEmail: (settings as any).doctorEmail || null,
+              doctorAddress: (settings as any).doctorAddress || null,
               doctorPhotoUrl: settings.doctorPhotoUrl,
               doctorSignatureUrl: settings.doctorSignatureUrl,
               clinicLogoUrl: settings.clinicLogoUrl,
+              clinicLicenseNumber: (settings as any).clinicLicenseNumber || null,
               ownerSpecialInstructionEnabled: settings.ownerSpecialInstructionEnabled,
               mykgvoaMemberId: settings.mykgvoaMemberId,
             }
@@ -607,7 +652,8 @@ export class AuthService {
         });
       } else {
         const mem = await prisma.practiceMember.findFirst({
-          where: { userId: existingIdentity.userId, isActive: true },
+          where: { userId: existingIdentity.userId, isActive: true, practice: { isActive: true } },
+          include: { practice: true },
         });
         practiceId = mem?.practiceId || null;
       }
@@ -718,7 +764,8 @@ export class AuthService {
         });
       } else {
         const mem = await prisma.practiceMember.findFirst({
-          where: { userId: existingUser.id, isActive: true },
+          where: { userId: existingUser.id, isActive: true, practice: { isActive: true } },
+          include: { practice: true },
         });
         practiceId = mem?.practiceId || null;
       }
@@ -1279,6 +1326,12 @@ export class AuthService {
             practice: {
               include: {
                 settings: true,
+                subscriptions: {
+                  where: { status: { in: ['ACTIVE', 'TRIAL', 'GRACE_PERIOD', 'PAST_DUE'] } },
+                  include: { plan: true },
+                  take: 1,
+                  orderBy: { createdAt: 'desc' },
+                },
               },
             },
           },
@@ -1294,13 +1347,13 @@ export class AuthService {
     let membership = null;
     if (activePracticeId) {
       membership = user.memberships.find(
-        (m) => m.practiceId === activePracticeId && m.isActive && m.practice?.isActive
+        (m) => m.practiceId === activePracticeId && m.isActive && m.practice?.isActive && m.practice.status === 'ACTIVE'
       );
     }
 
     // Fallback if session had no practiceId or practiceId was deactivated
     if (!membership) {
-      membership = user.memberships.find((m) => m.isActive && m.practice?.isActive);
+      membership = user.memberships.find((m) => m.isActive && m.practice?.isActive && m.practice.status === 'ACTIVE');
       if (membership && sessionId) {
         prisma.session
           .update({
@@ -1314,14 +1367,27 @@ export class AuthService {
     if (!membership || !membership.practice) {
       if (user.platformRole === PlatformRole.PLATFORM_SUPER_ADMIN) {
         const userPractices = user.memberships
-          .filter((m) => m.isActive && m.practice?.isActive)
-          .map((m) => ({
-            practiceId: m.practiceId,
-            practiceName: m.practice.name,
-            role: m.role as any,
-            isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
-            isCurrent: false,
-          }));
+          .filter((m) => m.isActive && m.practice?.isActive && m.practice.status === 'ACTIVE')
+          .map((m) => {
+            const sub = (m.practice as any).subscriptions?.[0];
+            return {
+              practiceId: m.practiceId,
+              practiceName: m.practice.settings?.clinicName?.trim() || m.practice.name,
+              practiceType: m.practice.practiceType,
+              role: m.role as any,
+              isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
+              isCurrent: false,
+              subscription: sub
+                ? {
+                    status: sub.status,
+                    planName: sub.plan?.name,
+                    planCode: sub.plan?.code,
+                    trialEndsAt: sub.trialEndsAt?.toISOString() || null,
+                    currentPeriodEnd: sub.currentPeriodEnd?.toISOString() || null,
+                  }
+                : null,
+            };
+          });
 
         return {
           user: {
@@ -1349,14 +1415,27 @@ export class AuthService {
     const permissions = await AuthorizationService.getEffectivePermissions(user.id, practice.id);
 
     const practices = user.memberships
-      .filter((m) => m.isActive && m.practice?.isActive)
-      .map((m) => ({
-        practiceId: m.practiceId,
-        practiceName: m.practice.name,
-        role: m.role as any,
-        isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
-        isCurrent: m.practiceId === practice.id,
-      }));
+      .filter((m) => m.isActive && m.practice?.isActive && m.practice.status === 'ACTIVE')
+      .map((m) => {
+        const sub = (m.practice as any).subscriptions?.[0];
+        return {
+          practiceId: m.practiceId,
+          practiceName: m.practice.settings?.clinicName?.trim() || m.practice.name,
+          practiceType: m.practice.practiceType,
+          role: m.role as any,
+          isClinicalApprover: Boolean(m.isClinicalApprover || m.role === Role.VETERINARIAN),
+          isCurrent: m.practiceId === practice.id,
+          subscription: sub
+            ? {
+                status: sub.status,
+                planName: sub.plan?.name,
+                planCode: sub.plan?.code,
+                trialEndsAt: sub.trialEndsAt?.toISOString() || null,
+                currentPeriodEnd: sub.currentPeriodEnd?.toISOString() || null,
+              }
+            : null,
+        };
+      });
 
     return {
       user: {
@@ -1371,7 +1450,7 @@ export class AuthService {
       },
       practice: {
         id: practice.id,
-        name: practice.name,
+        name: practice.settings?.clinicName?.trim() || practice.name,
         slug: practice.slug,
         ownerUserId: practice.ownerUserId,
         isActive: practice.isActive,
@@ -1399,9 +1478,14 @@ export class AuthService {
             registrationNumber: settings.registrationNumber,
             doctorName: settings.doctorName,
             doctorRegistrationNumber: settings.doctorRegistrationNumber,
+            doctorQualifications: (settings as any).doctorQualifications || null,
+            doctorPhone: (settings as any).doctorPhone || null,
+            doctorEmail: (settings as any).doctorEmail || null,
+            doctorAddress: (settings as any).doctorAddress || null,
             doctorPhotoUrl: settings.doctorPhotoUrl,
             doctorSignatureUrl: settings.doctorSignatureUrl,
             clinicLogoUrl: settings.clinicLogoUrl,
+            clinicLicenseNumber: (settings as any).clinicLicenseNumber || null,
             ownerSpecialInstructionEnabled: settings.ownerSpecialInstructionEnabled,
             mykgvoaMemberId: settings.mykgvoaMemberId,
           }

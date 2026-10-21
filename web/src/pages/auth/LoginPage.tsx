@@ -34,14 +34,19 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const loginResult = await login(email, password);
       const params = new URLSearchParams(location.search);
       const rawRedirect = params.get('redirect');
       const redirectUrl =
         rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && rawRedirect !== '/'
           ? rawRedirect
           : '/dashboard';
-      navigate(redirectUrl);
+
+      if (loginResult?.needsPracticeSelection) {
+        navigate(`/choose-practice?redirect=${encodeURIComponent(redirectUrl)}`);
+      } else {
+        navigate(redirectUrl);
+      }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Invalid credentials.');
     } finally {
@@ -296,7 +301,7 @@ export const LoginPage: React.FC = () => {
                   setViewMode('login');
                 }}
               >
-                ← Back to Sign In
+                Back to Sign In
               </button>
             </div>
           </form>

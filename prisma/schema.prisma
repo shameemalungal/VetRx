@@ -294,9 +294,14 @@ model PracticeSettings {
   registrationNumber             String?
   doctorName                     String?
   doctorRegistrationNumber       String?
+  doctorQualifications           String?
+  doctorPhone                    String?
+  doctorEmail                    String?
+  doctorAddress                  String?
   doctorPhotoUrl                 String?
   doctorSignatureUrl             String?
   clinicLogoUrl                  String?
+  clinicLicenseNumber            String?
   ownerSpecialInstructionEnabled Boolean  @default(false)
   
   // Future-compatible membership field for MyKGVOA integration

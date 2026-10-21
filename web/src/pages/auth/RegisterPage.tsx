@@ -252,20 +252,8 @@ export const RegisterPage: React.FC = () => {
   return (
     <div className="auth-container">
       <div className={`auth-card ${(step === 3 || (step === 2 && practiceType === 'CLINIC')) ? 'auth-card-wide' : ''}`}>
-        <div className="auth-top-nav">
-          {step === 1 ? (
-            <a
-              href="https://vetrx.brightbase.in/#pricing"
-              className="auth-back-btn"
-              id="register-back-to-pricing"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
-              <span>Back to Pricing</span>
-            </a>
-          ) : (
+        {step > 1 && (
+          <div className="auth-top-nav">
             <button
               type="button"
               className="auth-back-btn"
@@ -278,8 +266,8 @@ export const RegisterPage: React.FC = () => {
               </svg>
               <span>Back</span>
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="auth-header">
           <div className="auth-logo-badge">
@@ -625,7 +613,7 @@ export const RegisterPage: React.FC = () => {
                 style={{ background: '#f1f5f9', color: '#475569', flex: 1 }}
                 onClick={() => setStep(1)}
               >
-                &larr; Back
+                Back
               </button>
               <button
                 type="submit"
@@ -722,7 +710,7 @@ export const RegisterPage: React.FC = () => {
                   className="btn-skip-link"
                   onClick={() => setStep(2)}
                 >
-                  &larr; Back to Details
+                  Back to Details
                 </button>
 
                 <button
@@ -732,7 +720,7 @@ export const RegisterPage: React.FC = () => {
                   onClick={() => setShowSkipConfirmModal(true)}
                   disabled={loading}
                 >
-                  Skip for now &rarr;
+                  Skip for now
                 </button>
               </div>
             </div>

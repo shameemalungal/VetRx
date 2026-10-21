@@ -264,7 +264,7 @@ export const InventoryDashboardPage: React.FC = () => {
                   to="/inventory/stock"
                   style={{ fontSize: '12px', fontWeight: 600, color: '#00685f', textDecoration: 'none' }}
                 >
-                  Manage →
+                  Manage
                 </Link>
               </div>
 
@@ -298,7 +298,7 @@ export const InventoryDashboardPage: React.FC = () => {
                   onClick={() => setIsTransferOpen(true)}
                   style={{ flex: 1, fontSize: '12px', padding: '5px 8px' }}
                 >
-                  Transfer to Bag →
+                  Transfer to Bag
                 </button>
               </div>
             </div>
@@ -341,7 +341,7 @@ export const InventoryDashboardPage: React.FC = () => {
                   id="link-open-practice-bag"
                   style={{ fontSize: '12px', fontWeight: 600, color: '#15803d', textDecoration: 'none' }}
                 >
-                  Inspect Bag →
+                  Inspect Bag
                 </Link>
               </div>
 
@@ -487,7 +487,7 @@ export const InventoryDashboardPage: React.FC = () => {
                   <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Actionable Stock Alerts</h3>
                 </div>
                 <Link to="/inventory/alerts" style={{ fontSize: '13px', color: 'var(--color-primary, #00685f)', fontWeight: 600 }}>
-                  View All ({alertCount}) →
+                  View All ({alertCount})
                 </Link>
               </div>
 
@@ -567,7 +567,7 @@ export const InventoryDashboardPage: React.FC = () => {
                   <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Recent Purchases</h3>
                 </div>
                 <Link to="/inventory/purchases" style={{ fontSize: '13px', color: 'var(--color-primary, #00685f)', fontWeight: 600 }}>
-                  Purchase History →
+                  Purchase History
                 </Link>
               </div>
 

@@ -20,7 +20,7 @@ const updatePracticeSchema = z
   })
   .strict();
 
-const updateSettingsSchema = z
+export const updateSettingsSchema = z
   .object({
     clinicName: z.string().max(120).nullable().optional(),
     address: z.string().max(300).nullable().optional(),
@@ -29,9 +29,14 @@ const updateSettingsSchema = z
     registrationNumber: z.string().max(60).nullable().optional(),
     doctorName: z.string().max(120).nullable().optional(),
     doctorRegistrationNumber: z.string().max(60).nullable().optional(),
+    doctorQualifications: z.string().max(255).nullable().optional(),
+    doctorPhone: z.string().max(40).nullable().optional(),
+    doctorEmail: z.string().email().nullable().optional().or(z.literal('')),
+    doctorAddress: z.string().max(300).nullable().optional(),
     doctorPhotoUrl: z.string().nullable().optional(),
     doctorSignatureUrl: z.string().nullable().optional(),
     clinicLogoUrl: z.string().nullable().optional(),
+    clinicLicenseNumber: z.string().max(60).nullable().optional(),
     ownerSpecialInstructionEnabled: z.boolean().optional(),
     mykgvoaMemberId: z.string().max(50).nullable().optional(),
   })
@@ -101,6 +106,7 @@ practiceRouter.patch(
       const sanitizedUpdates = {
         ...updates,
         email: updates.email === '' ? null : updates.email,
+        doctorEmail: updates.doctorEmail === '' ? null : updates.doctorEmail,
       };
 
       const updated = await PracticeService.updateSettings(req.practice.id, req.user.id, sanitizedUpdates);

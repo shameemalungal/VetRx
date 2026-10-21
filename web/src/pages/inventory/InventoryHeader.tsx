@@ -20,6 +20,8 @@ interface InventoryHeaderProps {
   onOpenStocktake?: () => void;
   onOpenAdjustment?: () => void;
   onOpenInvoiceImporter?: () => void;
+  onOpenReviewEntries?: () => void;
+  onOpenClearStock?: () => void;
 }
 
 export const InventoryHeader: React.FC<InventoryHeaderProps> = ({
@@ -35,6 +37,8 @@ export const InventoryHeader: React.FC<InventoryHeaderProps> = ({
   onOpenStocktake,
   onOpenAdjustment,
   onOpenInvoiceImporter,
+  onOpenReviewEntries,
+  onOpenClearStock,
 }) => {
   return (
     <div className="inventory-header-row" style={{ marginBottom: '8px' }}>
@@ -183,6 +187,39 @@ export const InventoryHeader: React.FC<InventoryHeaderProps> = ({
           >
             <Icon name="edit" size={16} />
             <span>Adjust Stock</span>
+          </button>
+        )}
+        {onOpenReviewEntries && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onOpenReviewEntries}
+            id="inv-btn-review-entries"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Review and correct entries by date"
+          >
+            <Icon name="calendar" size={16} />
+            <span>Review by Date</span>
+          </button>
+        )}
+        {onOpenClearStock && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onOpenClearStock}
+            id="inv-btn-clear-stock"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: '#dc2626',
+              borderColor: '#fca5a5',
+              background: '#fff5f5',
+            }}
+            title="Clear all active stock for this practice"
+          >
+            <Icon name="warning" size={16} />
+            <span>Clear Stock</span>
           </button>
         )}
       </div>

@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
+import { PracticeSwitcher } from '../PracticeSwitcher/PracticeSwitcher';
 import './AppShell.css';
 
 // ── Bottom nav shows the 4 core mobile tabs plus dynamic 'More' menu ──────────
@@ -339,7 +340,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       return currentPath === '/inventory' || (currentPath.startsWith('/inventory/') && !currentPath.startsWith('/inventory/bag'));
     }
     if (itemPath === '/inventory/bag') {
-      return currentPath.startsWith('/inventory/bag');
+      return currentPath.startsWith('/inventory/bag') || currentPath === '/calls/bag';
     }
     return currentPath === itemPath || currentPath.startsWith(itemPath + '/');
   }, []);
@@ -399,7 +400,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               <NavLink
                 key={path}
                 to={path}
-                className={`sidebar-nav-item${active ? ' active' : ''}`}
+                end={path === '/dashboard' || path === '/inventory'}
+                className={() => `sidebar-nav-item${active ? ' active' : ''}`}
+                aria-current={active ? 'page' : undefined}
               >
               <Icon name={icon} size={18} />
               <span style={{ flex: 1 }}>{label}</span>
@@ -529,19 +532,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             <span className="desktop-header-greeting">
               {getGreeting()}, {practitioner ? firstWord : 'Doctor'}
             </span>
-            <div className="desktop-header-context">
-              <Icon
-                name={isClinicActive ? 'hospital' : 'verified'}
-                size={14}
-                className="text-primary"
-              />
-              <span className="desktop-header-clinic truncate">
-                {isClinicActive
-                  ? (activePracticeName || 'Clinical Practice')
-                  : practitioner?.qualifications
-                    ? `${practitioner.qualifications} • Independent Practitioner`
-                    : 'Independent Clinical Practice'}
-              </span>
+            <div className="desktop-header-context" style={{ marginTop: '4px' }}>
+              <PracticeSwitcher />
             </div>
           </div>
 
@@ -922,7 +914,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             </span>
             <span className="mobile-header-title">{currentNav.label}</span>
           </div>
-          <div className="mobile-header-right">
+          <div className="mobile-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <PracticeSwitcher />
             <button
               className="mobile-header-avatar"
               aria-label={`${displayName} — go to settings`}
@@ -1072,8 +1065,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                   <NavLink
                     key={path}
                     to={path}
-                    className={`more-menu-item${isActive ? ' active' : ''}`}
+                    end={path === '/dashboard' || path === '/inventory'}
+                    className={() => `more-menu-item${isActive ? ' active' : ''}`}
                     onClick={() => setIsMoreMenuOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
                   >
                     <div className="more-menu-item-icon">
                       <Icon name={icon} size={20} />

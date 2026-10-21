@@ -78,11 +78,11 @@ export const QuickActionLauncher: React.FC<QuickActionLauncherProps> = ({
   return (
     <>
       <div 
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
+        className="cvp-quick-action-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-200"
         onClick={onClose}
       >
         <div
-          className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl animate-in slide-in-from-bottom duration-300"
+          className="cvp-quick-action-panel w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl animate-in slide-in-from-bottom duration-300"
           role="dialog"
           aria-modal="true"
           aria-labelledby="quick-action-title"

@@ -382,6 +382,7 @@ export const TodayDashboardPage: React.FC = () => {
             onClick={() => setIsQuickActionsOpen(true)}
             className="p-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white shadow-md shadow-teal-900/20 transition-all flex items-center gap-1.5 text-xs font-bold"
             title="Quick Action Menu"
+            aria-label="Quick Action Menu"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Quick Action</span>
@@ -534,7 +535,7 @@ export const TodayDashboardPage: React.FC = () => {
       {/* ── SECTION B: TIME AND CAPACITY ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6 items-stretch">
         {/* Capacity Breakdown Card */}
-        <div className="lg:col-span-7 xl:col-span-8 p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col justify-between">
+        <div className="w-full lg:col-span-7 xl:col-span-8 p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
@@ -553,33 +554,33 @@ export const TodayDashboardPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-5">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider mb-1">Working Hours</span>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                <span className="text-slate-700 block text-[11px] uppercase font-bold tracking-wider mb-1">Working Hours</span>
                 <span className="text-base sm:text-lg font-black text-slate-900 whitespace-nowrap leading-tight">
                   {(timeMetrics.availableWorkingMinutes / 60).toFixed(1)} hrs
                 </span>
-                <span className="text-[11px] text-slate-400 block mt-1 truncate">Daily shift total</span>
+                <span className="text-[11px] text-slate-600 font-medium block mt-1 truncate">Daily shift total</span>
               </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider mb-1">Elapsed Field Time</span>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                <span className="text-slate-700 block text-[11px] uppercase font-bold tracking-wider mb-1">Elapsed Field Time</span>
                 <span className="text-base sm:text-lg font-black text-teal-800 whitespace-nowrap leading-tight">
                   {(timeMetrics.elapsedMinutes / 60).toFixed(1)} hrs
                 </span>
-                <span className="text-[11px] text-slate-400 block mt-1 truncate">{completedVisits.length} visits logged</span>
+                <span className="text-[11px] text-slate-600 font-medium block mt-1 truncate">{completedVisits.length} visits logged</span>
               </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider mb-1">Est. Remaining Visits</span>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                <span className="text-slate-700 block text-[11px] uppercase font-bold tracking-wider mb-1">Est. Remaining Visits</span>
                 <span className="text-base sm:text-lg font-black text-slate-900 whitespace-nowrap leading-tight">
                   {(timeMetrics.remainingVisitDuration / 60).toFixed(1)} hrs
                 </span>
-                <span className="text-[11px] text-slate-400 block mt-1 truncate">Clinical duration</span>
+                <span className="text-[11px] text-slate-600 font-medium block mt-1 truncate">Clinical duration</span>
               </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-between">
-                <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider mb-1">Est. Remaining Travel</span>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex flex-col justify-between">
+                <span className="text-slate-700 block text-[11px] uppercase font-bold tracking-wider mb-1">Est. Remaining Travel</span>
                 <span className="text-base sm:text-lg font-black text-slate-900 whitespace-nowrap leading-tight">
                   {timeMetrics.hasLocationData ? `${(timeMetrics.remainingTravelDuration / 60).toFixed(1)} hrs` : 'N/A'}
                 </span>
-                <span className="text-[11px] text-slate-400 block mt-1 truncate">
+                <span className="text-[11px] text-slate-600 font-medium block mt-1 truncate">
                   {timeMetrics.hasLocationData ? '~20m/stop transit' : 'Location missing'}
                 </span>
               </div>

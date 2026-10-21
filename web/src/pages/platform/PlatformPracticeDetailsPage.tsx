@@ -62,6 +62,16 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Practice Details Edit State (Requirement 5A)
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    practiceType: 'CLINIC',
+    contactEmail: '',
+    phone: '',
+    address: '',
+  });
+
   const loadDetails = async () => {
     if (!id) return;
     try {
@@ -69,10 +79,39 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
       setError(null);
       const res = await platformAdminApi.getPracticeDetails(id);
       setPractice(res);
+      setSettingsForm({
+        name: res.name || '',
+        practiceType: res.practiceType || 'CLINIC',
+        contactEmail: res.settings?.email || res.contactEmail || '',
+        phone: res.settings?.phone || '',
+        address: res.settings?.address || '',
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to load practice details.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSavePracticeSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      setIsSubmitting(true);
+      await platformAdminApi.updatePractice(id, {
+        name: settingsForm.name.trim(),
+        practiceType: settingsForm.practiceType,
+        email: settingsForm.contactEmail.trim() || undefined,
+        phone: settingsForm.phone.trim() || undefined,
+        address: settingsForm.address.trim() || undefined,
+      });
+      setSuccessMsg('Practice display details updated successfully.');
+      setIsEditingSettings(false);
+      await loadDetails();
+    } catch (err: any) {
+      alert(`Failed to update practice details: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -894,28 +933,161 @@ export const PlatformPracticeDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: SETTINGS */}
+      {/* TAB 3: SETTINGS (Requirement 5A: Edit practice information) */}
       {activeTab === 'SETTINGS' && (
-        <div className="platform-card" style={{ maxWidth: 640 }}>
-          <h2 className="platform-card-title" style={{ marginBottom: 16 }}>Practice Settings</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: '0.875rem' }}>
+        <div className="platform-card" style={{ maxWidth: 680 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <div>
-              <div style={{ color: '#64748b' }}>Clinic Name</div>
-              <div style={{ fontWeight: 600 }}>{practice.settings?.clinicName || practice.name}</div>
+              <h2 className="platform-card-title" style={{ margin: 0 }}>Practice Profile &amp; Contact Details</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748b' }}>
+                Manage practice identity, display name, and contact details independently from user authentication.
+              </p>
             </div>
-            <div>
-              <div style={{ color: '#64748b' }}>Address</div>
-              <div>{practice.settings?.address || 'Not provided'}</div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b' }}>Phone</div>
-              <div>{practice.settings?.phone || 'Not provided'}</div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b' }}>Registration / Licence Number</div>
-              <div>{practice.settings?.registrationNumber || 'Not provided'}</div>
-            </div>
+            {!isEditingSettings && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                id="btn-edit-practice-details"
+                onClick={() => setIsEditingSettings(true)}
+              >
+                <Icon name="edit" size={15} />
+                <span>Edit Details</span>
+              </button>
+            )}
           </div>
+
+          {isEditingSettings ? (
+            <form onSubmit={handleSavePracticeSettings}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label className="form-label">Practice / Clinic Display Name *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-control"
+                    value={settingsForm.name}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, name: e.target.value })}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Display name across application headers, prescription headers, and invoice outputs.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="form-label">Practice Type *</label>
+                  <select
+                    className="form-control"
+                    value={settingsForm.practiceType}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, practiceType: e.target.value })}
+                  >
+                    <option value="CLINIC">Veterinary Clinic / Hospital</option>
+                    <option value="INDEPENDENT">Individual Veterinary Practice</option>
+                    <option value="ENTERPRISE">Enterprise Multi-center Group</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label">Practice Contact Email</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    placeholder="contact@clinic.com"
+                    value={settingsForm.contactEmail}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, contactEmail: e.target.value })}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#0f766e', display: 'block', marginTop: 4 }}>
+                    Note: This is the public clinic contact email. Updating it does <strong>not</strong> change the account login email used to sign in.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="form-label">Contact Phone</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="+91 98765 43210"
+                    value={settingsForm.phone}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, phone: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label">Physical Address</label>
+                  <textarea
+                    rows={2}
+                    className="form-control"
+                    placeholder="Street, City, State, PIN"
+                    value={settingsForm.address}
+                    onChange={(e) => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      setIsEditingSettings(false);
+                      setSettingsForm({
+                        name: practice.name || '',
+                        practiceType: practice.practiceType || 'CLINIC',
+                        contactEmail: practice.settings?.email || practice.contactEmail || '',
+                        phone: practice.settings?.phone || '',
+                        address: practice.settings?.address || '',
+                      });
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving...' : 'Save Practice Details'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '0.875rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Display Name</div>
+                  <div style={{ fontWeight: 600, color: '#0f172a', marginTop: 2 }}>{practice.name}</div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Practice Type</div>
+                  <div style={{ fontWeight: 600, color: '#0f172a', marginTop: 2 }}>{practice.practiceType}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Practice Contact Email</div>
+                <div style={{ fontWeight: 600, color: '#0f172a', marginTop: 2 }}>
+                  {practice.settings?.email || practice.contactEmail || 'Not configured'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+                  (Distinct from login account email: {practice.owner?.email})
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Phone</div>
+                  <div style={{ color: '#0f172a', marginTop: 2 }}>{practice.settings?.phone || 'Not provided'}</div>
+                </div>
+
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Registration / Licence</div>
+                  <div style={{ color: '#0f172a', marginTop: 2 }}>{practice.settings?.registrationNumber || 'Not provided'}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 600 }}>Address</div>
+                <div style={{ color: '#0f172a', marginTop: 2 }}>{practice.settings?.address || 'Not provided'}</div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

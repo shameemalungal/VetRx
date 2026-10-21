@@ -13,7 +13,7 @@ interface InventoryRouteGateProps {
 }
 
 export const InventoryRouteGate: React.FC<InventoryRouteGateProps> = ({ children }) => {
-  const { isEntitled, isLoading, reason, toggleDevEntitlement } = useInventoryEntitlement();
+  const { isEntitled, isLoading, error, refetchEntitlement, reason, toggleDevEntitlement } = useInventoryEntitlement();
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -21,6 +21,64 @@ export const InventoryRouteGate: React.FC<InventoryRouteGateProps> = ({ children
       <div style={{ padding: '80px 24px', textAlign: 'center', color: '#64748b' }}>
         <div className="spinner" style={{ margin: '0 auto 12px' }} />
         <span>Verifying Inventory & Stock Management entitlement...</span>
+      </div>
+    );
+  }
+
+  if (error && !isEntitled) {
+    return (
+      <div
+        style={{
+          maxWidth: '560px',
+          margin: '60px auto',
+          background: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #fecaca',
+          padding: '36px 32px',
+          textAlign: 'center',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.05)',
+        }}
+      >
+        <div
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '16px',
+            background: '#fee2e2',
+            color: '#dc2626',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '16px',
+          }}
+        >
+          <Icon name="box" size={32} />
+        </div>
+
+        <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>
+          Unable to Verify Entitlement
+        </h2>
+
+        <p style={{ fontSize: '14px', color: '#64748b', lineHeight: 1.6, margin: '0 0 20px' }}>
+          {error || 'A network error occurred while verifying the Inventory & Stock Management add-on.'}
+        </p>
+
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void refetchEntitlement()}
+          >
+            Retry Verification
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => navigate('/dashboard')}
+          >
+            Return to Dashboard
+          </button>
+        </div>
       </div>
     );
   }

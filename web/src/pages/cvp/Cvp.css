@@ -268,7 +268,7 @@
 .cvp-search-input {
   width: 100%;
   min-height: 44px;
-  padding: 10px 38px 10px 38px !important;
+  padding: 10px 38px 10px 40px !important;
   background: #ffffff !important;
   border: 1.5px solid #cbd5e1 !important;
   border-radius: 12px !important;
@@ -1192,13 +1192,15 @@
   background: #f8fafc;
 }
 
-.cvp-search-input {
+.cvp-search-input-wrap .cvp-search-input {
   flex: 1;
-  border: none;
-  background: transparent;
+  border: none !important;
+  background: transparent !important;
   font-size: 1rem;
   color: #0f172a;
   outline: none;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
 .cvp-search-results-list {
@@ -1714,5 +1716,48 @@
 .cvp-form-control:focus {
   border-color: #0d9488 !important;
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18) !important;
+}
+
+/* ── Quick Action Launcher Modal ────────────────────────────── */
+.cvp-quick-action-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 0;
+}
+
+@media (min-width: 640px) {
+  .cvp-quick-action-overlay {
+    align-items: center !important;
+    padding: 1rem !important;
+  }
+}
+
+.cvp-quick-action-panel {
+  width: 100% !important;
+  max-width: 480px !important;
+  background-color: #ffffff !important;
+  border-top-left-radius: 1.5rem !important;
+  border-top-right-radius: 1.5rem !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  padding: 1.5rem !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  margin: 0 !important;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (min-width: 640px) {
+  .cvp-quick-action-panel {
+    border-radius: 1.25rem !important;
+    margin: auto !important;
+  }
 }
 

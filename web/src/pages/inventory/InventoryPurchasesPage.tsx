@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Icon } from '../../components/ui/Icon';
 import { InventoryHeader, InventorySubnav } from './InventoryHeader';
 import { InvoiceImporterModal } from './InvoiceImporterModal';
+import { ReverseInvoiceModal } from './components/ReverseInvoiceModal';
 import {
   inventoryApi,
   type PurchaseInvoice,
@@ -21,6 +22,7 @@ export const InventoryPurchasesPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [selectedInvoiceForReversal, setSelectedInvoiceForReversal] = useState<PurchaseInvoice | null>(null);
 
   const fetchPurchases = useCallback(async () => {
     try {
@@ -127,37 +129,67 @@ export const InventoryPurchasesPage: React.FC = () => {
                     <th style={{ textAlign: 'right' }}>Total Amount (₹)</th>
                     <th>Status</th>
                     <th>Imported At</th>
+                    <th style={{ textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {purchases.map((p) => (
-                    <tr key={p.id}>
-                      <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
-                        {p.invoiceNumber}
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.supplierName}</div>
-                        {p.supplierGstin && (
-                          <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
-                            GSTIN: {p.supplierGstin}
-                          </div>
-                        )}
-                      </td>
-                      <td>{p.invoiceDate}</td>
-                      <td>
-                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{p.items?.length || 0} line items</span>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-primary, #00685f)' }}>
-                        ₹{p.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td>
-                        <span className="inv-status-pill inv-status-in_stock">Confirmed</span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: '#64748b' }}>
-                        {new Date(p.createdAt).toLocaleDateString('en-IN')}
-                      </td>
-                    </tr>
-                  ))}
+                  {purchases.map((p) => {
+                    const isReversed = Boolean(p.notes?.includes('[REVERSED'));
+
+                    return (
+                      <tr key={p.id}>
+                        <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
+                          {p.invoiceNumber}
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 600, color: '#1e293b' }}>{p.supplierName}</div>
+                          {p.supplierGstin && (
+                            <div style={{ fontSize: '11px', color: '#64748b', fontFamily: 'monospace' }}>
+                              GSTIN: {p.supplierGstin}
+                            </div>
+                          )}
+                        </td>
+                        <td>{p.invoiceDate}</td>
+                        <td>
+                          <span style={{ fontSize: '13px', fontWeight: 600 }}>{p.items?.length || 0} line items</span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--color-primary, #00685f)' }}>
+                          ₹{p.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td>
+                          {isReversed ? (
+                            <span className="inv-status-pill inv-status-out_of_stock">Reversed</span>
+                          ) : (
+                            <span className="inv-status-pill inv-status-in_stock">Confirmed</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '12px', color: '#64748b' }}>
+                          {new Date(p.createdAt).toLocaleDateString('en-IN')}
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {isReversed ? (
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Reversed</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{
+                                padding: '3px 8px',
+                                fontSize: '11px',
+                                color: '#b91c1c',
+                                borderColor: '#fca5a5',
+                                background: '#fff5f5',
+                              }}
+                              onClick={() => setSelectedInvoiceForReversal(p)}
+                              title="Reverse this invoice and its stock effects"
+                            >
+                              Reverse
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -205,6 +237,13 @@ export const InventoryPurchasesPage: React.FC = () => {
       <InvoiceImporterModal
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
+        onSuccess={() => void fetchPurchases()}
+      />
+
+      <ReverseInvoiceModal
+        invoice={selectedInvoiceForReversal}
+        isOpen={Boolean(selectedInvoiceForReversal)}
+        onClose={() => setSelectedInvoiceForReversal(null)}
         onSuccess={() => void fetchPurchases()}
       />
     </div>

@@ -186,7 +186,7 @@ authRouter.post('/switch-practice', requireAuth, async (req: AuthenticatedReques
         include: { practice: true },
       });
 
-      if (!member || !member.isActive || !member.practice?.isActive) {
+      if (!member || !member.isActive || !member.practice?.isActive || member.practice.status !== 'ACTIVE') {
         throw new AppError(403, 'FORBIDDEN_PRACTICE', 'You do not have an active membership in this practice.');
       }
     }

@@ -345,7 +345,6 @@ export const PatientsListPage: React.FC = () => {
                     <div className="patient-card-actions">
                       <Link to={`/patients/${patient.id}`} className="btn btn-primary btn-sm" style={{ flex: 1 }}>
                         <span>View Details</span>
-                        <Icon name="arrow-right" size={14} />
                       </Link>
                       <Link to={`/patients/${patient.id}/edit`} className="btn btn-secondary btn-sm" title="Edit Patient">
                         <Icon name="edit" size={14} />

@@ -90,6 +90,14 @@ export class PracticeService {
           slug: updates.slug ? updates.slug.trim().toLowerCase() : undefined,
         },
       });
+
+      if (updates.name && updates.name.trim()) {
+        await prisma.practiceSettings.upsert({
+          where: { practiceId },
+          create: { practiceId, clinicName: updates.name.trim() },
+          update: { clinicName: updates.name.trim() },
+        });
+      }
     }
 
     // 2. Audit Trail
@@ -129,9 +137,14 @@ export class PracticeService {
           registrationNumber: null,
           doctorName: null,
           doctorRegistrationNumber: null,
+          doctorQualifications: null,
+          doctorPhone: null,
+          doctorEmail: null,
+          doctorAddress: null,
           doctorPhotoUrl: null,
           doctorSignatureUrl: null,
           clinicLogoUrl: null,
+          clinicLicenseNumber: null,
           ownerSpecialInstructionEnabled: false,
           mykgvoaMemberId: null,
         };
@@ -161,9 +174,14 @@ export class PracticeService {
       registrationNumber: settings.registrationNumber,
       doctorName: settings.doctorName,
       doctorRegistrationNumber: settings.doctorRegistrationNumber,
+      doctorQualifications: (settings as any).doctorQualifications || null,
+      doctorPhone: (settings as any).doctorPhone || null,
+      doctorEmail: (settings as any).doctorEmail || null,
+      doctorAddress: (settings as any).doctorAddress || null,
       doctorPhotoUrl: settings.doctorPhotoUrl,
       doctorSignatureUrl: settings.doctorSignatureUrl,
       clinicLogoUrl: settings.clinicLogoUrl,
+      clinicLicenseNumber: (settings as any).clinicLicenseNumber || null,
       ownerSpecialInstructionEnabled: settings.ownerSpecialInstructionEnabled,
       mykgvoaMemberId: settings.mykgvoaMemberId,
     };
@@ -190,6 +208,13 @@ export class PracticeService {
         ...updates,
       };
       this.mockSettings.set(practiceId, updated);
+      if (updates.clinicName && updates.clinicName.trim()) {
+        const p = this.mockPractices.get(practiceId);
+        if (p) {
+          p.name = updates.clinicName.trim();
+          this.mockPractices.set(practiceId, p);
+        }
+      }
       result = updated;
     } else {
       const updated = await prisma.practiceSettings.upsert({
@@ -203,6 +228,14 @@ export class PracticeService {
         },
       });
 
+      // Synchronize authoritative practice name if clinicName was updated
+      if (updates.clinicName && updates.clinicName.trim()) {
+        await prisma.practice.update({
+          where: { id: practiceId },
+          data: { name: updates.clinicName.trim() },
+        });
+      }
+
       result = {
         id: updated.id,
         practiceId: updated.practiceId,
@@ -213,9 +246,14 @@ export class PracticeService {
         registrationNumber: updated.registrationNumber,
         doctorName: updated.doctorName,
         doctorRegistrationNumber: updated.doctorRegistrationNumber,
+        doctorQualifications: (updated as any).doctorQualifications || null,
+        doctorPhone: (updated as any).doctorPhone || null,
+        doctorEmail: (updated as any).doctorEmail || null,
+        doctorAddress: (updated as any).doctorAddress || null,
         doctorPhotoUrl: updated.doctorPhotoUrl,
         doctorSignatureUrl: updated.doctorSignatureUrl,
         clinicLogoUrl: updated.clinicLogoUrl,
+        clinicLicenseNumber: (updated as any).clinicLicenseNumber || null,
         ownerSpecialInstructionEnabled: updated.ownerSpecialInstructionEnabled,
         mykgvoaMemberId: updated.mykgvoaMemberId,
       };

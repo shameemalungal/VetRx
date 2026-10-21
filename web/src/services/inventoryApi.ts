@@ -155,6 +155,7 @@ export interface PurchaseInvoiceItem {
   invoiceId: string;
   itemId?: string | null;
   medicineName: string;
+  name?: string;
   category: InventoryCategory;
   presentation?: string | null;
   batchNumber?: string | null;
@@ -162,6 +163,7 @@ export interface PurchaseInvoiceItem {
   manufacturingDate?: string | null;
   quantity: number;
   purchaseRate: number;
+  unitPrice?: number;
   mrp?: number | null;
   discountPercent?: number | null;
   taxPercent?: number | null;
@@ -179,9 +181,41 @@ export interface PurchaseInvoice {
   uploadedDocumentUrl?: string | null;
   totalAmount: number;
   status: string;
+  notes?: string | null;
   createdAt: string;
   supplier?: Supplier;
   items?: PurchaseInvoiceItem[];
+}
+
+export interface ClearStockSummary {
+  practiceId?: string;
+  practiceName: string;
+  affectedItemsCount: number;
+  affectedBatchesCount: number;
+  totalCurrentQuantity: number;
+  retainedEntities?: string;
+  retainedInformation?: string;
+}
+
+export interface InventoryTransactionEntry {
+  id: string;
+  createdAt: string;
+  transactionType: string;
+  quantityChange: number;
+  itemName: string;
+  batchNumber?: string | null;
+  currentBatchStock?: number;
+  canCompensate: boolean;
+  blockReason?: string;
+  performedBy?: string | null;
+  reason?: string | null;
+}
+
+export interface DateCorrectionResult {
+  success: boolean;
+  correctedCount: number;
+  totalUnitsAdjusted?: number;
+  message: string;
 }
 
 export interface InventoryDashboardData {
@@ -404,6 +438,7 @@ export const inventoryApi = {
   // Entitlement & Dev Toggle
   getEntitlement: async () => {
     const res = await inventoryRequest<{
+      practiceId?: string;
       entitled?: boolean;
       hasInventoryEntitlement?: boolean;
       reason?: string;
@@ -411,9 +446,10 @@ export const inventoryApi = {
     }>('/api/commercial/entitlements/inventory');
     const entitled = Boolean(res.hasInventoryEntitlement ?? res.entitled);
     return {
+      practiceId: res.practiceId,
       entitled,
       reason: res.reason,
-      mockMode: res.mockMode ?? true,
+      mockMode: res.mockMode ?? false,
     };
   },
 
@@ -628,6 +664,11 @@ export const inventoryApi = {
       quantity: number;
       purchaseRate: number;
       mrp?: number;
+      discountPercent?: number;
+      schemeDiscountPercent?: number;
+      gstPercent?: number;
+      taxableValue?: number;
+      lineTotal?: number;
       matchedMedicineId?: number;
       createNewMedicineMaster?: boolean;
     }>;
@@ -783,6 +824,45 @@ export const inventoryApi = {
       adjustmentsCount: number;
       reconciledItems: Array<{ itemId: string; variance: number; countedQuantity: number }>;
     }>('/api/inventory/reconcile', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getClearStockSummary: () =>
+    inventoryRequest<ClearStockSummary>('/api/inventory/clear-stock-summary'),
+
+  clearAllStock: (reason: string) =>
+    inventoryRequest<{
+      success: boolean;
+      affectedItemsCount: number;
+      affectedBatchesCount: number;
+      totalClearedQuantity: number;
+      clearedAt: string;
+    }>('/api/inventory/clear-stock', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  reversePurchaseInvoice: (invoiceId: string, reason?: string) =>
+    inventoryRequest<{
+      success: boolean;
+      invoiceId: string;
+      invoiceNumber: string;
+      message: string;
+    }>(`/api/inventory/purchases/${invoiceId}/reverse`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  getEntriesByDate: (date: string) =>
+    inventoryRequest<{
+      date: string;
+      count: number;
+      entries: InventoryTransactionEntry[];
+    }>(`/api/inventory/entries-by-date?date=${encodeURIComponent(date)}`),
+
+  correctEntriesByDate: (data: { transactionIds: string[]; reason: string }) =>
+    inventoryRequest<DateCorrectionResult>('/api/inventory/entries-by-date/correct', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

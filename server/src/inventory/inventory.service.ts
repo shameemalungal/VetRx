@@ -966,6 +966,7 @@ export class InventoryService {
       supplierGstin?: string | null;
       invoiceNumber: string;
       invoiceDate: string;
+      totalAmount?: number;
       notes?: string | null;
       items: Array<ExtractedInvoiceItemDTO & { createNewMedicineMaster?: boolean }>;
       performedByUserId?: string | null;
@@ -1139,7 +1140,15 @@ export class InventoryService {
       const qty = Math.max(1, Number(itemData.quantity));
       const rate = Number(itemData.purchaseRate) || 0;
       const mrp = Number(itemData.mrp) || Math.round(rate * 1.35);
-      const lineTotal = Math.round(qty * rate * 100) / 100;
+      const disc = Number(itemData.discountPercent ?? itemData.schemeDiscountPercent ?? 0);
+      const taxable = itemData.taxableValue && Number(itemData.taxableValue) > 0
+        ? Number(itemData.taxableValue)
+        : Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+      const gst = Number(itemData.gstPercent) || 0;
+      const calculatedLineTotal = Math.round((taxable + (taxable * gst) / 100) * 100) / 100;
+      const lineTotal = itemData.lineTotal && Number(itemData.lineTotal) > 0
+        ? Number(itemData.lineTotal)
+        : (disc > 0 || gst > 0 ? calculatedLineTotal : Math.round(qty * rate * 100) / 100);
       grandTotal += lineTotal;
 
       const expiryDateObj = itemData.expiryDate ? new Date(itemData.expiryDate) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
@@ -1238,7 +1247,9 @@ export class InventoryService {
       });
     }
 
-    const totalAmount = Math.round(grandTotal * 100) / 100;
+    const totalAmount = data.totalAmount !== undefined && Number(data.totalAmount) > 0
+      ? Math.round(Number(data.totalAmount) * 100) / 100
+      : Math.round(grandTotal * 100) / 100;
     const invDateObj = data.invoiceDate ? new Date(data.invoiceDate) : new Date();
     const validInvDate = isNaN(invDateObj.getTime()) ? new Date() : invDateObj;
 
@@ -2967,6 +2978,605 @@ export class InventoryService {
     };
   }
 
+  /**
+   * Generates a preview summary before executing a Clear All Stock action.
+   * Scoped strictly to the active practice.
+   */
+  static async getClearStockSummary(practiceId: string): Promise<{
+    practiceName: string;
+    affectedItemsCount: number;
+    affectedBatchesCount: number;
+    totalCurrentQuantity: number;
+    retainedEntities: string;
+  }> {
+    let practiceName = 'Current Practice';
+    let affectedItemsCount = 0;
+    let affectedBatchesCount = 0;
+    let totalCurrentQuantity = 0;
+
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const practice = await prisma.practice.findUnique({
+          where: { id: practiceId },
+          select: { name: true },
+        });
+        if (practice) practiceName = practice.name;
+
+        const batches = await prisma.inventoryBatch.findMany({
+          where: {
+            practiceId,
+            currentQuantity: { gt: 0 },
+          },
+          select: {
+            inventoryItemId: true,
+            currentQuantity: true,
+          },
+        });
+
+        affectedBatchesCount = batches.length;
+        const uniqueItems = new Set(batches.map((b) => b.inventoryItemId));
+        affectedItemsCount = uniqueItems.size;
+        totalCurrentQuantity = batches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+      } catch (err) {
+        console.warn('[InventoryService.getClearStockSummary] Prisma query error:', err);
+      }
+    }
+
+    if (affectedBatchesCount === 0 && this.mockBatches.has(practiceId)) {
+      const memBatches = this.getBatchesStore(practiceId).filter((b) => b.currentQuantity > 0);
+      affectedBatchesCount = memBatches.length;
+      const uniqueItems = new Set(memBatches.map((b) => b.inventoryItemId));
+      affectedItemsCount = uniqueItems.size;
+      totalCurrentQuantity = memBatches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+    }
+
+    return {
+      practiceName,
+      affectedItemsCount,
+      affectedBatchesCount,
+      totalCurrentQuantity,
+      retainedEntities:
+        'All purchase invoices, batch traceability, supplier transactions, prescriptions, patient invoices, and audit histories will be strictly retained.',
+    };
+  }
+
+  /**
+   * Safely and auditably zeroes all stock quantities for the active practice.
+   * Does NOT delete inventory items, purchase invoices, batches, or transactions.
+   */
+  static async clearAllStock(
+    practiceId: string,
+    performedByUserId?: string | null,
+    reason?: string | null
+  ): Promise<{
+    success: boolean;
+    affectedItemsCount: number;
+    affectedBatchesCount: number;
+    totalClearedQuantity: number;
+    clearedAt: string;
+  }> {
+    const defaultReason = reason || 'Manual Clear All Stock operation initiated by practice administrator';
+    const now = new Date();
+    let affectedBatchesCount = 0;
+    let affectedItemsCount = 0;
+    let totalClearedQuantity = 0;
+
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+      try {
+        const activeBatches = await prisma.inventoryBatch.findMany({
+          where: {
+            practiceId,
+            currentQuantity: { gt: 0 },
+          },
+          include: {
+            inventoryItem: true,
+          },
+        });
+
+        if (activeBatches.length > 0) {
+          const itemIds = new Set(activeBatches.map((b) => b.inventoryItemId));
+          affectedItemsCount = itemIds.size;
+          affectedBatchesCount = activeBatches.length;
+          totalClearedQuantity = activeBatches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+
+          await prisma.$transaction(async (tx) => {
+            for (const batch of activeBatches) {
+              const qtyBefore = Number(batch.currentQuantity);
+              if (qtyBefore <= 0) continue;
+
+              // Record auditable adjustment transaction
+              await tx.inventoryTransaction.create({
+                data: {
+                  practiceId,
+                  itemId: batch.inventoryItemId,
+                  batchId: batch.id,
+                  transactionType: 'STOCK_ADJUSTMENT',
+                  quantityChange: -qtyBefore,
+                  quantityBefore: qtyBefore,
+                  quantityAfter: 0,
+                  unitCost: batch.purchaseRate,
+                  referenceType: 'CLEAR_ALL_STOCK',
+                  reason: defaultReason,
+                  performedByUserId: performedByUserId || null,
+                  createdAt: now,
+                },
+              });
+
+              // Zero the batch
+              await tx.inventoryBatch.update({
+                where: { id: batch.id },
+                data: {
+                  currentQuantity: 0,
+                  updatedAt: now,
+                },
+              });
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[InventoryService.clearAllStock] Prisma error:', err);
+      }
+    }
+
+    // Update in-memory store for isolated tests & local dev
+    const memBatches = this.getBatchesStore(practiceId).filter((b) => b.currentQuantity > 0);
+    if (memBatches.length > 0 && affectedBatchesCount === 0) {
+      const itemIds = new Set(memBatches.map((b) => b.inventoryItemId));
+      affectedItemsCount = itemIds.size;
+      affectedBatchesCount = memBatches.length;
+      totalClearedQuantity = memBatches.reduce((sum, b) => sum + (Number(b.currentQuantity) || 0), 0);
+
+      for (const batch of memBatches) {
+        const qtyBefore = batch.currentQuantity;
+        batch.currentQuantity = 0;
+        batch.updatedAt = now.toISOString();
+
+        await this.recordTransaction(practiceId, {
+          itemId: batch.inventoryItemId,
+          batchId: batch.id,
+          transactionType: 'STOCK_ADJUSTMENT',
+          quantityChange: -qtyBefore,
+          quantityBefore: qtyBefore,
+          quantityAfter: 0,
+          unitCost: batch.purchaseRate,
+          referenceType: 'CLEAR_ALL_STOCK',
+          reason: defaultReason,
+          performedByUserId,
+        });
+      }
+    }
+
+    void AuditService.record({
+      practiceId,
+      userId: performedByUserId || undefined,
+      action: 'INVENTORY_STOCK_CLEARED',
+      resource: 'InventoryBatch',
+      details: {
+        affectedItemsCount,
+        affectedBatchesCount,
+        totalClearedQuantity,
+        reason: defaultReason,
+      },
+    });
+
+    return {
+      success: true,
+      affectedItemsCount,
+      affectedBatchesCount,
+      totalClearedQuantity,
+      clearedAt: now.toISOString(),
+    };
+  }
+
+  /**
+   * Safely reverses a purchase invoice and its stock effects.
+   * Validates that subsequent stock consumption hasn't reduced current batch quantity below the invoice quantity.
+   */
+  static async reversePurchaseInvoice(
+    practiceId: string,
+    invoiceId: string,
+    performedByUserId?: string | null,
+    reason?: string | null
+  ): Promise<{
+    success: boolean;
+    invoiceId: string;
+    invoiceNumber: string;
+    message: string;
+  }> {
+    const defaultReason = reason || 'Manual purchase invoice reversal';
+    const now = new Date();
+
+    let invoice: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.purchaseInvoice) {
+      try {
+        invoice = await prisma.purchaseInvoice.findFirst({
+          where: { id: invoiceId, practiceId },
+          include: {
+            items: {
+              include: {
+                inventoryItem: true,
+              },
+            },
+          },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.reversePurchaseInvoice] Prisma query error:', err);
+      }
+    }
+
+    if (!invoice) {
+      invoice = this.getPurchasesStore(practiceId).find((p) => p.id === invoiceId);
+    }
+
+    if (!invoice) {
+      throw new AppError(404, 'INVOICE_NOT_FOUND', 'Purchase invoice not found for this practice.');
+    }
+
+    // Check if already reversed
+    if (invoice.notes && invoice.notes.includes('[REVERSED')) {
+      throw new AppError(400, 'INVOICE_ALREADY_REVERSED', 'This purchase invoice has already been reversed.');
+    }
+
+    // 1. Inspect all items and check whether subsequent consumption prevents reversal
+    for (const item of invoice.items) {
+      let batch: any = null;
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryBatch) {
+        batch = await prisma.inventoryBatch.findFirst({
+          where: {
+            practiceId,
+            inventoryItemId: item.inventoryItemId,
+            batchNumber: item.batchNumber,
+          },
+        });
+      } else {
+        batch = this.getBatchesStore(practiceId).find(
+          (b) => b.inventoryItemId === item.inventoryItemId && b.batchNumber === item.batchNumber
+        );
+      }
+
+      const currentQty = batch ? Number(batch.currentQuantity) : 0;
+      const itemQty = Number(item.quantity);
+
+      if (!batch || currentQty < itemQty) {
+        const itemName = item.itemName || (item as any).inventoryItem?.name || 'Item';
+        throw new AppError(
+          400,
+          'CANNOT_REVERSE_INSUFFICIENT_STOCK',
+          `Cannot safely reverse invoice #${invoice.invoiceNumber}. Line item "${itemName}" (Batch ${item.batchNumber}) has only ${currentQty} units remaining in stock, but this invoice supplied ${itemQty} units (${itemQty - currentQty} units were consumed by prescriptions, invoices, or field usage). Reversing this invoice would result in an invalid negative stock balance. Please use manual stock adjustment instead.`
+        );
+      }
+    }
+
+    // 2. Perform the reversal transactionally
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.purchaseInvoice) {
+      await prisma.$transaction(async (tx) => {
+        for (const item of invoice.items) {
+          const batch = await tx.inventoryBatch.findFirst({
+            where: {
+              practiceId,
+              inventoryItemId: item.inventoryItemId,
+              batchNumber: item.batchNumber,
+            },
+          });
+
+          if (batch) {
+            const qtyBefore = Number(batch.currentQuantity);
+            const itemQty = Number(item.quantity);
+            const qtyAfter = Math.max(0, qtyBefore - itemQty);
+
+            // Create REVERSAL transaction
+            await tx.inventoryTransaction.create({
+              data: {
+                practiceId,
+                itemId: item.inventoryItemId,
+                batchId: batch.id,
+                transactionType: 'REVERSAL',
+                quantityChange: -itemQty,
+                quantityBefore: qtyBefore,
+                quantityAfter: qtyAfter,
+                unitCost: item.purchaseRate,
+                referenceType: 'PURCHASE_INVOICE_REVERSAL',
+                referenceId: invoice.id,
+                reason: defaultReason,
+                performedByUserId: performedByUserId || null,
+                createdAt: now,
+              },
+            });
+
+            // Update batch current quantity
+            await tx.inventoryBatch.update({
+              where: { id: batch.id },
+              data: {
+                currentQuantity: qtyAfter,
+                updatedAt: now,
+              },
+            });
+          }
+        }
+
+        // Annotate invoice notes with reversal audit trail
+        const auditNote = `[REVERSED on ${now.toISOString()} by ${performedByUserId || 'User'}. Reason: ${defaultReason}]`;
+        await tx.purchaseInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            notes: invoice.notes ? `${invoice.notes}\n${auditNote}` : auditNote,
+            updatedAt: now,
+          },
+        });
+      });
+    }
+
+    // In-memory store updates
+    const memBatches = this.getBatchesStore(practiceId);
+    for (const item of invoice.items) {
+      const b = memBatches.find(
+        (batch) => batch.inventoryItemId === item.inventoryItemId && batch.batchNumber === item.batchNumber
+      );
+      if (b) {
+        const qtyBefore = b.currentQuantity;
+        const itemQty = Number(item.quantity);
+        const qtyAfter = Math.max(0, qtyBefore - itemQty);
+        b.currentQuantity = qtyAfter;
+        b.updatedAt = now.toISOString();
+
+        await this.recordTransaction(practiceId, {
+          itemId: item.inventoryItemId,
+          batchId: b.id,
+          transactionType: 'REVERSAL',
+          quantityChange: -itemQty,
+          quantityBefore: qtyBefore,
+          quantityAfter: qtyAfter,
+          unitCost: item.purchaseRate,
+          referenceType: 'PURCHASE_INVOICE_REVERSAL',
+          referenceId: invoice.id,
+          reason: defaultReason,
+          performedByUserId,
+        });
+      }
+    }
+    const auditNote = `[REVERSED on ${now.toISOString()} by ${performedByUserId || 'User'}. Reason: ${defaultReason}]`;
+    invoice.notes = invoice.notes ? `${invoice.notes}\n${auditNote}` : auditNote;
+
+    void AuditService.record({
+      practiceId,
+      userId: performedByUserId || undefined,
+      action: 'PURCHASE_INVOICE_REVERSED',
+      resource: 'PurchaseInvoice',
+      resourceId: invoice.id,
+      details: {
+        invoiceNumber: invoice.invoiceNumber,
+        itemsCount: invoice.items.length,
+        reason: defaultReason,
+      },
+    });
+
+    return {
+      success: true,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      message: `Purchase invoice #${invoice.invoiceNumber} has been safely reversed and stock deducted.`,
+    };
+  }
+
+  /**
+   * Retrieves all inventory transactions recorded on a specific date for the practice.
+   */
+  static async getEntriesByDate(
+    practiceId: string,
+    dateStr: string
+  ): Promise<{
+    date: string;
+    count: number;
+    entries: Array<InventoryTransactionDTO & { batchNumber?: string | null; canCompensate: boolean }>;
+  }> {
+    const targetDate = new Date(dateStr);
+    if (isNaN(targetDate.getTime())) {
+      throw new AppError(400, 'INVALID_DATE', 'Invalid date format. Expected YYYY-MM-DD.');
+    }
+
+    // Set full day boundary in UTC
+    const startOfDay = new Date(dateStr);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(dateStr);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    let entries: any[] = [];
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryTransaction) {
+      try {
+        const dbTxs = await prisma.inventoryTransaction.findMany({
+          where: {
+            practiceId,
+            createdAt: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
+          },
+          include: {
+            item: true,
+            batch: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        entries = dbTxs.map((tx) => ({
+          id: tx.id,
+          practiceId: tx.practiceId,
+          itemId: tx.itemId,
+          itemName: tx.item?.name || 'Unknown Item',
+          itemCategory: (tx.item?.category as any) || 'OTHER',
+          batchId: tx.batchId,
+          batchNumber: tx.batch?.batchNumber || null,
+          transactionType: tx.transactionType as any,
+          quantityChange: tx.quantityChange,
+          quantityBefore: tx.quantityBefore,
+          quantityAfter: tx.quantityAfter,
+          unitCost: tx.unitCost,
+          referenceType: tx.referenceType,
+          referenceId: tx.referenceId,
+          reason: tx.reason,
+          performedByUserId: tx.performedByUserId,
+          createdAt: tx.createdAt.toISOString(),
+          canCompensate: tx.transactionType !== 'REVERSAL' && !tx.referenceType?.includes('CORRECTION'),
+        }));
+      } catch (err) {
+        console.warn('[InventoryService.getEntriesByDate] Prisma error:', err);
+      }
+    }
+
+    if (entries.length === 0 && this.mockTransactions.has(practiceId)) {
+      const allTx = this.getTransactionsStore(practiceId);
+      entries = allTx
+        .filter((tx) => {
+          const d = new Date(tx.createdAt);
+          return d >= startOfDay && d <= endOfDay;
+        })
+        .map((tx) => ({
+          ...tx,
+          canCompensate: tx.transactionType !== 'REVERSAL' && !tx.referenceType?.includes('CORRECTION'),
+        }));
+    }
+
+    return {
+      date: dateStr,
+      count: entries.length,
+      entries,
+    };
+  }
+
+  /**
+   * Applies compensating ledger corrections to specified inventory transactions.
+   * Respects batch availability and never creates negative stock balances.
+   */
+  static async correctEntriesByDate(
+    practiceId: string,
+    data: {
+      transactionIds: string[];
+      reason: string;
+      performedByUserId?: string | null;
+    }
+  ): Promise<{
+    success: boolean;
+    correctedCount: number;
+    message: string;
+  }> {
+    if (!data.transactionIds || data.transactionIds.length === 0) {
+      throw new AppError(400, 'NO_ENTRIES_SELECTED', 'Please select at least one entry to correct.');
+    }
+    if (!data.reason || !data.reason.trim()) {
+      throw new AppError(400, 'REASON_REQUIRED', 'A valid reason is required for correcting ledger entries.');
+    }
+
+    const now = new Date();
+    let correctedCount = 0;
+
+    for (const txId of data.transactionIds) {
+      let tx: any = null;
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryTransaction) {
+        tx = await prisma.inventoryTransaction.findFirst({
+          where: { id: txId, practiceId },
+          include: { batch: true, item: true },
+        });
+      } else {
+        tx = this.getTransactionsStore(practiceId).find((t) => t.id === txId);
+      }
+
+      if (!tx) continue;
+
+      // If the original transaction was an addition (quantityChange > 0), reversing it removes stock
+      if (tx.quantityChange > 0) {
+        const batch = tx.batch || (tx.batchId ? this.getBatchesStore(practiceId).find((b) => b.id === tx.batchId) : null);
+        const currentQty = batch ? Number(batch.currentQuantity) : 0;
+        if (currentQty < tx.quantityChange) {
+          throw new AppError(
+            400,
+            'CANNOT_CORRECT_INSUFFICIENT_STOCK',
+            `Cannot correct entry #${tx.id} for "${tx.item?.name || 'Item'}". Current batch quantity is ${currentQty}, which is less than the entry amount ${tx.quantityChange}. Correcting this entry would create an invalid negative stock balance.`
+          );
+        }
+      }
+
+      // Record compensating transaction
+      const compensatingChange = -Number(tx.quantityChange);
+      const batchId = tx.batchId;
+
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryTransaction) {
+        await prisma.$transaction(async (prismaTx) => {
+          let qtyBefore = 0;
+          let qtyAfter = 0;
+
+          if (batchId) {
+            const b = await prismaTx.inventoryBatch.findUnique({ where: { id: batchId } });
+            if (b) {
+              qtyBefore = Number(b.currentQuantity);
+              qtyAfter = Math.max(0, qtyBefore + compensatingChange);
+              await prismaTx.inventoryBatch.update({
+                where: { id: batchId },
+                data: { currentQuantity: qtyAfter, updatedAt: now },
+              });
+            }
+          }
+
+          await prismaTx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: tx.itemId,
+              batchId: batchId || null,
+              transactionType: 'STOCK_ADJUSTMENT',
+              quantityChange: compensatingChange,
+              quantityBefore: qtyBefore,
+              quantityAfter: qtyAfter,
+              unitCost: tx.unitCost,
+              referenceType: 'DATE_ENTRY_CORRECTION',
+              referenceId: tx.id,
+              reason: `Compensating correction for entry #${tx.id}: ${data.reason.trim()}`,
+              performedByUserId: data.performedByUserId || null,
+              createdAt: now,
+            },
+          });
+        });
+      } else {
+        if (batchId) {
+          const b = this.getBatchesStore(practiceId).find((batch) => batch.id === batchId);
+          if (b) {
+            b.currentQuantity = Math.max(0, b.currentQuantity + compensatingChange);
+            b.updatedAt = now.toISOString();
+          }
+        }
+        await this.recordTransaction(practiceId, {
+          itemId: tx.itemId,
+          batchId: tx.batchId || null,
+          transactionType: 'STOCK_ADJUSTMENT',
+          quantityChange: compensatingChange,
+          quantityBefore: tx.quantityAfter,
+          quantityAfter: tx.quantityBefore,
+          unitCost: tx.unitCost,
+          referenceType: 'DATE_ENTRY_CORRECTION',
+          referenceId: tx.id,
+          reason: `Compensating correction for entry #${tx.id}: ${data.reason.trim()}`,
+          performedByUserId: data.performedByUserId,
+        });
+      }
+
+      correctedCount++;
+    }
+
+    void AuditService.record({
+      practiceId,
+      userId: data.performedByUserId || undefined,
+      action: 'INVENTORY_DATE_ENTRIES_CORRECTED',
+      resource: 'InventoryTransaction',
+      details: {
+        correctedCount,
+        reason: data.reason,
+      },
+    });
+
+    return {
+      success: true,
+      correctedCount,
+      message: `Successfully applied compensating corrections to ${correctedCount} entries.`,
+    };
+  }
 
   private static getItemsStore(practiceId: string): InventoryItemDTO[] {
     if (!this.mockItems.has(practiceId)) {

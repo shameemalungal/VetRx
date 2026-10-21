@@ -410,6 +410,12 @@ export const platformAdminApi = {
   updateUser: (id: string, data: { name?: string; email?: string; phone?: string; platformRole?: string | null }) =>
     request<any>(`/api/platform/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
+  changeUserLoginEmail: (id: string, newEmail: string, reason?: string) =>
+    request<{ success: boolean; message: string; user: any; previousEmail: string; newEmail: string }>(
+      `/api/platform-admin/users/${id}/change-login-email`,
+      { method: 'POST', body: JSON.stringify({ newEmail, reason }) }
+    ),
+
   resetPassword: (id: string) =>
     request<{ success: boolean; message: string }>(`/api/platform/admin/users/${id}/reset-password`, { method: 'POST' }),
 

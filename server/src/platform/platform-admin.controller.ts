@@ -459,6 +459,24 @@ const revokeSessionsHandler = async (req: AuthenticatedRequest, res: any, next: 
 platformAdminRouter.post('/users/:id/revoke-sessions', revokeSessionsHandler);
 platformAdminRouter.post('/users/:id/force-logout', revokeSessionsHandler);
 
+platformAdminRouter.post('/users/:id/change-login-email', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const actorUserId = req.user?.id;
+    if (!actorUserId) throw new AppError(401, 'UNAUTHORIZED', 'Authentication required.');
+    const targetUserId = req.params.id as string;
+
+    const schema = z.object({
+      newEmail: z.string().email('A valid email address is required'),
+      reason: z.string().optional(),
+    });
+    const body = schema.parse(req.body);
+    const result = await PlatformAdminService.changeUserLoginEmail(actorUserId, targetUserId, body.newEmail, body.reason);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 platformAdminRouter.post('/users/:id/practices', async (req: AuthenticatedRequest, res, next) => {
   try {
     const actorUserId = req.user?.id;
