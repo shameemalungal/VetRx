@@ -11,7 +11,14 @@
     "test": "tsx test_phase7_dosing.ts && tsx test_dose_and_import_fixes.ts && tsx test_shared_medicine_form.ts && tsx test_medicine_formulation_persistence.ts && tsx test_platform_header_layout.ts && tsx test_inventory_addon_v1.ts && tsx test_cvp_phase2_foundation.ts && tsx test_cvp_phase3_registration.ts && tsx test_cvp_phase8_followup_duration.ts && tsx test_contrast_integrity.ts && tsx test_unified_records_integration.ts && tsx test_inventory_entitlement_regression.ts && tsx test_ui_arrow_and_overlap_regression.ts",
     "test:cvp8": "tsx test_cvp_phase8_followup_duration.ts",
     "test:browser": "node ../scripts/run_browser_uat.mjs",
-    "test:browser:smoke": "node ../scripts/browser_smoke.mjs"
+    "test:browser:smoke": "node ../scripts/browser_smoke.mjs",
+    "cap:sync": "npm run build:android && cap sync android && npm run android:configure",
+    "cap:open": "cap open android",
+    "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug",
+    "android:release": "npm run cap:sync && cd android && gradlew.bat bundleRelease",
+    "cap:add:android": "cap add android",
+    "build:android": "tsc -p tsconfig.app.json --noEmit && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --mode android",
+    "android:configure": "node scripts/patch-android-native.mjs"
   },
   "dependencies": {
     "@types/html2canvas": "^0.5.35",
@@ -24,7 +31,17 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-router-dom": "^7.18.3",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.2",
+    "@capacitor/browser": "^7.0.2",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/filesystem": "^7.1.4",
+    "@capacitor/haptics": "^7.0.2",
+    "@capacitor/keyboard": "^7.0.3",
+    "@capacitor/local-notifications": "^7.0.2",
+    "@capacitor/share": "^7.0.2",
+    "@capacitor/splash-screen": "^7.0.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -33,6 +50,7 @@
     "@vitejs/plugin-react": "^6.1.0",
     "oxlint": "^1.79.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "@capacitor/cli": "^7.4.3"
   }
 }

@@ -1194,3 +1194,57 @@
   }
 }
 
+
+
+/* Android / small-screen refinement inspired by the approved Stitch screens.
+   These rules are scoped to the existing app shell and preserve page logic. */
+:root {
+  --android-safe-top: env(safe-area-inset-top, 0px);
+  --android-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, .bottom-nav-item, .more-menu-item { touch-action: manipulation; }
+
+@media (max-width: 1023px) {
+  .app-shell { min-height: 100dvh; }
+  .app-main { min-width: 0; width: 100%; }
+  .mobile-header {
+    padding-top: var(--android-safe-top);
+    min-height: calc(56px + var(--android-safe-top));
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  }
+  .mobile-header-title { letter-spacing: -0.025em; }
+  .page-content {
+    padding-top: 18px;
+    padding-left: clamp(12px, 4vw, 20px);
+    padding-right: clamp(12px, 4vw, 20px);
+    padding-bottom: calc(var(--bottom-nav-height) + var(--android-safe-bottom) + 34px);
+  }
+  .bottom-nav {
+    padding-bottom: var(--android-safe-bottom);
+    background: color-mix(in srgb, #ffffff 94%, transparent);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 68%, transparent);
+    box-shadow: 0 -8px 28px rgba(19, 27, 46, 0.055);
+  }
+  .bottom-nav-inner { padding-bottom: 2px; }
+  .bottom-nav-item { min-width: 48px; min-height: 48px; border-radius: 16px; transition: background 160ms ease, color 160ms ease, transform 160ms ease; }
+  .bottom-nav-item.active { background: color-mix(in srgb, var(--color-primary-fixed) 42%, transparent); }
+  .bottom-nav-icon-wrapper { transition: transform 160ms ease; }
+  .bottom-nav-item.active .bottom-nav-icon-wrapper { transform: translateY(-1px); }
+  .more-menu-sheet { padding-bottom: calc(16px + var(--android-safe-bottom)); border-radius: 24px 24px 0 0; }
+  .more-menu-item { min-height: 60px; border-radius: 14px; }
+  .more-menu-item:active, .bottom-nav-item:active { transform: scale(0.97); }
+  .btn, button { min-height: max(40px, var(--control-touch-target, 40px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

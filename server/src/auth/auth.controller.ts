@@ -92,7 +92,7 @@ authRouter.post('/register', authRateLimiter, async (req, res, next) => {
       userAgent,
     });
 
-    SessionService.setCookie(res, result.token);
+    SessionService.setCookie(res, result.token, req.headers.origin);
     res.status(201).json(result.data);
   } catch (error) {
     next(error);
@@ -116,7 +116,7 @@ authRouter.post('/login', authRateLimiter, async (req, res, next) => {
       userAgent,
     });
 
-    SessionService.setCookie(res, result.token);
+    SessionService.setCookie(res, result.token, req.headers.origin);
     res.status(200).json(result.data);
   } catch (error) {
     next(error);
@@ -134,7 +134,7 @@ authRouter.post('/logout', async (req, res, next) => {
       await SessionService.revokeSession(rawToken);
     }
 
-    SessionService.clearCookie(res);
+    SessionService.clearCookie(res, req.headers.origin);
     res.status(200).json({ message: 'Successfully logged out.' });
   } catch (error) {
     next(error);
@@ -429,7 +429,7 @@ authRouter.get('/google/callback', async (req, res) => {
       invitationToken: parsedPayload.invitationToken,
     });
 
-    SessionService.setCookie(res, token);
+    SessionService.setCookie(res, token, req.headers.origin);
 
     // Redirect to frontend application
     const appBase = env.APP_URL.includes('vetrx.brightbase.in') && !env.APP_URL.includes('app.vetrx.brightbase.in')

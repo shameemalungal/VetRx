@@ -138,12 +138,13 @@ export class SessionService {
   /**
    * Attaches the secure session cookie to the response.
    */
-  static setCookie(res: Response, rawToken: string): void {
+  static setCookie(res: Response, rawToken: string, requestOrigin?: string): void {
     const isProd = env.NODE_ENV === 'production';
+    const isCapacitorAndroidOrigin = requestOrigin === 'https://localhost';
     res.cookie(env.COOKIE_NAME, rawToken, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
+      secure: isProd || isCapacitorAndroidOrigin,
+      sameSite: isCapacitorAndroidOrigin ? 'none' : 'lax',
       path: '/',
       maxAge: env.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
     });
@@ -152,12 +153,13 @@ export class SessionService {
   /**
    * Clears the session cookie.
    */
-  static clearCookie(res: Response): void {
+  static clearCookie(res: Response, requestOrigin?: string): void {
     const isProd = env.NODE_ENV === 'production';
+    const isCapacitorAndroidOrigin = requestOrigin === 'https://localhost';
     res.clearCookie(env.COOKIE_NAME, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
+      secure: isProd || isCapacitorAndroidOrigin,
+      sameSite: isCapacitorAndroidOrigin ? 'none' : 'lax',
       path: '/',
     });
   }

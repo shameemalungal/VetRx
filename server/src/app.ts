@@ -63,6 +63,8 @@ export function createApp() {
   // CORS Configuration (Strict Trusted Application Origins Only)
   const defaultOrigins = [
     'https://app.vetrx.brightbase.in',
+    // Capacitor Android uses https://localhost as its packaged WebView origin.
+    'https://localhost',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
