@@ -29,8 +29,8 @@ const envSchema = z.object({
 
   // Rate Limiting
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
-  AUTH_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(1000),
+  AUTH_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
 
   // Transactional Email (Brevo / SMTP)
   EMAIL_ENABLED: z.preprocess(
