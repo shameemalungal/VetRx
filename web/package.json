@@ -15,7 +15,8 @@
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
     "android:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug",
-    "android:release": "npm run cap:sync && cd android && gradlew.bat bundleRelease"
+    "android:release": "npm run cap:sync && cd android && gradlew.bat bundleRelease",
+    "cap:add:android": "cap add android"
   },
   "dependencies": {
     "@types/html2canvas": "^0.5.35",
@@ -37,7 +38,8 @@
     "@capacitor/haptics": "^7.0.2",
     "@capacitor/keyboard": "^7.0.3",
     "@capacitor/local-notifications": "^7.0.2",
-    "@capacitor/share": "^7.0.2"
+    "@capacitor/share": "^7.0.2",
+    "@capacitor/splash-screen": "^7.0.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
