@@ -58,6 +58,10 @@ jobs:
         working-directory: web
         run: npx cap sync android
 
+      - name: Configure Android session cookies
+        working-directory: web
+        run: npm run android:configure
+
       - name: Assemble debug APK
         working-directory: web/android
         run: ./gradlew assembleDebug
