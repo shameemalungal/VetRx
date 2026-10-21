@@ -46,7 +46,7 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
-          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -mindepth 2 -maxdepth 2 -name sdkmanager | sort -V | tail -n 1)"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -mindepth 3 -maxdepth 3 -name sdkmanager | sort -V | tail -n 1)"
           if [ -z "$SDKMANAGER" ]; then
             echo "Android SDK manager not found under $ANDROID_HOME/cmdline-tools"
             exit 1
