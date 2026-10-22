@@ -188,6 +188,8 @@ export class DocumentExtractionService {
     });
 
     // Line Items Normalization & Medicine Master Matching
+    const isInclusive = Boolean(doc.invoice.isInclusive);
+
     const items: ExtractedInvoiceItemDTO[] = validLineItems.map((raw, idx) => {
       const matched = this.matchWithCatalogue(raw.itemName, existingCatalogue);
 
@@ -196,10 +198,19 @@ export class DocumentExtractionService {
       let mrp = typeof raw.mrp === 'number' ? raw.mrp : 0;
       const schDisc = typeof raw.schemeDiscountPercent === 'number' ? raw.schemeDiscountPercent : 0;
       const disc = typeof raw.discountPercent === 'number' ? raw.discountPercent : schDisc;
-      const gst = typeof raw.gstPercent === 'number' ? raw.gstPercent : 5;
-      let taxable = typeof raw.taxableValue === 'number' ? raw.taxableValue : 0;
+
+      // Preserve explicit 0% GST. Flag if rate is genuinely missing or ambiguous.
+      const rawGst = raw.gstPercent;
+      const hasGst = typeof rawGst === 'number' && !isNaN(rawGst);
+      const gst = hasGst ? rawGst : undefined;
+
+      const itemFlags = [...(raw.flags || [])];
+      if (!hasGst) {
+        itemFlags.push('AMBIGUOUS_GST_RATE');
+      }
 
       // Sanity Check 1: If rate was swapped with HSN/Batch (> 50,000) or rate > mrp * 2 (when mrp > 0)
+      let taxable = typeof raw.taxableValue === 'number' ? raw.taxableValue : 0;
       if (rate > 50000 || (mrp > 0 && rate > mrp * 2)) {
         if (taxable > 0 && taxable <= 50000) {
           rate = Math.round((taxable / qty) * 100) / 100;
@@ -208,12 +219,36 @@ export class DocumentExtractionService {
         }
       }
 
-      // Sanity Check 2: Taxable value calculation
-      let calculatedLineTotal = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
-      if (taxable > 0 && Math.abs(taxable - calculatedLineTotal) <= Math.max(5, calculatedLineTotal * 0.05)) {
-        calculatedLineTotal = taxable;
-      } else if (taxable > 0 && (calculatedLineTotal === 0 || calculatedLineTotal > 500000)) {
-        calculatedLineTotal = taxable;
+      const gPct = gst !== undefined ? gst : 0;
+      let calculatedTaxable: number;
+      let lineTotal: number;
+      let gstAmount: number;
+
+      if (isInclusive) {
+        // Stated line total is GST-inclusive
+        lineTotal = typeof raw.lineTotal === 'number' && raw.lineTotal > 0
+          ? raw.lineTotal
+          : (taxable > 0 ? taxable : Math.round(qty * rate * (1 - disc / 100) * 100) / 100);
+
+        if (typeof raw.taxableValue === 'number' && raw.taxableValue > 0 && raw.taxableValue !== raw.lineTotal) {
+          calculatedTaxable = raw.taxableValue;
+        } else if (gPct > 0) {
+          calculatedTaxable = Math.round((lineTotal / (1 + gPct / 100)) * 100) / 100;
+        } else {
+          calculatedTaxable = lineTotal;
+        }
+        gstAmount = typeof raw.gstAmount === 'number' ? raw.gstAmount : Math.round((lineTotal - calculatedTaxable) * 100) / 100;
+      } else {
+        // GST-exclusive: line amount is taxable value
+        calculatedTaxable = typeof raw.taxableValue === 'number' && raw.taxableValue > 0
+          ? raw.taxableValue
+          : Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+        gstAmount = typeof raw.gstAmount === 'number'
+          ? raw.gstAmount
+          : Math.round(((calculatedTaxable * gPct) / 100) * 100) / 100;
+        lineTotal = typeof raw.lineTotal === 'number' && raw.lineTotal > 0
+          ? raw.lineTotal
+          : Math.round((calculatedTaxable + gstAmount) * 100) / 100;
       }
 
       return {
@@ -236,15 +271,16 @@ export class DocumentExtractionService {
         mrp: mrp || Math.round(rate * 1.35 * 100) / 100,
         schemeDiscountPercent: schDisc,
         discountPercent: disc,
-        gstPercent: gst,
-        taxableValue: calculatedLineTotal,
-        lineTotal: calculatedLineTotal,
+        gstPercent: gst !== undefined ? gst : 0,
+        taxableValue: calculatedTaxable,
+        lineTotal,
+        gstAmount,
         confidence: raw.confidence || 'HIGH',
         rawOcrText: raw.rawOcrText,
         matchedMedicineId: matched.medicineId || null,
         matchedItemId: matched.itemId || null,
         matchConfidence: matched.medicineId || matched.itemId ? 'HIGH' : 'NONE',
-        flags: [],
+        flags: itemFlags,
       };
     });
 
@@ -271,18 +307,20 @@ export class DocumentExtractionService {
       );
     }
 
-    const calculatedTaxable = items.reduce(
-      (sum, it) => sum + (it.taxableValue || it.quantity * it.purchaseRate),
+    const calculatedTaxable = Math.round(items.reduce(
+      (sum, it) => sum + (it.taxableValue || 0),
       0
-    );
+    ) * 100) / 100;
+    const calculatedGst = Math.round(items.reduce(
+      (sum, it) => sum + (it.gstAmount || 0),
+      0
+    ) * 100) / 100;
     const taxableAmount =
-      doc.invoice.taxableAmount || Math.round(calculatedTaxable * 100) / 100;
+      doc.invoice.taxableAmount || calculatedTaxable;
     const finalTotal =
       typeof doc.invoice.totalAmount === 'number' && doc.invoice.totalAmount > 0
         ? doc.invoice.totalAmount
-        : typeof taxableAmount === 'number' && taxableAmount > 0
-        ? Math.round(taxableAmount * 1.05 * 100) / 100
-        : Math.round(calculatedTaxable * 100) / 100;
+        : Math.round((calculatedTaxable + calculatedGst + (doc.invoice.roundOff || 0)) * 100) / 100;
 
     return {
       supplier: {
@@ -309,13 +347,14 @@ export class DocumentExtractionService {
       paymentType,
       taxableAmount,
       totalTax:
-        doc.invoice.totalTax ||
-        (taxableAmount ? Math.round((finalTotal - taxableAmount) * 100) / 100 : undefined),
+        doc.invoice.totalTax || calculatedGst,
       totalDiscount: doc.invoice.totalDiscount,
       totalItems,
       totalQuantity,
       netPayable: finalTotal,
       totalAmount: finalTotal,
+      roundOff: doc.invoice.roundOff,
+      isInclusive,
       items,
       isDuplicate: isDuplicateWarning,
       isDuplicateWarning,

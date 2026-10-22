@@ -377,6 +377,8 @@ export interface ParsedInvoiceItemData {
   discountPercent?: number;
   gstPercent?: number;
   taxableValue?: number;
+  lineTotal?: number | null;
+  gstAmount?: number | null;
   matchedMedicineId?: number | null;
   matchedMedicineName?: string | null;
   createNewMedicineMaster?: boolean;
@@ -411,6 +413,8 @@ export interface ParsedInvoiceData {
   totalQuantity?: number | null;
   netPayable?: number | null;
   totalAmount?: number | null;
+  roundOff?: number | null;
+  isInclusive?: boolean | null;
   isDuplicateWarning?: boolean;
   duplicateMessage?: string | null;
   warnings?: string[];

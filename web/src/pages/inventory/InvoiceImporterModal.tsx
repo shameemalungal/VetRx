@@ -54,6 +54,8 @@ export const InvoiceImporterModal: React.FC<InvoiceImporterModalProps> = ({
     totalTax?: number | null;
     netPayable?: number | null;
     totalDiscount?: number | null;
+    roundOff?: number | null;
+    isInclusive?: boolean | null;
   } | null>(null);
 
   const [items, setItems] = useState<ParsedInvoiceItemData[]>([]);
@@ -217,28 +219,51 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
         totalTax: parsed.totalTax,
         netPayable: parsed.netPayable ?? parsed.totalAmount,
         totalDiscount: parsed.totalDiscount,
+        roundOff: parsed.roundOff,
+        isInclusive: parsed.isInclusive,
       });
 
+      const isInvoiceInclusive = Boolean(parsed.isInclusive);
       const normalized: ParsedInvoiceItemData[] = (parsed.items || []).map((item, idx) => {
         const qty = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
         let rate = Number(item.purchaseRate) || 0;
         let mrp = Number(item.mrp) || 0;
-        let taxable = Number(item.taxableValue) || 0;
         const disc = Number(item.discountPercent) || Number(item.schemeDiscountPercent) || 0;
 
-        // Sanity check: if an 8-digit HSN or batch number was parsed into rate/taxable
-        if (rate > 50000 && qty > 0) {
-          if (taxable > 0 && taxable < 500000) {
-            rate = Math.round((taxable / qty) * 100) / 100;
-          } else if (mrp > 0 && mrp < 50000) {
-            rate = Math.round(mrp * 0.75 * 100) / 100;
-          } else {
-            rate = 100;
+        // Preserve extracted GST percentage! If explicitly 0, it must remain 0!
+        const gstPercent = item.gstPercent !== undefined && item.gstPercent !== null
+          ? Number(item.gstPercent)
+          : undefined;
+
+        let taxable = Number(item.taxableValue) || 0;
+        let lineTotal = Number(item.lineTotal) || 0;
+        let gstAmount = Number(item.gstAmount) || 0;
+
+        if (isInvoiceInclusive) {
+          if (lineTotal <= 0 && taxable > 0) {
+            lineTotal = taxable;
+          } else if (lineTotal <= 0) {
+            lineTotal = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+          }
+          const gPct = gstPercent !== undefined ? gstPercent : 0;
+          if (taxable <= 0 || taxable === lineTotal) {
+            taxable = gPct > 0 ? Math.round((lineTotal / (1 + gPct / 100)) * 100) / 100 : lineTotal;
+          }
+          gstAmount = Math.round((lineTotal - taxable) * 100) / 100;
+        } else {
+          if (taxable <= 0) {
+            taxable = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+          }
+          const gPct = gstPercent !== undefined ? gstPercent : 0;
+          gstAmount = Math.round(((taxable * gPct) / 100) * 100) / 100;
+          if (lineTotal <= 0) {
+            lineTotal = Math.round((taxable + gstAmount) * 100) / 100;
           }
         }
 
-        if (taxable > 500000 || taxable <= 0) {
-          taxable = Math.round(qty * rate * (1 - disc / 100) * 100) / 100;
+        const flags = [...(item.flags || [])];
+        if (gstPercent === undefined && !flags.includes('AMBIGUOUS_GST_RATE')) {
+          flags.push('AMBIGUOUS_GST_RATE');
         }
 
         return {
@@ -260,14 +285,16 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           mrp: mrp > 0 ? mrp : Math.round(rate * 1.35 * 100) / 100,
           schemeDiscountPercent: item.schemeDiscountPercent || 0,
           discountPercent: disc,
-          gstPercent: item.gstPercent !== undefined ? Number(item.gstPercent) : 5,
+          gstPercent: gstPercent !== undefined ? gstPercent : 0,
           taxableValue: taxable,
+          lineTotal,
+          gstAmount,
           matchedMedicineId: item.matchedMedicineId,
           matchedMedicineName: item.matchedMedicineName,
           createNewMedicineMaster: !item.matchedMedicineId && item.category === 'MEDICINE',
           confidence: item.confidence || 'HIGH',
           rawOcrText: item.rawOcrText,
-          flags: item.flags || [],
+          flags,
         };
       });
 
@@ -283,7 +310,8 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
   const updateItemField = (index: number, field: keyof ParsedInvoiceItemData, val: any) => {
     setItems((prev) => {
       const next = [...prev];
-      const updated = { ...next[index], [field]: val };
+      const current = next[index];
+      const updated = { ...current, [field]: val };
 
       // Ensure discountPercent and schemeDiscountPercent remain strictly synchronized
       if (field === 'discountPercent' || field === 'schemeDiscountPercent') {
@@ -292,12 +320,54 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
         updated.schemeDiscountPercent = numDisc;
       }
 
-      // Auto-recalculate taxable value when quantity, purchaseRate, or discount changes
+      // If user edits GST:
+      if (field === 'gstPercent') {
+        const newGst = val !== '' && val !== null && val !== undefined ? Number(val) : 0;
+        updated.gstPercent = newGst;
+        const isInclusive = parsedTotals?.isInclusive;
+        if (isInclusive && updated.lineTotal && updated.lineTotal > 0) {
+          // Do not silently change line total on inclusive invoices; recalculate taxable base and GST
+          if (newGst > 0) {
+            updated.taxableValue = Math.round((updated.lineTotal / (1 + newGst / 100)) * 100) / 100;
+          } else {
+            updated.taxableValue = updated.lineTotal;
+          }
+          updated.gstAmount = Math.round((updated.lineTotal - updated.taxableValue) * 100) / 100;
+        } else {
+          // GST-exclusive: line taxable value stays constant; update gstAmount and lineTotal
+          const tax = Number(updated.taxableValue) || 0;
+          updated.gstAmount = Math.round(((tax * newGst) / 100) * 100) / 100;
+          updated.lineTotal = Math.round((tax + updated.gstAmount) * 100) / 100;
+        }
+      }
+
+      // If user edits quantity, purchaseRate, or discount:
       if (field === 'quantity' || field === 'purchaseRate' || field === 'discountPercent' || field === 'schemeDiscountPercent') {
         const q = Number(field === 'quantity' ? val : updated.quantity) || 0;
         const r = Number(field === 'purchaseRate' ? val : updated.purchaseRate) || 0;
         const d = Number(field === 'discountPercent' || field === 'schemeDiscountPercent' ? val : (updated.discountPercent ?? updated.schemeDiscountPercent ?? 0)) || 0;
-        updated.taxableValue = Math.round(q * r * (1 - d / 100) * 100) / 100;
+        const isInclusive = parsedTotals?.isInclusive;
+        const g = Number(updated.gstPercent) || 0;
+        const rawTotal = Math.round(q * r * (1 - d / 100) * 100) / 100;
+
+        if (isInclusive) {
+          updated.lineTotal = rawTotal;
+          updated.taxableValue = g > 0 ? Math.round((rawTotal / (1 + g / 100)) * 100) / 100 : rawTotal;
+          updated.gstAmount = Math.round((rawTotal - updated.taxableValue) * 100) / 100;
+        } else {
+          updated.taxableValue = rawTotal;
+          updated.gstAmount = Math.round(((rawTotal * g) / 100) * 100) / 100;
+          updated.lineTotal = Math.round((rawTotal + updated.gstAmount) * 100) / 100;
+        }
+      }
+
+      // If user manually edits taxableValue:
+      if (field === 'taxableValue') {
+        const newTaxable = Number(val) || 0;
+        const g = Number(updated.gstPercent) || 0;
+        updated.taxableValue = newTaxable;
+        updated.gstAmount = Math.round(((newTaxable * g) / 100) * 100) / 100;
+        updated.lineTotal = Math.round((newTaxable + updated.gstAmount) * 100) / 100;
       }
 
       next[index] = updated;
@@ -306,6 +376,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
   };
 
   const addItemRow = () => {
+    const isInclusive = parsedTotals?.isInclusive;
     const newItem: ParsedInvoiceItemData = {
       lineNumber: items.length + 1,
       name: 'New Medicine / Product',
@@ -323,7 +394,9 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       schemeDiscountPercent: 0,
       discountPercent: 0,
       gstPercent: 5,
-      taxableValue: 100,
+      taxableValue: isInclusive ? 95.24 : 100,
+      lineTotal: isInclusive ? 100 : 105,
+      gstAmount: isInclusive ? 4.76 : 5,
       createNewMedicineMaster: true,
       confidence: 'HIGH',
       flags: ['MANUALLY_ADDED'],
@@ -337,35 +410,51 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
 
   const calculateSumQty = () => items.reduce((sum, it) => sum + Number(it.quantity || 0), 0);
 
+  // Total medicine cost excluding GST: sum of taxable values
   const calculateSumTaxable = () =>
-    items.reduce((sum, it) => {
-      const q = Number(it.quantity || 0);
-      const r = Number(it.purchaseRate || 0);
-      const disc = Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0);
-      const rowTaxable =
-        Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
-          ? Number(it.taxableValue)
-          : Math.round(q * r * (1 - disc / 100) * 100) / 100;
-      return sum + rowTaxable;
-    }, 0);
+    Math.round(items.reduce((sum, it) => {
+      return sum + Number(it.taxableValue || 0);
+    }, 0) * 100) / 100;
 
+  // Total GST: sum of applicable GST amounts
   const calculateSumGst = () =>
-    items.reduce((sum, it) => {
-      const q = Number(it.quantity || 0);
-      const r = Number(it.purchaseRate || 0);
-      const disc = Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0);
-      const rowTaxable =
-        Number(it.taxableValue) > 0 && Math.abs(Number(it.taxableValue) - q * r) <= Math.max(10, q * r * 0.1)
-          ? Number(it.taxableValue)
-          : Math.round(q * r * (1 - disc / 100) * 100) / 100;
-      const gstPct = Number(it.gstPercent || 0);
-      return sum + Math.round(((rowTaxable * gstPct) / 100) * 100) / 100;
-    }, 0);
+    Math.round(items.reduce((sum, it) => {
+      if (typeof it.gstAmount === 'number') {
+        return sum + it.gstAmount;
+      }
+      const tax = Number(it.taxableValue || 0);
+      const g = Number(it.gstPercent || 0);
+      return sum + Math.round(((tax * g) / 100) * 100) / 100;
+    }, 0) * 100) / 100;
 
+  // Total medicine cost including GST: sum of medicine line totals including GST before round-off
+  const calculateSumInclusive = () =>
+    Math.round(items.reduce((sum, it) => {
+      if (typeof it.lineTotal === 'number' && it.lineTotal > 0) {
+        return sum + it.lineTotal;
+      }
+      const tax = Number(it.taxableValue || 0);
+      const gst = typeof it.gstAmount === 'number' ? it.gstAmount : Math.round(((tax * Number(it.gstPercent || 0)) / 100) * 100) / 100;
+      return sum + Math.round((tax + gst) * 100) / 100;
+    }, 0) * 100) / 100;
+
+  // Invoice round-off from parser or difference
+  const getInvoiceRoundOff = () => {
+    if (parsedTotals?.roundOff !== undefined && parsedTotals.roundOff !== null) {
+      return parsedTotals.roundOff;
+    }
+    if (parsedTotals?.netPayable !== undefined && parsedTotals.netPayable !== null) {
+      const gross = calculateSumInclusive();
+      return Math.round((parsedTotals.netPayable - gross) * 100) / 100;
+    }
+    return 0;
+  };
+
+  // Final invoice grand total
   const calculateSumNet = () => {
-    const tax = calculateSumTaxable();
-    const gst = calculateSumGst();
-    return Math.round((tax + gst) * 100) / 100;
+    const gross = calculateSumInclusive();
+    const ro = getInvoiceRoundOff();
+    return Math.round((gross + ro) * 100) / 100;
   };
 
   const handleConfirm = async () => {
@@ -423,9 +512,10 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
           purchaseRate: Number(it.purchaseRate) || 0,
           mrp: Number(it.mrp) || Math.round((Number(it.purchaseRate) || 0) * 1.35),
           discountPercent: Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0),
-          schemeDiscountPercent: Number(it.discountPercent ?? it.schemeDiscountPercent ?? 0),
-          gstPercent: Number(it.gstPercent || 0),
+          gstPercent: it.gstPercent !== undefined && it.gstPercent !== null ? Number(it.gstPercent) : 0,
           taxableValue: Number(it.taxableValue || 0),
+          lineTotal: Number(it.lineTotal || (Number(it.taxableValue || 0) + (typeof it.gstAmount === 'number' ? it.gstAmount : Math.round((Number(it.taxableValue || 0) * Number(it.gstPercent || 0)) / 100)))),
+          gstAmount: typeof it.gstAmount === 'number' ? it.gstAmount : Math.round((Number(it.taxableValue || 0) * Number(it.gstPercent || 0)) / 100),
           matchedMedicineId: it.matchedMedicineId ? Number(it.matchedMedicineId) : undefined,
           createNewMedicineMaster: it.createNewMedicineMaster,
         })),
@@ -984,6 +1074,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                   <th style={{ width: '75px', minWidth: '75px', textAlign: 'right' }}>Disc %</th>
                   <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>GST %</th>
                   <th style={{ width: '105px', minWidth: '105px', textAlign: 'right' }}>Taxable (₹)</th>
+                  <th style={{ width: '105px', minWidth: '105px', textAlign: 'right' }}>Amount (₹)</th>
                   <th style={{ width: '38px', minWidth: '38px', textAlign: 'center' }}></th>
                 </tr>
               </thead>
@@ -1140,10 +1231,11 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                       <td>
                         <input
                           type="number"
+                          step="0.1"
                           min="0"
                           className="inv-clean-input"
-                          value={it.gstPercent || 5}
-                          onChange={(e) => updateItemField(idx, 'gstPercent', Number(e.target.value))}
+                          value={it.gstPercent !== undefined && it.gstPercent !== null ? it.gstPercent : ''}
+                          onChange={(e) => updateItemField(idx, 'gstPercent', e.target.value === '' ? '' : Number(e.target.value))}
                           style={{ textAlign: 'center' }}
                         />
                       </td>
@@ -1153,10 +1245,13 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                           step="0.01"
                           min="0"
                           className="inv-clean-input"
-                          value={it.taxableValue || 0}
-                          onChange={(e) => updateItemField(idx, 'taxableValue', Number(e.target.value))}
+                          value={it.taxableValue !== undefined && it.taxableValue !== null ? it.taxableValue : ''}
+                          onChange={(e) => updateItemField(idx, 'taxableValue', e.target.value === '' ? '' : Number(e.target.value))}
                           style={{ textAlign: 'right', fontWeight: 600 }}
                         />
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
+                        ₹{(it.lineTotal || (Number(it.taxableValue || 0) + (typeof it.gstAmount === 'number' ? it.gstAmount : Math.round((Number(it.taxableValue || 0) * Number(it.gstPercent || 0)) / 100)))).toFixed(2)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <button
@@ -1176,57 +1271,96 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
             </div>
 
             {/* Totals & Cross-Check Footer */}
+            {/* Phase 3: Invoice Summary Cards & Reconciliation */}
             <div
               style={{
                 flexShrink: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
-                padding: '10px 14px',
+                padding: '12px 14px',
                 background: '#f8fafc',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
-                fontSize: '12.5px',
+                fontSize: '12px',
               }}
             >
               <div
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
                   gap: '10px',
                 }}
               >
-                <div style={{ display: 'flex', gap: '16px', color: '#475569', flexWrap: 'wrap' }}>
-                  <span>
-                    Total Items: <strong style={{ color: '#0f172a' }}>{items.length}</strong>
-                  </span>
-                  <span>
-                    Total Units: <strong style={{ color: '#0f172a' }}>{calculateSumQty()}</strong>
-                  </span>
-                  <span>
-                    Taxable Value:{' '}
-                    <strong style={{ color: '#0f172a' }}>
-                      ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </strong>
-                  </span>
-                  <span>
-                    GST Tax:{' '}
-                    <strong style={{ color: '#0f172a' }}>
-                      ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </strong>
-                  </span>
+                {/* 1. Total medicine cost excluding GST */}
+                <div style={{ background: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                    Total Cost (Excl. GST)
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                    ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  {parsedTotals?.taxableAmount != null && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                      Invoice: ₹{Number(parsedTotals.taxableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  Net Payable Total:{' '}
-                  <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '16px', fontWeight: 800 }}>
-                    ₹
-                    {calculateSumNet().toLocaleString('en-IN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </strong>
+
+                {/* 2. Total GST */}
+                <div style={{ background: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                    Total GST
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                    ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  {parsedTotals?.totalTax != null && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                      Invoice: ₹{Number(parsedTotals.totalTax).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Total medicine cost including GST */}
+                <div style={{ background: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                    Total Cost (Incl. GST)
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                    ₹{calculateSumInclusive().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                    Before round-off
+                  </div>
+                </div>
+
+                {/* 4. Invoice round-off */}
+                <div style={{ background: '#ffffff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                    Invoice Round-Off
+                  </div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: getInvoiceRoundOff() < 0 ? '#b91c1c' : '#0f172a', marginTop: '2px' }}>
+                    {getInvoiceRoundOff() < 0 ? '−' : ''}₹{Math.abs(getInvoiceRoundOff()).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
+                    Source adjustment
+                  </div>
+                </div>
+
+                {/* 5. Final invoice grand total */}
+                <div style={{ background: '#f0fdf4', padding: '8px 12px', borderRadius: '6px', border: '1px solid #86efac' }}>
+                  <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, textTransform: 'uppercase' }}>
+                    Final Grand Total
+                  </div>
+                  <div style={{ fontSize: '15.5px', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>
+                    ₹{calculateSumNet().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  {parsedTotals?.netPayable != null && (
+                    <div style={{ fontSize: '10px', color: '#166534', marginTop: '2px' }}>
+                      Invoice: ₹{Number(parsedTotals.netPayable).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1235,7 +1369,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                 const invoiceNet = Number(parsedTotals.netPayable ?? 0);
                 const itemsNet = calculateSumNet();
                 const totalDiff = Math.abs(itemsNet - invoiceNet);
-                const isReconciled = totalDiff <= 1.0;
+                const isReconciled = totalDiff <= 0.5;
 
                 return (
                   <div
@@ -1251,28 +1385,24 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                       background: isReconciled ? '#f0fdf4' : '#fffbeb',
                       border: `1px solid ${isReconciled ? '#bbf7d0' : '#fde68a'}`,
                       color: isReconciled ? '#166534' : '#92400e',
+                      marginTop: '2px',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span>
-                        <strong>Invoice Summary Reconcile:</strong> Extracted Invoice Net: ₹
-                        {invoiceNet.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        {parsedTotals.taxableAmount != null && (
-                          <> | Extracted Taxable: ₹{Number(parsedTotals.taxableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
-                        )}
-                        {parsedTotals.totalTax != null && (
-                          <> | Extracted Tax: ₹{Number(parsedTotals.totalTax).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
-                        )}
+                        <strong>Reconciliation Status:</strong> {items.length} items | {calculateSumQty()} units |
+                        Taxable Base: ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} |
+                        GST Total: ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
                       {isReconciled ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16a34a', fontWeight: 700 }}>
-                          <Icon name="check" size={13} /> Reconciled (Diff: ₹{totalDiff.toFixed(2)})
+                          <Icon name="check" size={13} /> Fully Reconciled (Diff: ₹{totalDiff.toFixed(2)})
                         </span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#b45309', fontWeight: 700 }}>
-                          <Icon name="alert-triangle" size={13} /> Discrepancy: ₹{totalDiff.toFixed(2)} (Please check line item rates or discounts)
+                          <Icon name="alert-triangle" size={13} /> Discrepancy: ₹{totalDiff.toFixed(2)} (Review line item rates or GST)
                         </span>
                       )}
                     </div>

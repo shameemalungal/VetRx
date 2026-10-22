@@ -46,10 +46,13 @@ const HEADER_SYNONYMS: Record<string, RegExp> = {
   schemeQuantity: /^(?:SCH\.?\s*QTY\.?|SCHEME\s*QTY|FREE|FREE\s*QTY)$/i,
   purchaseRate: /^(?:RATE|PURCHASE\s*RATE|PTR|PRICE|NET\s*RATE|RATE\/UNIT)$/i,
   mrp: /^(?:MRP|M\.R\.P\.?|MAXIMUM\s*RETAIL\s*PRICE)$/i,
-  discount: /^(?:DISC\.?|DISCOUNT|DISC\s*%|DISCOUNT\s*%|SCH\.?\s*DISC\.?|SCHEME\s*DISC)$/i,
-  sgst: /^(?:SGST|S\.GST|SGST\s*%|SGST\s*RATE)$/i,
-  cgst: /^(?:CGST|C\.GST|CGST\s*%|CGST\s*RATE)$/i,
-  igst: /^(?:IGST|I\.GST|IGST\s*%|IGST\s*RATE)$/i,
+  sgstAmt: /^(?:SGST\s*AMT|SGST\s*AMOUNT|S\.GST\s*AMT|S\.GST\s*AMOUNT)$/i,
+  cgstAmt: /^(?:CGST\s*AMT|CGST\s*AMOUNT|C\.GST\s*AMT|C\.GST\s*AMOUNT)$/i,
+  igstAmt: /^(?:IGST\s*AMT|IGST\s*AMOUNT|I\.GST\s*AMT|I\.GST\s*AMOUNT)$/i,
+  taxAmt: /^(?:TAX\s*AMT|TAX\s*AMOUNT|GST\s*AMT|GST\s*AMOUNT)$/i,
+  sgst: /^(?:SGST|S\.GST|SGST\s*%|SGST\s*RATE|S-GST\s*%)$/i,
+  cgst: /^(?:CGST|C\.GST|CGST\s*%|CGST\s*RATE|C-GST\s*%)$/i,
+  igst: /^(?:IGST|I\.GST|IGST\s*%|IGST\s*RATE|I-GST\s*%)$/i,
   gst: /^(?:GST|GST\s*%|TAX|TAX\s*%|TOTAL\s*GST|VAT)$/i,
   amount: /^(?:AMOUNT|LINE\s*AMOUNT|NET\s*AMOUNT|TOTAL|TAXABLE|TAXABLE\s*VALUE|VALUE)$/i,
 };
@@ -73,14 +76,18 @@ export function buildColumnsFromHeaders(
   let i = 0;
   while (i < sorted.length) {
     const cur = sorted[i];
-    let matchedKey = matchHeaderToken(cur.str);
+    const curKey = matchHeaderToken(cur.str);
+    let matchedKey = curKey;
     let combinedStr = cur.str;
     let totalW = cur.width;
 
     if (i + 1 < sorted.length) {
       const next = sorted[i + 1];
       const gap = next.x - (cur.x + cur.width);
-      if (gap < 25) {
+      const nextKey = matchHeaderToken(next.str);
+      // Only merge multi-word headers if the gap is small (< 12) AND we don't accidentally
+      // swallow two distinct valid columns (e.g. 'CGST' and 'Amount' must remain separate).
+      if (gap < 12 && !(curKey && nextKey && curKey !== nextKey)) {
         const twoWord = `${cur.str} ${next.str}`;
         const twoKey = matchHeaderToken(twoWord);
         if (twoKey) {
@@ -377,13 +384,36 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
         const discountPercent = parseFloat((rowData.discount || '').replace(/,/g, '')) || 0;
 
         // GST calculation: SGST + CGST, or IGST, or GST
-        const sgst = parseFloat((rowData.sgst || '').replace(/,/g, '')) || 0;
-        const cgst = parseFloat((rowData.cgst || '').replace(/,/g, '')) || 0;
-        const igst = parseFloat((rowData.igst || '').replace(/,/g, '')) || 0;
-        const explicitGst = parseFloat((rowData.gst || '').replace(/,/g, '')) || 0;
-        const gstPercent = (sgst + cgst > 0) ? (sgst + cgst) : (igst > 0 ? igst : explicitGst);
+        const sgstStr = (rowData.sgst || '').replace(/,/g, '').trim();
+        const cgstStr = (rowData.cgst || '').replace(/,/g, '').trim();
+        const igstStr = (rowData.igst || '').replace(/,/g, '').trim();
+        const gstStr = (rowData.gst || '').replace(/,/g, '').trim();
 
-        const amount = parseFloat((rowData.amount || '').replace(/,/g, '')) || Math.round(qty * rate * 100) / 100;
+        const hasSgst = sgstStr !== '' && !isNaN(parseFloat(sgstStr));
+        const hasCgst = cgstStr !== '' && !isNaN(parseFloat(cgstStr));
+        const hasIgst = igstStr !== '' && !isNaN(parseFloat(igstStr));
+        const hasGst = gstStr !== '' && !isNaN(parseFloat(gstStr));
+
+        const sgst = hasSgst ? parseFloat(sgstStr) : 0;
+        const cgst = hasCgst ? parseFloat(cgstStr) : 0;
+        const igst = hasIgst ? parseFloat(igstStr) : 0;
+        const explicitGst = hasGst ? parseFloat(gstStr) : 0;
+
+        let gstPercent: number | undefined;
+        const itemFlags: string[] = [];
+
+        if (hasSgst || hasCgst) {
+          gstPercent = Math.round((sgst + cgst) * 100) / 100;
+        } else if (hasIgst) {
+          gstPercent = Math.round(igst * 100) / 100;
+        } else if (hasGst) {
+          gstPercent = Math.round(explicitGst * 100) / 100;
+        } else {
+          gstPercent = undefined;
+          itemFlags.push('AMBIGUOUS_GST_RATE');
+        }
+
+        const rawAmount = parseFloat((rowData.amount || '').replace(/,/g, '')) || Math.round(qty * rate * 100) / 100;
 
         lineItems.push({
           lineNumber: slNo,
@@ -398,9 +428,11 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
           mrp,
           discountPercent,
           gstPercent,
-          taxableValue: amount,
+          taxableValue: rawAmount, // temporary, normalized below based on isInclusive
+          lineTotal: rawAmount,
           confidence: 'HIGH',
           rawOcrText: rowItems.map((it) => it.str).join(' '),
+          flags: itemFlags.length > 0 ? itemFlags : undefined,
         });
       }
     }
@@ -409,14 +441,55 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
       throw new Error('PDF spatial extraction did not find any recognizable medicine items.');
     }
 
-    // Invoice Totals Reconciliation
-    const calculatedSubtotal = Math.round(lineItems.reduce((acc, it) => acc + (it.taxableValue || 0), 0) * 100) / 100;
-    const calculatedGst = Math.round(lineItems.reduce((acc, it) => acc + ((it.taxableValue || 0) * (it.gstPercent || 0) / 100), 0) * 100) / 100;
-    const grandTotal = detectedInvoiceMeta.totalAmount || calculatedSubtotal;
+    // Determine if line amounts are GST-inclusive or GST-exclusive
+    const sumLineAmounts = Math.round(lineItems.reduce((acc, it) => acc + (it.taxableValue || 0), 0) * 100) / 100;
+    const taxableMeta = detectedInvoiceMeta.taxableAmount;
+    const taxMeta = detectedInvoiceMeta.totalTax;
+    const totalMeta = detectedInvoiceMeta.totalAmount;
 
-    if (detectedInvoiceMeta.taxableAmount && Math.abs(detectedInvoiceMeta.taxableAmount - calculatedSubtotal) > 1.0) {
+    let isInclusive = false;
+    if (taxableMeta && taxMeta) {
+      const expectedGross = Math.round((taxableMeta + taxMeta) * 100) / 100;
+      if (Math.abs(sumLineAmounts - expectedGross) <= 2.0 && Math.abs(sumLineAmounts - taxableMeta) > 5.0) {
+        isInclusive = true;
+      } else if (totalMeta && Math.abs(sumLineAmounts - totalMeta) <= 2.0 && Math.abs(sumLineAmounts - taxableMeta) > 5.0) {
+        isInclusive = true;
+      }
+    }
+
+    // Recalculate taxableValue, lineTotal, and gstAmount for each line
+    for (const it of lineItems) {
+      const rawAmt = it.taxableValue || 0;
+      const gPct = it.gstPercent !== undefined ? it.gstPercent : 0;
+      if (isInclusive) {
+        it.lineTotal = rawAmt;
+        if (gPct > 0) {
+          it.taxableValue = Math.round((rawAmt / (1 + gPct / 100)) * 100) / 100;
+          it.gstAmount = Math.round((rawAmt - it.taxableValue) * 100) / 100;
+        } else {
+          it.taxableValue = rawAmt;
+          it.gstAmount = 0;
+        }
+      } else {
+        it.taxableValue = rawAmt;
+        it.gstAmount = Math.round(((rawAmt * gPct) / 100) * 100) / 100;
+        it.lineTotal = Math.round((rawAmt + it.gstAmount) * 100) / 100;
+      }
+    }
+
+    // Invoice Totals Reconciliation comparing equivalent values
+    const calculatedTaxable = Math.round(lineItems.reduce((acc, it) => acc + (it.taxableValue || 0), 0) * 100) / 100;
+    const calculatedGst = Math.round(lineItems.reduce((acc, it) => acc + (it.gstAmount || 0), 0) * 100) / 100;
+    const calculatedGross = Math.round(lineItems.reduce((acc, it) => acc + (it.lineTotal || 0), 0) * 100) / 100;
+    const roundOff = detectedInvoiceMeta.roundOff !== undefined
+      ? detectedInvoiceMeta.roundOff
+      : (detectedInvoiceMeta.totalAmount ? Math.round((detectedInvoiceMeta.totalAmount - (calculatedTaxable + calculatedGst)) * 100) / 100 : 0);
+
+    const grandTotal = detectedInvoiceMeta.totalAmount || Math.round((calculatedGross + roundOff) * 100) / 100;
+
+    if (detectedInvoiceMeta.taxableAmount && Math.abs(detectedInvoiceMeta.taxableAmount - calculatedTaxable) > 1.0) {
       warnings.push(
-        `Invoice Subtotal: ₹${detectedInvoiceMeta.taxableAmount.toFixed(2)} | Sum of line amounts: ₹${calculatedSubtotal.toFixed(2)}`
+        `Invoice Subtotal: ₹${detectedInvoiceMeta.taxableAmount.toFixed(2)} | Sum of taxable line amounts: ₹${calculatedTaxable.toFixed(2)}`
       );
     }
 
@@ -442,9 +515,11 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
         invoiceDate: detectedInvoiceMeta.invoiceDate || new Date().toISOString().split('T')[0],
         paymentType: detectedInvoiceMeta.paymentType || 'CREDIT',
         totalAmount: grandTotal,
-        taxableAmount: detectedInvoiceMeta.taxableAmount || calculatedSubtotal,
+        taxableAmount: detectedInvoiceMeta.taxableAmount || calculatedTaxable,
         totalTax: detectedInvoiceMeta.totalTax || calculatedGst,
         totalDiscount: detectedInvoiceMeta.totalDiscount || 0,
+        roundOff,
+        isInclusive,
         totalItems: detectedInvoiceMeta.totalItems || lineItems.length,
         totalQuantity: detectedInvoiceMeta.totalQuantity || lineItems.reduce((acc, it) => acc + it.quantity, 0),
       },
@@ -568,6 +643,20 @@ export class PdfExtractorProvider implements IDocumentExtractionProvider {
         const dm = line.match(/Total\s*Disc\s*Amt[\s.:]+([\d,]+(?:\.\d{2})?)/i);
         if (dm) invoice.totalDiscount = parseFloat(dm[1].replace(/,/g, ''));
       }
+      if (invoice.roundOff === undefined) {
+        const roMatch = line.match(/Round\s*off[\s.:]+(?:\(([\d,]+(?:\.\d{2})?)\)|([+-]?[\d,]+(?:\.\d{2})?))/i);
+        if (roMatch) {
+          if (roMatch[1]) {
+            invoice.roundOff = -parseFloat(roMatch[1].replace(/,/g, ''));
+          } else if (roMatch[2]) {
+            invoice.roundOff = parseFloat(roMatch[2].replace(/,/g, ''));
+          }
+        }
+      }
+    }
+
+    if (invoice.roundOff === undefined && invoice.totalAmount && invoice.taxableAmount && invoice.totalTax) {
+      invoice.roundOff = Math.round((invoice.totalAmount - (invoice.taxableAmount + invoice.totalTax)) * 100) / 100;
     }
   }
 }

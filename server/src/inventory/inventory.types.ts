@@ -231,6 +231,7 @@ export interface ExtractedInvoiceItemDTO {
   gstPercent?: number;
   taxableValue?: number;
   lineTotal?: number;
+  gstAmount?: number;
   rawDescription?: string;
   rawOcrText?: string;
   confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -272,6 +273,8 @@ export interface InvoiceExtractionResultDTO {
   totalQuantity?: number;
   netPayable?: number;
   totalAmount?: number;
+  roundOff?: number;
+  isInclusive?: boolean;
   items: ExtractedInvoiceItemDTO[];
   isDuplicate: boolean;
   isDuplicateWarning?: boolean;

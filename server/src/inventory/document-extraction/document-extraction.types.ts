@@ -33,6 +33,9 @@ export interface DocumentExtractionInvoiceMeta {
   totalDiscount?: number;
   totalItems?: number;
   totalQuantity?: number;
+  netPayable?: number;
+  roundOff?: number;
+  isInclusive?: boolean;
 }
 
 export interface DocumentExtractionLineItem {
@@ -51,8 +54,11 @@ export interface DocumentExtractionLineItem {
   discountPercent?: number;
   gstPercent?: number;
   taxableValue?: number;
+  lineTotal?: number;
+  gstAmount?: number;
   confidence?: 'HIGH' | 'MEDIUM' | 'LOW';
   rawOcrText?: string;
+  flags?: string[];
 }
 
 export interface StructuredInvoiceDocument {
