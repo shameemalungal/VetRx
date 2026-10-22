@@ -357,6 +357,7 @@ export interface ReconcileStockPayload {
 export interface ParsedInvoiceItemData {
   lineNumber?: number;
   name: string;
+  manufacturer?: string | null;
   genericName?: string | null;
   category: InventoryCategory;
   presentation?: string | null;
@@ -714,7 +715,7 @@ export const inventoryApi = {
 
   // Clinical & Invoicing Integration
   resolvePrescriptionStock: (
-    items: Array<{ medicineId?: number; medicineName?: string; quantity: number }>
+    items: Array<{ medicineId?: number | string; medicineName?: string; quantity: number }>
   ) =>
     inventoryRequest<{
       resolutions: PrescriptionStockResolution[];

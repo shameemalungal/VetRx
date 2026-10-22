@@ -49,6 +49,12 @@ export const InvoiceImporterModal: React.FC<InvoiceImporterModalProps> = ({
   const [duplicateMessage, setDuplicateMessage] = useState('');
   const [bypassDuplicateWarning, setBypassDuplicateWarning] = useState(false);
   const [extractionWarnings, setExtractionWarnings] = useState<string[]>([]);
+  const [parsedTotals, setParsedTotals] = useState<{
+    taxableAmount?: number | null;
+    totalTax?: number | null;
+    netPayable?: number | null;
+    totalDiscount?: number | null;
+  } | null>(null);
 
   const [items, setItems] = useState<ParsedInvoiceItemData[]>([]);
 
@@ -206,6 +212,12 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
       setDuplicateMessage(parsed.duplicateMessage || '');
       setBypassDuplicateWarning(false);
       setExtractionWarnings(parsed.warnings || []);
+      setParsedTotals({
+        taxableAmount: parsed.taxableAmount,
+        totalTax: parsed.totalTax,
+        netPayable: parsed.netPayable ?? parsed.totalAmount,
+        totalDiscount: parsed.totalDiscount,
+      });
 
       const normalized: ParsedInvoiceItemData[] = (parsed.items || []).map((item, idx) => {
         const qty = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
@@ -232,6 +244,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
         return {
           lineNumber: item.lineNumber || idx + 1,
           name: item.name,
+          manufacturer: item.manufacturer || '',
           category: item.category || 'MEDICINE',
           presentation: item.presentation || '',
           packing: item.packing || item.packSize || '',
@@ -296,6 +309,7 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
     const newItem: ParsedInvoiceItemData = {
       lineNumber: items.length + 1,
       name: 'New Medicine / Product',
+      manufacturer: '',
       category: 'MEDICINE',
       packing: '10s',
       hsnCode: '30049099',
@@ -953,15 +967,16 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
 
           {/* Scrollable Table Area with Permanently Sticky Header */}
           <div style={{ flex: 1, minHeight: '220px', overflowX: 'auto', overflowY: 'auto', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#ffffff', position: 'relative' }}>
-            <table className="inventory-table inv-sticky-table" style={{ fontSize: '12px', minWidth: '1260px', margin: 0, width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+            <table className="inventory-table inv-sticky-table" style={{ fontSize: '12px', minWidth: '1360px', margin: 0, width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 <tr>
                   <th style={{ width: '36px', minWidth: '36px', textAlign: 'center' }}>#</th>
-                  <th style={{ minWidth: '240px', textAlign: 'left' }}>Medicine / Item Name</th>
+                  <th style={{ minWidth: '220px', textAlign: 'left' }}>Product / Medicine Name</th>
+                  <th style={{ width: '160px', minWidth: '160px', textAlign: 'left' }}>Manufacturer</th>
                   <th style={{ width: '85px', minWidth: '85px', textAlign: 'left' }}>Packing</th>
                   <th style={{ width: '95px', minWidth: '95px', textAlign: 'left' }}>HSN</th>
                   <th style={{ width: '105px', minWidth: '105px', textAlign: 'left' }}>Batch No</th>
-                  <th style={{ width: '110px', minWidth: '110px', textAlign: 'left' }}>Exp (YYYY-MM)</th>
+                  <th style={{ width: '110px', minWidth: '110px', textAlign: 'left' }}>Exp Date</th>
                   <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Qty</th>
                   <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Sch Qty</th>
                   <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>MRP (₹)</th>
@@ -1014,6 +1029,15 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
                             {it.confidence || 'HIGH'}
                           </span>
                         </div>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="inv-clean-input"
+                          value={it.manufacturer || ''}
+                          onChange={(e) => updateItemField(idx, 'manufacturer', e.target.value)}
+                          placeholder="Manufacturer"
+                        />
                       </td>
                       <td>
                         <input
@@ -1156,47 +1180,105 @@ SNo Rack Mfac Particulars          Packing HSN      Batch     Exp   Qty SchQty M
               style={{
                 flexShrink: 0,
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '8px 14px',
+                flexDirection: 'column',
+                gap: '8px',
+                padding: '10px 14px',
                 background: '#f8fafc',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
                 fontSize: '12.5px',
-                flexWrap: 'wrap',
-                gap: '10px',
               }}
             >
-              <div style={{ display: 'flex', gap: '16px', color: '#475569', flexWrap: 'wrap' }}>
-                <span>
-                  Total Items: <strong style={{ color: '#0f172a' }}>{items.length}</strong>
-                </span>
-                <span>
-                  Total Units: <strong style={{ color: '#0f172a' }}>{calculateSumQty()}</strong>
-                </span>
-                <span>
-                  Taxable Value:{' '}
-                  <strong style={{ color: '#0f172a' }}>
-                    ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '16px', color: '#475569', flexWrap: 'wrap' }}>
+                  <span>
+                    Total Items: <strong style={{ color: '#0f172a' }}>{items.length}</strong>
+                  </span>
+                  <span>
+                    Total Units: <strong style={{ color: '#0f172a' }}>{calculateSumQty()}</strong>
+                  </span>
+                  <span>
+                    Taxable Value:{' '}
+                    <strong style={{ color: '#0f172a' }}>
+                      ₹{calculateSumTaxable().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong>
+                  </span>
+                  <span>
+                    GST Tax:{' '}
+                    <strong style={{ color: '#0f172a' }}>
+                      ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong>
+                  </span>
+                </div>
+                <div>
+                  Net Payable Total:{' '}
+                  <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '16px', fontWeight: 800 }}>
+                    ₹
+                    {calculateSumNet().toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </strong>
-                </span>
-                <span>
-                  GST Tax:{' '}
-                  <strong style={{ color: '#0f172a' }}>
-                    ₹{calculateSumGst().toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </strong>
-                </span>
+                </div>
               </div>
-              <div>
-                Net Payable Total:{' '}
-                <strong style={{ color: 'var(--color-primary, #00685f)', fontSize: '16px', fontWeight: 800 }}>
-                  ₹
-                  {calculateSumNet().toLocaleString('en-IN', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </strong>
-              </div>
+
+              {/* Invoice Totals Reconciliation Display */}
+              {parsedTotals && (parsedTotals.taxableAmount != null || parsedTotals.netPayable != null) && (() => {
+                const invoiceNet = Number(parsedTotals.netPayable ?? 0);
+                const itemsNet = calculateSumNet();
+                const totalDiff = Math.abs(itemsNet - invoiceNet);
+                const isReconciled = totalDiff <= 1.0;
+
+                return (
+                  <div
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                      background: isReconciled ? '#f0fdf4' : '#fffbeb',
+                      border: `1px solid ${isReconciled ? '#bbf7d0' : '#fde68a'}`,
+                      color: isReconciled ? '#166534' : '#92400e',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <span>
+                        <strong>Invoice Summary Reconcile:</strong> Extracted Invoice Net: ₹
+                        {invoiceNet.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {parsedTotals.taxableAmount != null && (
+                          <> | Extracted Taxable: ₹{Number(parsedTotals.taxableAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                        )}
+                        {parsedTotals.totalTax != null && (
+                          <> | Extracted Tax: ₹{Number(parsedTotals.totalTax).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                        )}
+                      </span>
+                    </div>
+                    <div>
+                      {isReconciled ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#16a34a', fontWeight: 700 }}>
+                          <Icon name="check" size={13} /> Reconciled (Diff: ₹{totalDiff.toFixed(2)})
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#b45309', fontWeight: 700 }}>
+                          <Icon name="alert-triangle" size={13} /> Discrepancy: ₹{totalDiff.toFixed(2)} (Please check line item rates or discounts)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Modal Actions */}

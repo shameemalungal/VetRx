@@ -524,7 +524,7 @@ describe('Inventory & Stock Management V1 Test Suite', () => {
       assert.strictEqual(item1.name, 'OPTHOCARE EYE DROPS');
       assert.strictEqual(item1.category, 'MEDICINE');
       assert.strictEqual(item1.batchNumber, 'OPG472');
-      assert.strictEqual(item1.expiryDate, '2028-05-01');
+      assert.strictEqual(item1.expiryDate, '31-05-2028');
       assert.strictEqual(item1.quantity, 10);
       assert.strictEqual(item1.purchaseRate, 85);
       assert.strictEqual(item1.mrp, 140);

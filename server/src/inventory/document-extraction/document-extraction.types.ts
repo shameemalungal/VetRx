@@ -38,6 +38,7 @@ export interface DocumentExtractionInvoiceMeta {
 export interface DocumentExtractionLineItem {
   lineNumber: number;
   itemName: string;
+  manufacturer?: string;
   packing?: string;
   hsnCode?: string;
   batchNumber?: string;

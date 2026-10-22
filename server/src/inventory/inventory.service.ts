@@ -1151,8 +1151,22 @@ export class InventoryService {
         : (disc > 0 || gst > 0 ? calculatedLineTotal : Math.round(qty * rate * 100) / 100);
       grandTotal += lineTotal;
 
-      const expiryDateObj = itemData.expiryDate ? new Date(itemData.expiryDate) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
-      const validExpiry = isNaN(expiryDateObj.getTime()) ? new Date(Date.now() + 365 * 24 * 3600 * 1000) : expiryDateObj;
+      let validExpiry: Date;
+      if (itemData.expiryDate) {
+        const trimmed = String(itemData.expiryDate).trim();
+        const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        if (dmy) {
+          validExpiry = new Date(Date.UTC(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10), 12, 0, 0));
+        } else if (ymd) {
+          validExpiry = new Date(Date.UTC(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10), 12, 0, 0));
+        } else {
+          const parsed = new Date(trimmed);
+          validExpiry = isNaN(parsed.getTime()) ? new Date(Date.now() + 365 * 24 * 3600 * 1000) : parsed;
+        }
+      } else {
+        validExpiry = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+      }
       const mfgDateObj = itemData.manufacturingDate ? new Date(itemData.manufacturingDate) : null;
       const validMfg = mfgDateObj && !isNaN(mfgDateObj.getTime()) ? mfgDateObj : null;
 

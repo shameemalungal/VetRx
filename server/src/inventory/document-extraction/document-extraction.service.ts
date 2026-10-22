@@ -220,6 +220,7 @@ export class DocumentExtractionService {
         tempId: `item-${idx + 1}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         lineNumber: idx + 1,
         name: raw.itemName,
+        manufacturer: raw.manufacturer || undefined,
         category: matched.category,
         packing: raw.packing || matched.packSize || '',
         packSize: raw.packing || matched.packSize || '',

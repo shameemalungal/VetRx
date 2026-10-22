@@ -8,6 +8,7 @@ import type {
   StructuredInvoiceDocument,
   DocumentExtractionLineItem,
 } from '../document-extraction.types.js';
+import { normalizeExpiryDate } from './pdf-extractor.provider.js';
 
 export class TextParserProvider implements IDocumentExtractionProvider {
   name = 'Text Parser Provider';
@@ -146,10 +147,49 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     const beforeExp = line.substring(0, expIdx).trim();
     const afterExp = line.substring(expIdx + expStr.length).trim();
 
-    const afterTokens = afterExp.split(/\s+/).filter(Boolean);
+    let afterTokens = afterExp.split(/\s+/).filter(Boolean);
+    let hsn = '';
+
+    // Check if beforeExp has only 1 token (e.g. BATCH) and afterExp starts with alphabetical product name
+    let itemNameFromAfter = '';
+    const beforeRawTokens = beforeExp.split(/\s+/).filter(Boolean);
+    if (beforeRawTokens.length <= 1 && afterTokens.length >= 3 && /^[A-Za-z]/.test(afterTokens[0])) {
+      const nameToks: string[] = [];
+      while (afterTokens.length > 0) {
+        if (/^\d+(?:\.\d+)?%?$/.test(afterTokens[0]) && nameToks.length >= 2) {
+          break;
+        }
+        nameToks.push(afterTokens.shift()!);
+      }
+      itemNameFromAfter = nameToks.join(' ').trim();
+    }
+
+    // Check if any token in afterTokens is HSN (6-8 digits, e.g. 30049085, 23099010)
+    for (let i = 0; i < afterTokens.length; i++) {
+      const cleanNum = afterTokens[i].replace(/[^0-9]/g, '');
+      if (cleanNum.length >= 6 && cleanNum.length <= 8 && !hsn) {
+        hsn = cleanNum;
+        afterTokens.splice(i, 1);
+        i--;
+      }
+    }
+
+    // Check if any tokens contain percentage (e.g. 10.0%, 2.5%, 12.0%)
+    const pctTokens: number[] = [];
+    for (let i = 0; i < afterTokens.length; i++) {
+      if (afterTokens[i].includes('%')) {
+        const p = parseFloat(afterTokens[i].replace(/[^0-9.]/g, ''));
+        if (!isNaN(p)) {
+          pctTokens.push(p);
+        }
+        afterTokens.splice(i, 1);
+        i--;
+      }
+    }
+
     const numbers: number[] = [];
     for (const tok of afterTokens) {
-      const cleanNum = tok.replace(/[^0-9.]/g, '');
+      const cleanNum = tok.replace(/,/g, '').replace(/[^0-9.]/g, '');
       if (cleanNum && !isNaN(parseFloat(cleanNum))) {
         numbers.push(parseFloat(cleanNum));
       }
@@ -167,21 +207,21 @@ export class TextParserProvider implements IDocumentExtractionProvider {
     let gst = 5;
     let taxable = 0;
 
+    // Standard Neethi / Indian Pharma column layout after EXP:
+    // [HSN(removed)] QTY Rate MRP SGST CGST Amount  (6 numbers)
+    // e.g. [30, 47.25, 56.25, 2.50, 2.50, 1417.50]
     if (numbers.length >= 6) {
       qty = Math.round(numbers[0]) || 1;
-      const valA = numbers[1];
-      const valB = numbers[2];
-      if (valA > valB) {
-        mrp = valA;
-        rate = valB;
-      } else {
-        rate = valA;
-        mrp = valB;
+      rate = numbers[1];
+      mrp = numbers[2];
+      const sgst = numbers[3];
+      const cgst = numbers[4];
+      if (sgst <= 28 && cgst <= 28) {
+        gst = Math.round((sgst + cgst) * 100) / 100;
       }
-      schDisc = numbers[3];
-      gst = numbers[4];
       taxable = numbers[5];
     } else if (numbers.length === 5) {
+      // QTY Rate MRP GST Amount or QTY Rate MRP DISC Amount
       qty = Math.round(numbers[0]) || 1;
       const valA = numbers[1];
       const valB = numbers[2];
@@ -192,8 +232,14 @@ export class TextParserProvider implements IDocumentExtractionProvider {
         rate = valA;
         mrp = valB;
       }
-      schDisc = numbers[3];
       taxable = numbers[4];
+      const candMid = numbers[3];
+      if (taxable > 0 && Math.abs(qty * rate * (1 - candMid / 100) - taxable) <= 1.0) {
+        disc = candMid;
+        gst = 0;
+      } else if (candMid <= 28) {
+        gst = candMid;
+      }
     } else if (numbers.length === 4) {
       qty = Math.round(numbers[0]) || 1;
       const valA = numbers[1];
@@ -231,53 +277,119 @@ export class TextParserProvider implements IDocumentExtractionProvider {
       taxable = Math.round(qty * rate * 100) / 100;
     }
 
+    // Process percentage tokens: discount reduces taxable, tax sums
+    let hasTaxPct = false;
+    for (const p of pctTokens) {
+      const isDisc = p > 0 && taxable < qty * rate - 0.5 && Math.abs(qty * rate * (1 - p / 100) - taxable) <= 1.0;
+      if (isDisc) {
+        disc = p;
+      } else {
+        if (!hasTaxPct) {
+          gst = p;
+          hasTaxPct = true;
+        } else {
+          gst += p;
+        }
+      }
+    }
+
     const beforeTokens = beforeExp.split(/\s+/).filter(Boolean);
     let batch = 'BATCH-DETECT';
-    let hsn = '';
     let packing = '';
 
     if (beforeTokens.length >= 1) {
       const lastTok = beforeTokens[beforeTokens.length - 1];
-      if (/[A-Z0-9-]{3,12}/i.test(lastTok)) {
+      if (/[A-Z0-9-]{2,14}/i.test(lastTok)) {
         batch = lastTok.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
         beforeTokens.pop();
       }
     }
 
-    for (let i = beforeTokens.length - 1; i >= 0; i--) {
-      const t = beforeTokens[i].replace(/[^0-9]/g, '');
-      if (t.length >= 6 && t.length <= 8) {
-        hsn = t;
-        beforeTokens.splice(i, 1);
-        break;
+    // If HSN was not after EXP, search in beforeTokens
+    if (!hsn) {
+      for (let i = beforeTokens.length - 1; i >= 0; i--) {
+        const t = beforeTokens[i].replace(/[^0-9]/g, '');
+        if (t.length >= 6 && t.length <= 8) {
+          hsn = t;
+          beforeTokens.splice(i, 1);
+          break;
+        }
       }
     }
 
-    for (let i = beforeTokens.length - 1; i >= 0; i--) {
+    // Packing detection: only check trailing tokens right before the batch
+    for (let i = beforeTokens.length - 1; i >= Math.max(0, beforeTokens.length - 2); i--) {
       const tok = beforeTokens[i];
       if (/^\d{1,4}(?:gm|ml|mg|kg|ltr|s|'s|tab|caps|vial|amp)$/i.test(tok) || /^\d{1,4}'[sS]$/.test(tok)) {
         packing = tok;
         beforeTokens.splice(i, 1);
         break;
       }
-      if (i > 0 && /^\d{1,4}$/.test(beforeTokens[i - 1]) && /^(?:ML|GM|MG|PCS|VIAL|TAB|AMP)$/i.test(tok)) {
+      if (i > 0 && /^\d{1,4}$/.test(beforeTokens[i - 1]) && /^(?:ML|GM|MG|PCS|VIAL|TAB|AMP|S|LTR|KG)$/i.test(tok)) {
         packing = `${beforeTokens[i - 1]} ${tok}`;
         beforeTokens.splice(i - 1, 2);
         break;
       }
     }
 
-    let rawName = beforeTokens.join(' ').trim();
-    rawName = rawName.replace(/^[\d\s\W|✓+vV]+/, '').trim();
-    rawName = rawName.replace(/^(?:CORI|INTAS|SAVA|SIHIL|CADILA|MANKIND|INTASPET|PETCARE|VIRBAC)[\s:.]+/i, '').trim();
-    rawName = rawName.replace(/^[|/\\[\](){}✓+\-_.:;\s]+/, '').trim();
+    // Identify Manufacturer vs Product Name preserving spaces in beforeExp
+    let rawTextBefore = beforeExp;
+    if (batch && batch !== 'BATCH-DETECT') {
+      const bIdx = rawTextBefore.lastIndexOf(batch);
+      if (bIdx !== -1) {
+        rawTextBefore = rawTextBefore.substring(0, bIdx);
+      }
+    }
+    if (packing) {
+      const pIdx = rawTextBefore.lastIndexOf(packing);
+      if (pIdx !== -1) {
+        rawTextBefore = rawTextBefore.substring(0, pIdx);
+      }
+    }
+    if (hsn) {
+      const hIdx = rawTextBefore.lastIndexOf(hsn);
+      if (hIdx !== -1) {
+        rawTextBefore = rawTextBefore.substring(0, hIdx);
+      }
+    }
+    rawTextBefore = rawTextBefore.replace(/^\s*\d{1,4}\s+/, '').trim();
+
+    let manufacturer = '';
+    let rawName = itemNameFromAfter || rawTextBefore;
+
+    if (!itemNameFromAfter && rawTextBefore) {
+      // Check for 2+ spaces column separator before manufacturer
+      const colGapMatch = rawTextBefore.match(/^(.*?)\s{2,}([A-Z0-9.&-].*)$/);
+      if (colGapMatch && colGapMatch[1].trim().length >= 2) {
+        const candMfr = colGapMatch[2].trim();
+        if (/(?:LTD|PVT|LABS|INC|PHARMA|PHARMACEUTICALS|HEALTHCARE|DRUG|REMEDIES|HEALTH|CARE|BIO|VET|V\.C\.|AYURVET|INTAS|VIRBAC|ALEMBIC|ZENEX|TTK)/i.test(candMfr)) {
+          manufacturer = candMfr;
+          rawName = colGapMatch[1].trim();
+        }
+      }
+
+      if (!manufacturer) {
+        // Fallback pattern
+        const mfrPattern = /\b([A-Z0-9\.\s&-]+(?:\s+LTD|\s+PVT|\s+LABS|\s+INC|\s+PHARMACEUTICALS|\s+HEALTHCARE|\s+DRUG\s*CO|\s+REMEDIES|\s+LIFE\s*SCIENCES|\s+ANIMAL\s*HEALTH|\s+INDIA|\s+FARMCARE|\s+THERAPUTIC|\s+VETMAX|\s+VET)[\w\s.-]*)$/i;
+        const mfrMatch = rawTextBefore.match(mfrPattern);
+        if (mfrMatch && mfrMatch.index && mfrMatch.index > 3) {
+          manufacturer = mfrMatch[1].trim();
+          rawName = rawTextBefore.substring(0, mfrMatch.index).trim();
+        } else {
+          rawName = rawName.replace(/^[\d\s\W|✓+vV]+/, '').trim();
+          rawName = rawName.replace(/^(?:CORI|INTAS|SAVA|SIHIL|CADILA|MANKIND|INTASPET|PETCARE|VIRBAC)[\s:.]+/i, '').trim();
+          rawName = rawName.replace(/^[|/\\[\](){}✓+\-_.:;\s]+/, '').trim();
+        }
+      }
+    }
 
     if (!rawName || rawName.length < 2) {
-      return null;
+      rawName = rawTextBefore;
     }
 
     return {
       itemName: rawName,
+      manufacturer: manufacturer || undefined,
       packing: packing || '',
       hsnCode: hsn || '',
       batchNumber: batch || 'BATCH-DETECT',
@@ -287,8 +399,8 @@ export class TextParserProvider implements IDocumentExtractionProvider {
       mrp: mrp || 0,
       purchaseRate: rate || 0,
       schemeDiscountPercent: schDisc || 0,
-      discountPercent: disc || 0,
-      gstPercent: gst || 5,
+      discountPercent: disc != null ? disc : 0,
+      gstPercent: gst != null ? gst : 5,
       taxableValue: taxable || Math.round(qty * rate * 100) / 100,
       confidence: 'HIGH',
       rawOcrText: line,
@@ -404,16 +516,7 @@ export class TextParserProvider implements IDocumentExtractionProvider {
   }
 
   private normalizeExpiry(exp: string): string {
-    const parts = exp.split(/[\/-]/);
-    if (parts.length === 2) {
-      const month = parts[0].padStart(2, '0');
-      let year = parts[1];
-      if (year.length === 2) {
-        year = `20${year}`;
-      }
-      return `${year}-${month}-01`;
-    }
-    return exp;
+    return normalizeExpiryDate(exp);
   }
 
   private extractSupplier(lines: string[]) {
