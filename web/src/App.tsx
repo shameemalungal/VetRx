@@ -3,61 +3,62 @@
 // Root router. Loads settings, seeds DB, manages Auth Gate & AppShell.
 // =============================================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { AppShell } from './components/Layout/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
-import { MedicinesListPage } from './pages/medicines/MedicinesListPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { PatientsListPage } from './pages/patients/PatientsListPage';
-import { PatientDetailsPage } from './pages/patients/PatientDetailsPage';
-import { PatientFormPage } from './pages/patients/PatientFormPage';
-import { PrescriptionsListPage } from './pages/prescriptions/PrescriptionsListPage';
-import { PrescriptionBuilderPage } from './pages/prescriptions/PrescriptionBuilderPage';
-import { PrescriptionDetailsPage } from './pages/prescriptions/PrescriptionDetailsPage';
-import { PackagesListPage } from './pages/packages/PackagesListPage';
-import { PackageFormPage } from './pages/packages/PackageFormPage';
-import { InvoicesListPage } from './pages/invoices/InvoicesListPage';
-import { InvoiceBuilderPage } from './pages/invoices/InvoiceBuilderPage';
-import { InvoiceDetailsPage } from './pages/invoices/InvoiceDetailsPage';
-import { TodayDashboardPage } from './pages/cvp/TodayDashboardPage';
-import { CallsListPage } from './pages/cvp/CallsListPage';
-import { CallRegistrationPage } from './pages/cvp/CallRegistrationPage';
-import { PlanDayPage } from './pages/cvp/PlanDayPage';
-import { FieldModePage } from './pages/cvp/FieldModePage';
-import { VisitDetailPage } from './pages/cvp/VisitDetailPage';
-import { FollowUpsPage } from './pages/cvp/FollowUpsPage';
-import { CaseDetailPage } from './pages/cvp/CaseDetailPage';
 import { LoginPage } from './pages/auth/LoginPage';
-import { RegisterPage } from './pages/auth/RegisterPage';
-import { AcceptInvitationPage } from './pages/auth/AcceptInvitationPage';
-import { ChoosePracticePage } from './pages/auth/ChoosePracticePage';
-import { RolePermissionManagementPage } from './pages/platform/RolePermissionManagementPage';
-import { PlatformShell } from './components/Layout/PlatformShell';
-import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
-import { PlatformPracticesPage } from './pages/platform/PlatformPracticesPage';
-import { PlatformPracticeDetailsPage } from './pages/platform/PlatformPracticeDetailsPage';
-import { PlatformUsersPage } from './pages/platform/PlatformUsersPage';
-import { PlatformUserDetailsPage } from './pages/platform/PlatformUserDetailsPage';
-import { PlatformSubscriptionsPage } from './pages/platform/PlatformSubscriptionsPage';
-import { PlatformPaymentsPage } from './pages/platform/PlatformPaymentsPage';
-import { PlatformIssuesPage } from './pages/platform/PlatformIssuesPage';
-import { PlatformAuditPage } from './pages/platform/PlatformAuditPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { InventoryEntitlementProvider } from './context/InventoryEntitlementContext';
-import {
-  InventoryDashboardPage,
-  InventoryStockPage,
-  InventoryPurchasesPage,
-  InventoryAlertsPage,
-  InventoryMovementsPage,
-  InventoryReportsPage,
-  InventoryRouteGate,
-  PracticeBagPage,
-} from './pages/inventory';
+import { InventoryRouteGate } from './pages/inventory/InventoryRouteGate';
+import { PlatformShell } from './components/Layout/PlatformShell';
+
+// ── Lazy-loaded Route Chunks (Code-Splitting for Optimal Bundle Size) ──
+const MedicinesListPage = React.lazy(() => import('./pages/medicines/MedicinesListPage').then(m => ({ default: m.MedicinesListPage })));
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const PatientsListPage = React.lazy(() => import('./pages/patients/PatientsListPage').then(m => ({ default: m.PatientsListPage })));
+const PatientDetailsPage = React.lazy(() => import('./pages/patients/PatientDetailsPage').then(m => ({ default: m.PatientDetailsPage })));
+const PatientFormPage = React.lazy(() => import('./pages/patients/PatientFormPage').then(m => ({ default: m.PatientFormPage })));
+const PrescriptionsListPage = React.lazy(() => import('./pages/prescriptions/PrescriptionsListPage').then(m => ({ default: m.PrescriptionsListPage })));
+const PrescriptionBuilderPage = React.lazy(() => import('./pages/prescriptions/PrescriptionBuilderPage').then(m => ({ default: m.PrescriptionBuilderPage })));
+const PrescriptionDetailsPage = React.lazy(() => import('./pages/prescriptions/PrescriptionDetailsPage').then(m => ({ default: m.PrescriptionDetailsPage })));
+const PackagesListPage = React.lazy(() => import('./pages/packages/PackagesListPage').then(m => ({ default: m.PackagesListPage })));
+const PackageFormPage = React.lazy(() => import('./pages/packages/PackageFormPage').then(m => ({ default: m.PackageFormPage })));
+const InvoicesListPage = React.lazy(() => import('./pages/invoices/InvoicesListPage').then(m => ({ default: m.InvoicesListPage })));
+const InvoiceBuilderPage = React.lazy(() => import('./pages/invoices/InvoiceBuilderPage').then(m => ({ default: m.InvoiceBuilderPage })));
+const InvoiceDetailsPage = React.lazy(() => import('./pages/invoices/InvoiceDetailsPage').then(m => ({ default: m.InvoiceDetailsPage })));
+const TodayDashboardPage = React.lazy(() => import('./pages/cvp/TodayDashboardPage').then(m => ({ default: m.TodayDashboardPage })));
+const CallsListPage = React.lazy(() => import('./pages/cvp/CallsListPage').then(m => ({ default: m.CallsListPage })));
+const CallRegistrationPage = React.lazy(() => import('./pages/cvp/CallRegistrationPage').then(m => ({ default: m.CallRegistrationPage })));
+const PlanDayPage = React.lazy(() => import('./pages/cvp/PlanDayPage').then(m => ({ default: m.PlanDayPage })));
+const FieldModePage = React.lazy(() => import('./pages/cvp/FieldModePage').then(m => ({ default: m.FieldModePage })));
+const VisitDetailPage = React.lazy(() => import('./pages/cvp/VisitDetailPage').then(m => ({ default: m.VisitDetailPage })));
+const FollowUpsPage = React.lazy(() => import('./pages/cvp/FollowUpsPage').then(m => ({ default: m.FollowUpsPage })));
+const CaseDetailPage = React.lazy(() => import('./pages/cvp/CaseDetailPage').then(m => ({ default: m.CaseDetailPage })));
+const RegisterPage = React.lazy(() => import('./pages/auth/RegisterPage').then(m => ({ default: m.RegisterPage })));
+const AcceptInvitationPage = React.lazy(() => import('./pages/auth/AcceptInvitationPage').then(m => ({ default: m.AcceptInvitationPage })));
+const ChoosePracticePage = React.lazy(() => import('./pages/auth/ChoosePracticePage').then(m => ({ default: m.ChoosePracticePage })));
+const RolePermissionManagementPage = React.lazy(() => import('./pages/platform/RolePermissionManagementPage').then(m => ({ default: m.RolePermissionManagementPage })));
+const PlatformDashboardPage = React.lazy(() => import('./pages/platform/PlatformDashboardPage').then(m => ({ default: m.PlatformDashboardPage })));
+const PlatformPracticesPage = React.lazy(() => import('./pages/platform/PlatformPracticesPage').then(m => ({ default: m.PlatformPracticesPage })));
+const PlatformPracticeDetailsPage = React.lazy(() => import('./pages/platform/PlatformPracticeDetailsPage').then(m => ({ default: m.PlatformPracticeDetailsPage })));
+const PlatformUsersPage = React.lazy(() => import('./pages/platform/PlatformUsersPage').then(m => ({ default: m.PlatformUsersPage })));
+const PlatformUserDetailsPage = React.lazy(() => import('./pages/platform/PlatformUserDetailsPage').then(m => ({ default: m.PlatformUserDetailsPage })));
+const PlatformSubscriptionsPage = React.lazy(() => import('./pages/platform/PlatformSubscriptionsPage').then(m => ({ default: m.PlatformSubscriptionsPage })));
+const PlatformPaymentsPage = React.lazy(() => import('./pages/platform/PlatformPaymentsPage').then(m => ({ default: m.PlatformPaymentsPage })));
+const PlatformIssuesPage = React.lazy(() => import('./pages/platform/PlatformIssuesPage').then(m => ({ default: m.PlatformIssuesPage })));
+const PlatformAuditPage = React.lazy(() => import('./pages/platform/PlatformAuditPage').then(m => ({ default: m.PlatformAuditPage })));
+const InventoryDashboardPage = React.lazy(() => import('./pages/inventory/InventoryDashboardPage').then(m => ({ default: m.InventoryDashboardPage })));
+const InventoryStockPage = React.lazy(() => import('./pages/inventory/InventoryStockPage').then(m => ({ default: m.InventoryStockPage })));
+const InventoryPurchasesPage = React.lazy(() => import('./pages/inventory/InventoryPurchasesPage').then(m => ({ default: m.InventoryPurchasesPage })));
+const InventoryAlertsPage = React.lazy(() => import('./pages/inventory/InventoryAlertsPage').then(m => ({ default: m.InventoryAlertsPage })));
+const InventoryMovementsPage = React.lazy(() => import('./pages/inventory/InventoryMovementsPage').then(m => ({ default: m.InventoryMovementsPage })));
+const InventoryReportsPage = React.lazy(() => import('./pages/inventory/InventoryReportsPage').then(m => ({ default: m.InventoryReportsPage })));
+const PracticeBagPage = React.lazy(() => import('./pages/inventory/PracticeBagPage').then(m => ({ default: m.PracticeBagPage })));
 import { useSettingsStore } from './store/settingsStore';
 import { ensureSeeded } from './db/schema';
+import { nativeService } from './services/nativeService';
 
 import './pages/DashboardPage.css';
 
@@ -255,24 +256,34 @@ function PlatformAccessDeniedPage() {
   );
 }
 
+function RouteLoadingFallback() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '240px', width: '100%' }}>
+      <div className="spinner" style={{ width: '28px', height: '28px', borderWidth: '3px' }} />
+    </div>
+  );
+}
+
 function PlatformAppRoutes() {
   return (
     <PlatformErrorBoundary>
       <PlatformShell>
-        <Routes>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<PlatformDashboardPage />} />
-          <Route path="practices" element={<PlatformPracticesPage />} />
-          <Route path="practices/:id" element={<PlatformPracticeDetailsPage />} />
-          <Route path="users" element={<PlatformUsersPage />} />
-          <Route path="users/:id" element={<PlatformUserDetailsPage />} />
-          <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
-          <Route path="payments" element={<PlatformPaymentsPage />} />
-          <Route path="issues" element={<PlatformIssuesPage />} />
-          <Route path="audit" element={<PlatformAuditPage />} />
-          <Route path="permissions" element={<RolePermissionManagementPage />} />
-          <Route path="*" element={<Navigate to="dashboard" replace />} />
-        </Routes>
+        <React.Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<PlatformDashboardPage />} />
+            <Route path="practices" element={<PlatformPracticesPage />} />
+            <Route path="practices/:id" element={<PlatformPracticeDetailsPage />} />
+            <Route path="users" element={<PlatformUsersPage />} />
+            <Route path="users/:id" element={<PlatformUserDetailsPage />} />
+            <Route path="subscriptions" element={<PlatformSubscriptionsPage />} />
+            <Route path="payments" element={<PlatformPaymentsPage />} />
+            <Route path="issues" element={<PlatformIssuesPage />} />
+            <Route path="audit" element={<PlatformAuditPage />} />
+            <Route path="permissions" element={<RolePermissionManagementPage />} />
+            <Route path="*" element={<Navigate to="dashboard" replace />} />
+          </Routes>
+        </React.Suspense>
       </PlatformShell>
     </PlatformErrorBoundary>
   );
@@ -281,114 +292,115 @@ function PlatformAppRoutes() {
 function AuthenticatedAppRoutes() {
   return (
     <AppShell>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
+      <React.Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
 
-        {/* Call & Visit Planner (CVP) Module — Phase 2, 3 & 4 */}
-        <Route path="/calls" element={<CallsListPage />} />
-        <Route path="/calls/register" element={<CallRegistrationPage />} />
-        <Route path="/calls/:id" element={<CaseDetailPage />} />
-        <Route path="/calls/case/:id" element={<CaseDetailPage />} />
-        <Route path="/calls/new" element={<Navigate to="/calls/register" replace />} />
-        <Route path="/calls/today" element={<TodayDashboardPage />} />
-        <Route path="/calls/plan" element={<PlanDayPage />} />
-        <Route path="/calls/field" element={<FieldModePage />} />
-        <Route path="/calls/bag" element={<InventoryRouteGate><PracticeBagPage /></InventoryRouteGate>} />
-        <Route path="/calls/visits/:id" element={<VisitDetailPage />} />
-        <Route path="/calls/follow-ups" element={<FollowUpsPage />} />
-        <Route path="/calls/upcoming" element={<Navigate to="/calls?tab=upcoming" replace />} />
-        <Route path="/calls/postponed" element={<Navigate to="/calls?tab=postponed" replace />} />
-        <Route path="/calls/all" element={<Navigate to="/calls?tab=all" replace />} />
+          {/* Call & Visit Planner (CVP) Module — Phase 2, 3 & 4 */}
+          <Route path="/calls" element={<CallsListPage />} />
+          <Route path="/calls/register" element={<CallRegistrationPage />} />
+          <Route path="/calls/:id" element={<CaseDetailPage />} />
+          <Route path="/calls/case/:id" element={<CaseDetailPage />} />
+          <Route path="/calls/new" element={<Navigate to="/calls/register" replace />} />
+          <Route path="/calls/today" element={<TodayDashboardPage />} />
+          <Route path="/calls/plan" element={<PlanDayPage />} />
+          <Route path="/calls/field" element={<FieldModePage />} />
+          <Route path="/calls/bag" element={<InventoryRouteGate><PracticeBagPage /></InventoryRouteGate>} />
+          <Route path="/calls/visits/:id" element={<VisitDetailPage />} />
+          <Route path="/calls/follow-ups" element={<FollowUpsPage />} />
+          <Route path="/calls/upcoming" element={<Navigate to="/calls?tab=upcoming" replace />} />
+          <Route path="/calls/postponed" element={<Navigate to="/calls?tab=postponed" replace />} />
+          <Route path="/calls/all" element={<Navigate to="/calls?tab=all" replace />} />
 
-        {/* Follow-ups & Recurring Schedules */}
-        <Route path="/follow-ups" element={<FollowUpsPage />} />
+          {/* Follow-ups & Recurring Schedules */}
+          <Route path="/follow-ups" element={<FollowUpsPage />} />
 
-        {/* CVP Route Aliases */}
-        <Route path="/cvp" element={<Navigate to="/calls" replace />} />
-        <Route path="/cvp/calls" element={<Navigate to="/calls" replace />} />
-        <Route path="/cvp/today" element={<Navigate to="/calls/today" replace />} />
-        <Route path="/cvp/plan" element={<Navigate to="/calls/plan" replace />} />
-        <Route path="/cvp/follow-ups" element={<Navigate to="/follow-ups" replace />} />
+          {/* CVP Route Aliases */}
+          <Route path="/cvp" element={<Navigate to="/calls" replace />} />
+          <Route path="/cvp/calls" element={<Navigate to="/calls" replace />} />
+          <Route path="/cvp/today" element={<Navigate to="/calls/today" replace />} />
+          <Route path="/cvp/plan" element={<Navigate to="/calls/plan" replace />} />
+          <Route path="/cvp/follow-ups" element={<Navigate to="/follow-ups" replace />} />
 
-        {/* Patients Module (Phase 2) */}
-        <Route path="/patients" element={<PatientsListPage />} />
-        <Route path="/patients/new" element={<PatientFormPage mode="new" />} />
-        <Route path="/patients/:id" element={<PatientDetailsPage />} />
-        <Route path="/patients/:id/edit" element={<PatientFormPage mode="edit" />} />
+          {/* Patients Module (Phase 2) */}
+          <Route path="/patients" element={<PatientsListPage />} />
+          <Route path="/patients/new" element={<PatientFormPage mode="new" />} />
+          <Route path="/patients/:id" element={<PatientDetailsPage />} />
+          <Route path="/patients/:id/edit" element={<PatientFormPage mode="edit" />} />
 
-        {/* Prescriptions Module (Phase 3) */}
-        <Route path="/prescriptions" element={<PrescriptionsListPage />} />
-        <Route path="/prescriptions/new" element={<PrescriptionBuilderPage mode="new" />} />
-        <Route path="/prescriptions/:id" element={<PrescriptionDetailsPage />} />
-        <Route path="/prescriptions/:id/edit" element={<PrescriptionBuilderPage mode="edit" />} />
+          {/* Prescriptions Module (Phase 3) */}
+          <Route path="/prescriptions" element={<PrescriptionsListPage />} />
+          <Route path="/prescriptions/new" element={<PrescriptionBuilderPage mode="new" />} />
+          <Route path="/prescriptions/:id" element={<PrescriptionDetailsPage />} />
+          <Route path="/prescriptions/:id/edit" element={<PrescriptionBuilderPage mode="edit" />} />
 
-        {/* Treatment Packages Module (Phase 4) */}
-        <Route path="/packages" element={<PackagesListPage />} />
-        <Route path="/packages/new" element={<PackageFormPage mode="new" />} />
-        <Route path="/packages/:id" element={<PackageFormPage mode="edit" />} />
-        <Route path="/packages/:id/edit" element={<PackageFormPage mode="edit" />} />
-        <Route path="/medicines" element={<MedicinesListPage />} />
+          {/* Treatment Packages Module (Phase 4) */}
+          <Route path="/packages" element={<PackagesListPage />} />
+          <Route path="/packages/new" element={<PackageFormPage mode="new" />} />
+          <Route path="/packages/:id" element={<PackageFormPage mode="edit" />} />
+          <Route path="/packages/:id/edit" element={<PackageFormPage mode="edit" />} />
+          <Route path="/medicines" element={<MedicinesListPage />} />
 
-        {/* Inventory & Stock Management Module (Add-on V1 & Phase 6) */}
-        <Route path="/inventory" element={<InventoryRouteGate><InventoryDashboardPage /></InventoryRouteGate>} />
-        <Route path="/inventory/dashboard" element={<Navigate to="/inventory" replace />} />
-        <Route path="/inventory/stock" element={<InventoryRouteGate><InventoryStockPage /></InventoryRouteGate>} />
-        <Route path="/inventory/bag" element={<InventoryRouteGate><PracticeBagPage /></InventoryRouteGate>} />
-        <Route path="/inventory/practice-bag" element={<Navigate to="/inventory/bag" replace />} />
-        <Route path="/inventory/purchases" element={<InventoryRouteGate><InventoryPurchasesPage /></InventoryRouteGate>} />
-        <Route path="/inventory/alerts" element={<InventoryRouteGate><InventoryAlertsPage /></InventoryRouteGate>} />
-        <Route path="/inventory/movements" element={<InventoryRouteGate><InventoryMovementsPage /></InventoryRouteGate>} />
-        <Route path="/inventory/reports" element={<InventoryRouteGate><InventoryReportsPage /></InventoryRouteGate>} />
+          {/* Inventory & Stock Management Module (Add-on V1 & Phase 6) */}
+          <Route path="/inventory" element={<InventoryRouteGate><InventoryDashboardPage /></InventoryRouteGate>} />
+          <Route path="/inventory/dashboard" element={<Navigate to="/inventory" replace />} />
+          <Route path="/inventory/stock" element={<InventoryRouteGate><InventoryStockPage /></InventoryRouteGate>} />
+          <Route path="/inventory/bag" element={<InventoryRouteGate><PracticeBagPage /></InventoryRouteGate>} />
+          <Route path="/inventory/practice-bag" element={<Navigate to="/inventory/bag" replace />} />
+          <Route path="/inventory/purchases" element={<InventoryRouteGate><InventoryPurchasesPage /></InventoryRouteGate>} />
+          <Route path="/inventory/alerts" element={<InventoryRouteGate><InventoryAlertsPage /></InventoryRouteGate>} />
+          <Route path="/inventory/movements" element={<InventoryRouteGate><InventoryMovementsPage /></InventoryRouteGate>} />
+          <Route path="/inventory/reports" element={<InventoryRouteGate><InventoryReportsPage /></InventoryRouteGate>} />
 
-        {/* Invoices Module (Phase 6) */}
-        <Route path="/invoices" element={<InvoicesListPage />} />
-        <Route path="/invoices/new" element={<InvoiceBuilderPage mode="new" />} />
-        <Route path="/invoices/:id" element={<InvoiceDetailsPage />} />
-        <Route path="/invoices/:id/edit" element={<InvoiceBuilderPage mode="edit" />} />
+          {/* Invoices Module (Phase 6) */}
+          <Route path="/invoices" element={<InvoicesListPage />} />
+          <Route path="/invoices/new" element={<InvoiceBuilderPage mode="new" />} />
+          <Route path="/invoices/:id" element={<InvoiceDetailsPage />} />
+          <Route path="/invoices/:id/edit" element={<InvoiceBuilderPage mode="edit" />} />
 
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/platform/permissions" element={<RolePermissionManagementPage />} />
-        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/platform/permissions" element={<RolePermissionManagementPage />} />
+          <Route path="/invite/:token" element={<AcceptInvitationPage />} />
 
-        {/* Auth routes when already authenticated redirect to dashboard */}
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/register" element={<Navigate to="/dashboard" replace />} />
+          {/* Auth routes when already authenticated redirect to dashboard */}
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/register" element={<Navigate to="/dashboard" replace />} />
 
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </React.Suspense>
     </AppShell>
   );
 }
 
 function PublicAuthRoutes() {
   return (
-    <Routes>
-      <Route path="/invite/:token" element={<AcceptInvitationPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/choose-practice" element={<ChoosePracticePage />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+    <React.Suspense fallback={<RouteLoadingFallback />}>
+      <Routes>
+        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/choose-practice" element={<ChoosePracticePage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </React.Suspense>
   );
 }
 
 function MainContent() {
   const { user, practice, settings, isLoading, isPlatformAdmin } = useAuth();
   const { loadSettings } = useSettingsStore();
-  const [dbReady, setDbReady] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
     async function initDb() {
       try {
-        await ensureSeeded();
-        await loadSettings(settings, user);
+        void ensureSeeded();
+        void loadSettings(settings, user);
       } catch (err) {
         console.error('VetRx IndexedDB init error:', err);
-      } finally {
-        setDbReady(true);
       }
     }
     void initDb();
@@ -438,7 +450,7 @@ function MainContent() {
     return <PlatformAccessDeniedPage />;
   }
 
-  if (isLoading || !dbReady) {
+  if (isLoading) {
     return (
       <div className="loading-screen" role="status" aria-label="Loading VetRx…">
         <div style={{ textAlign: 'center' }}>
@@ -482,6 +494,10 @@ function MainContent() {
 }
 
 export default function App() {
+  useEffect(() => {
+    nativeService.initNativeApp();
+  }, []);
+
   return (
     <AuthProvider>
       <InventoryEntitlementProvider>

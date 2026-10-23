@@ -360,6 +360,15 @@
   box-sizing: border-box !important;
 }
 
+.prescription-ribbon-external {
+  background: #f0fdf4 !important;
+  border-color: #bbf7d0 !important;
+}
+
+.prescription-ribbon-external .prescription-ribbon-title {
+  color: #166534 !important;
+}
+
 .prescription-ribbon-title {
   display: inline-flex !important;
   align-items: center !important;

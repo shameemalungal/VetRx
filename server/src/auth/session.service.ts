@@ -161,4 +161,68 @@ export class SessionService {
       path: '/',
     });
   }
+
+  // ----------------------------------------------------------------------------
+  // Ephemeral Mobile OAuth Exchange Tickets (60s Single-Use Bridge)
+  // ----------------------------------------------------------------------------
+  private static mobileTickets = new Map<
+    string,
+    {
+      token: string;
+      userId: string;
+      practiceId?: string | null;
+      returnTo?: string;
+      createdAt: number;
+    }
+  >();
+
+  /**
+   * Creates an ephemeral, single-use ticket mapped to a valid session token.
+   * Expires after 60 seconds.
+   */
+  static createMobileAuthTicket(
+    token: string,
+    userId: string,
+    practiceId?: string | null,
+    returnTo?: string
+  ): string {
+    const ticket = crypto.randomBytes(32).toString('hex');
+    this.mobileTickets.set(ticket, {
+      token,
+      userId,
+      practiceId,
+      returnTo,
+      createdAt: Date.now(),
+    });
+
+    // Cleanup tickets older than 60 seconds
+    const now = Date.now();
+    for (const [key, val] of this.mobileTickets.entries()) {
+      if (now - val.createdAt > 60_000) {
+        this.mobileTickets.delete(key);
+      }
+    }
+
+    return ticket;
+  }
+
+  /**
+   * Consumes a mobile auth ticket. Single-use: deleted immediately.
+   * Returns null if ticket is invalid or older than 60 seconds.
+   */
+  static consumeMobileAuthTicket(ticket: string) {
+    if (!ticket || typeof ticket !== 'string') return null;
+    const ticketData = this.mobileTickets.get(ticket);
+    if (!ticketData) return null;
+
+    // Immediately remove to prevent replay attacks
+    this.mobileTickets.delete(ticket);
+
+    if (Date.now() - ticketData.createdAt > 60_000) {
+      return null;
+    }
+
+    return ticketData;
+  }
 }
+

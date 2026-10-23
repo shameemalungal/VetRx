@@ -4,12 +4,13 @@
 //                  vetrx_treatment_packages_mobile
 // =============================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { TreatmentPackage, TreatmentPackageItem } from '../../types';
 import { Icon } from '../../components/ui/Icon';
+import { packagesApi } from '../../services/api/packagesApi';
 import './Packages.css';
 
 type SpeciesFilter =
@@ -44,9 +45,38 @@ const SPECIES_FILTER_OPTIONS: { id: SpeciesFilter; label: string; icon?: string 
 export const PackagesListPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // ── Database Queries ──────────────────────────────────────────
-  const allPackages = useLiveQuery(() => db.treatmentPackages.toArray(), []);
-  const allItems = useLiveQuery(() => db.treatmentPackageItems.toArray(), []);
+  // ── Database Queries & Server State ──────────────────────────
+  const dexiePackages = useLiveQuery(() => db.treatmentPackages.toArray(), []);
+  const dexieItems = useLiveQuery(() => db.treatmentPackageItems.toArray(), []);
+  const [serverPackages, setServerPackages] = useState<Array<TreatmentPackage & { items: TreatmentPackageItem[] }> | null>(null);
+
+  const fetchPackages = useCallback(async () => {
+    try {
+      const list = await packagesApi.list();
+      setServerPackages(list);
+      // Sync into local Dexie for offline resilience
+      for (const sp of list) {
+        if (typeof sp.id === 'number') {
+          await db.treatmentPackages.put(sp).catch(() => {});
+        } else if (typeof sp.id === 'string') {
+          const existing = await db.treatmentPackages.where('protocolCode').equals(sp.protocolCode || '').first();
+          if (existing) {
+            await db.treatmentPackages.update(existing.id!, { ...sp, id: existing.id }).catch(() => {});
+          } else {
+            await db.treatmentPackages.add({ ...sp, id: undefined as any }).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch packages from server, using local cache:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchPackages();
+  }, [fetchPackages]);
+
+  const allPackages = serverPackages ?? dexiePackages;
 
   // ── Local State ───────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,7 +84,7 @@ export const PackagesListPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Active popover menu (packageId or null)
-  const [activeMenuId, setActiveMenuId] = useState<number | null>(null);
+  const [activeMenuId, setActiveMenuId] = useState<number | string | null>(null);
 
   // Delete dialog state
   const [packageToDelete, setPackageToDelete] = useState<TreatmentPackage | null>(null);
@@ -62,16 +92,22 @@ export const PackagesListPage: React.FC = () => {
 
   // Group items by packageId
   const itemsByPackage = useMemo(() => {
-    const map = new Map<number, TreatmentPackageItem[]>();
-    if (allItems) {
-      for (const itm of allItems) {
+    const map = new Map<string | number, TreatmentPackageItem[]>();
+    if (serverPackages) {
+      for (const sp of serverPackages) {
+        if (sp.id) {
+          map.set(sp.id, sp.items || []);
+        }
+      }
+    } else if (dexieItems) {
+      for (const itm of dexieItems) {
         const arr = map.get(itm.packageId) || [];
         arr.push(itm);
         map.set(itm.packageId, arr);
       }
     }
     return map;
-  }, [allItems]);
+  }, [serverPackages, dexieItems]);
 
   // Determine species list for package (helper)
   const getPackageSpeciesList = (pkg: TreatmentPackage): string[] => {
@@ -185,57 +221,34 @@ export const PackagesListPage: React.FC = () => {
   }, [totalDispenses]);
 
   // ── Action Handlers ───────────────────────────────────────────
-  const handleApplyToRx = (pkgId: number) => {
+  const handleApplyToRx = (pkgId: number | string) => {
     navigate(`/prescriptions/new?packageId=${pkgId}`);
   };
 
-  const handleEdit = (pkgId: number) => {
+  const handleEdit = (pkgId: number | string) => {
     navigate(`/packages/${pkgId}/edit`);
   };
 
-  const handleView = (pkgId: number) => {
+  const handleView = (pkgId: number | string) => {
     navigate(`/packages/${pkgId}`);
   };
 
   const handleDuplicate = async (pkg: TreatmentPackage) => {
     if (!pkg.id) return;
     try {
-      const now = new Date();
       const speciesList = getPackageSpeciesList(pkg);
-      const newPkgId = await db.treatmentPackages.add({
+      const items = itemsByPackage.get(pkg.id) || [];
+      await packagesApi.create({
         name: `${pkg.name} (Copy)`,
         category: pkg.category,
         description: pkg.description,
         species: pkg.species || speciesList.join(', '),
         targetSpecies: pkg.targetSpecies || speciesList,
         defaultInstructions: pkg.defaultInstructions,
-        protocolCode: `COPY-${Date.now().toString().slice(-4)}`,
-        usageCount: 0,
-        createdAt: now,
-        updatedAt: now,
+        items,
       });
-
-      const items = itemsByPackage.get(pkg.id) || [];
-      if (items.length > 0) {
-        await db.treatmentPackageItems.bulkAdd(
-          items.map((itm, idx) => ({
-            packageId: newPkgId as number,
-            medicineId: itm.medicineId,
-            brandName: itm.brandName,
-            genericName: itm.genericName,
-            presentation: itm.presentation,
-            strengthVolume: itm.strengthVolume,
-            quantity: itm.quantity,
-            unit: itm.unit,
-            frequency: itm.frequency,
-            durationDays: itm.durationDays,
-            route: itm.route,
-            directions: itm.directions,
-            sortOrder: idx,
-          }))
-        );
-      }
       setActiveMenuId(null);
+      await fetchPackages();
     } catch (err) {
       console.error('Error duplicating package:', err);
     }
@@ -245,9 +258,13 @@ export const PackagesListPage: React.FC = () => {
     if (!packageToDelete?.id) return;
     setIsDeleting(true);
     try {
-      await db.treatmentPackageItems.where('packageId').equals(packageToDelete.id).delete();
-      await db.treatmentPackages.delete(packageToDelete.id);
+      await packagesApi.delete(String(packageToDelete.id));
+      if (typeof packageToDelete.id === 'number') {
+        await db.treatmentPackageItems.where('packageId').equals(packageToDelete.id).delete().catch(() => {});
+        await db.treatmentPackages.delete(packageToDelete.id).catch(() => {});
+      }
       setPackageToDelete(null);
+      await fetchPackages();
     } catch (err) {
       console.error('Error deleting package:', err);
     } finally {
@@ -541,7 +558,7 @@ export const PackagesListPage: React.FC = () => {
                       title="More Options"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setActiveMenuId(isMenuOpen ? null : (pkg.id as number));
+                        setActiveMenuId(isMenuOpen ? null : pkg.id!);
                       }}
                     >
                       <Icon name="dots-vertical" size={16} />

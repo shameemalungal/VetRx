@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Icon } from './Icon';
 import { savePdfWithFilePicker } from '../../utils/pdfGenerator';
+import { nativeService, blobToBase64 } from '../../services/nativeService';
 
 export interface ShareModalProps {
   isOpen: boolean;
@@ -21,6 +22,11 @@ export interface ShareModalProps {
   suggestedFilename?: string;
   filename?: string;
   documentUrl: string;
+}
+
+export function sanitizeShareUrl(url: string): string {
+  const productionOrigin = 'https://app.vetrx.brightbase.in';
+  return (url || '').replace(/^(?:https?:\/\/localhost(:\d+)?|https?:\/\/127\.0\.0\.1(:\d+)?|capacitor:\/\/localhost)/, productionOrigin);
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -47,18 +53,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const actualFilename = suggestedFilename || filename || `${documentTitle}_${documentNumber}.pdf`;
   const actualTotal = totalDisplay || (grandTotalPaisa !== undefined ? `₹${(grandTotalPaisa / 100).toFixed(2)}` : undefined);
 
+  const cleanDocumentUrl = sanitizeShareUrl(documentUrl);
+
   const shareText = `VetRx ${documentTitle} ${documentNumber}${
     actualRecipient ? ` for ${actualRecipient}` : ''
   }${actualTotal ? ` • Amount: ${actualTotal}` : ''}`;
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(documentUrl);
+      await navigator.clipboard.writeText(cleanDocumentUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
       // Fallback prompt if clipboard fails
-      prompt('Copy link to document:', documentUrl);
+      prompt('Copy link to document:', cleanDocumentUrl);
     }
   };
 
@@ -72,8 +80,30 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
   };
 
-  const handleWhatsApp = () => {
-    const text = encodeURIComponent(`${shareText}\n${documentUrl}`);
+  const handleWhatsApp = async () => {
+    if (nativeService.isNative() && pdfBlob) {
+      try {
+        setIsDownloading(true);
+        const base64 = await blobToBase64(pdfBlob);
+        const res = await nativeService.sharePdfFile({
+          base64Data: base64,
+          filename: actualFilename,
+          title: `${documentTitle} ${documentNumber}`,
+          text: shareText,
+          targetApp: 'whatsapp',
+        });
+        if (res.success && !res.fallback) {
+          onClose();
+          return;
+        }
+      } catch (err) {
+        console.warn('Native WhatsApp document share failed, falling back to URL:', err);
+      } finally {
+        setIsDownloading(false);
+      }
+    }
+
+    const text = encodeURIComponent(`${shareText}\n${cleanDocumentUrl}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -82,9 +112,42 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     const body = encodeURIComponent(
       `Hello,\n\nPlease find your ${documentTitle.toLowerCase()} details below:\n\nDocument: ${documentNumber}\nRecipient: ${
         recipientName || 'Client'
-      }\n${totalDisplay ? `Total: ${totalDisplay}\n` : ''}\nDocument Link: ${documentUrl}\n\nThank you,\nVetRx Veterinary Practice`
+      }\n${totalDisplay ? `Total: ${totalDisplay}\n` : ''}\nDocument Link: ${cleanDocumentUrl}\n\nThank you,\nVetRx Veterinary Practice`
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  const handleNativeShare = async () => {
+    if (nativeService.isNative() && pdfBlob) {
+      try {
+        setIsDownloading(true);
+        const base64 = await blobToBase64(pdfBlob);
+        const res = await nativeService.sharePdfFile({
+          base64Data: base64,
+          filename: actualFilename,
+          title: `${documentTitle} ${documentNumber}`,
+          text: shareText,
+        });
+        if (res.success) {
+          onClose();
+          return;
+        }
+      } catch (err) {
+        console.warn('Native PDF file share failed, falling back to link:', err);
+      } finally {
+        setIsDownloading(false);
+      }
+    }
+
+    const success = await nativeService.shareDocument({
+      title: `${documentTitle} ${documentNumber}`,
+      text: shareText,
+      url: cleanDocumentUrl,
+      dialogTitle: `Share ${documentTitle}`,
+    });
+    if (success) {
+      onClose();
+    }
   };
 
   return (
@@ -210,6 +273,38 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
           {/* Action List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* System / Native Share Sheet */}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleNativeShare}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                gap: '12px',
+                padding: '12px 14px',
+                textAlign: 'left',
+                width: '100%',
+                height: 'auto',
+                minHeight: '52px',
+                whiteSpace: 'normal',
+                boxSizing: 'border-box',
+              }}
+            >
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <Icon name="share" size={18} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '2px' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', lineHeight: 1.3, color: '#ffffff' }}>
+                  Share via System Apps
+                </span>
+                <span style={{ fontSize: '11px', lineHeight: 1.35, color: 'rgba(255,255,255,0.85)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                  Open native share sheet (Messages, Drive, Nearby, etc.)
+                </span>
+              </div>
+            </button>
+
             {/* Direct PDF Download */}
             {pdfBlob && (
               <button

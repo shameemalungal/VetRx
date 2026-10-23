@@ -9,6 +9,7 @@ import { db } from '../../db/schema';
 import type { InvoiceStatus } from '../../types';
 import { Icon } from '../../components/ui/Icon';
 import { formatINR, ensureSampleInvoicesSeeded, formatLocalDateInput } from './invoiceUtils';
+import { syncInvoices } from '../../services/clinicalSync';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import './Invoices.css';
 
@@ -18,9 +19,10 @@ export const InvoicesListPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | InvoiceStatus>('All');
 
-  // Ensure sample seed exists
+  // Ensure sample seed exists and synchronize invoices from server
   useEffect(() => {
     void ensureSampleInvoicesSeeded();
+    void syncInvoices();
   }, []);
 
   // Live queries

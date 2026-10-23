@@ -23,6 +23,7 @@ import { DISPENSE_UNITS } from '../../utils/unitConverter';
 import { ImportPrescriptionsModal, type SelectedMedicineImport } from './ImportPrescriptionsModal';
 import { formatInvoiceItemDescription } from '../../utils/documentFormat';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
+import { API_BASE } from '../../config/api';
 import { inventoryApi, type InventoryItem } from '../../services/inventoryApi';
 import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
 import './Invoices.css';
@@ -32,7 +33,7 @@ interface InvoiceBuilderProps {
 }
 
 interface ItemDraft {
-  id?: number;
+  id?: number | string;
   tempId: string;
   category: InvoiceItemCategory;
   description: string;
@@ -47,15 +48,15 @@ interface ItemDraft {
   govOrderDate?: string;
   rateControlled?: boolean;
   // Multi-prescription source snapshot
-  prescriptionId?: number;
+  prescriptionId?: number | string;
   prescriptionNumber?: string;
   prescriptionDate?: Date | string;
-  patientId?: number;
+  patientId?: number | string;
   patientName?: string;
   patientSubtitle?: string;
-  ownerId?: number;
+  ownerId?: number | string;
   ownerName?: string;
-  medicineId?: number;
+  medicineId?: number | string;
   visitId?: number | string;
   visitCaseId?: number | string;
   procedureId?: number | string;
@@ -89,9 +90,9 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
   // Form states
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [selectedPatientId, setSelectedPatientId] = useState<number | ''>('');
+  const [selectedPatientId, setSelectedPatientId] = useState<number | string | ''>('');
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
-  const [prescriptionId, setPrescriptionId] = useState<number | undefined>(undefined);
+  const [prescriptionId, setPrescriptionId] = useState<number | string | undefined>(undefined);
   const [invoiceDate, setInvoiceDate] = useState<string>(
     formatLocalDateInput()
   );
@@ -107,7 +108,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   const patientPrescriptions = useLiveQuery<Prescription[]>(
     async () => {
       if (!selectedPatientId) return [];
-      return db.prescriptions.where('patientId').equals(Number(selectedPatientId)).reverse().sortBy('createdAt');
+      return db.prescriptions.where('patientId').equals(selectedPatientId as any).reverse().sortBy('createdAt');
     },
     [selectedPatientId]
   ) || [];
@@ -135,7 +136,7 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
 
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [priceMap, setPriceMap] = useState<Map<string, number>>(new Map());
-  const [modalMedicineId, setModalMedicineId] = useState<number | undefined>(undefined);
+  const [modalMedicineId, setModalMedicineId] = useState<number | string | undefined>(undefined);
   // Unified billing catalogue: all confirmed InventoryItems (medicines + consumables)
   const [inventoryStockItems, setInventoryStockItems] = useState<Array<{ item: InventoryItem; price: number; qty: number }>>([]);
 
@@ -575,10 +576,10 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
   ]);
 
   // Import prescription medicines handler (UAT Requirement 8)
-  const handleImportPrescription = async (rxIdToImport: number) => {
-    const rx = await db.prescriptions.get(rxIdToImport);
+  const handleImportPrescription = async (rxIdToImport: number | string) => {
+    const rx = await db.prescriptions.get(rxIdToImport as any);
     if (!rx) return;
-    const rxItems = await db.prescriptionItems.where('prescriptionId').equals(rxIdToImport).toArray();
+    const rxItems = await db.prescriptionItems.where('prescriptionId').equals(rxIdToImport as any).toArray();
     if (rxItems.length === 0) {
       alert('No medicines found in this prescription.');
       return;
@@ -1017,6 +1018,50 @@ export const InvoiceBuilderPage: React.FC<InvoiceBuilderProps> = ({ mode }) => {
           );
         } catch (stockErr) {
           console.warn('Inventory deduction notice:', stockErr);
+        }
+      }
+
+      // Online sync to backend
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        try {
+          let serverPatientUuid: string | null = null;
+          if (typeof selectedPatientId === 'string' && (selectedPatientId as string).includes('-')) {
+            serverPatientUuid = selectedPatientId as string;
+          } else if (selectedPatientId) {
+            const pat = await db.patients.get(Number(selectedPatientId));
+            if (pat?.serverId && pat.serverId.includes('-')) {
+              serverPatientUuid = pat.serverId;
+            }
+          }
+
+          const syncRes = await fetch(`${API_BASE}/api/invoices`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              invoiceNumber: invoiceNumber.trim() || `INV-${savedInvoiceId}`,
+              patientId: serverPatientUuid || null,
+              subtotal: ((calculations as any).subtotalPaisa || 0) / 100,
+              discountAmount: ((calculations as any).doctorDiscountPaisa || 0) / 100,
+              totalAmount: ((calculations as any).finalTotalPaisa || 0) / 100,
+              status: saveStatus === 'Issued' ? 'Issued' : 'Draft',
+              items: itemsToInsert.map((itm) => ({
+                description: itm.description || 'Service/Medicine',
+                category: itm.category || 'Medicine',
+                unitPrice: (itm.unitPricePaisa || 0) / 100,
+                quantity: itm.quantity || 1,
+                totalPrice: (itm.lineTotalPaisa || 0) / 100,
+              })),
+            }),
+          });
+          if (syncRes.ok) {
+            const serverInv = await syncRes.json();
+            if (serverInv?.id) {
+              await db.invoices.update(savedInvoiceId, { serverId: serverInv.id } as any);
+            }
+          }
+        } catch (syncErr) {
+          console.warn('[VetRx] Non-blocking: Server invoice sync failed:', syncErr);
         }
       }
 

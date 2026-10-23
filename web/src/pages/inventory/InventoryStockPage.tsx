@@ -301,6 +301,19 @@ export const InventoryStockPage: React.FC = () => {
                             {currentStock}
                           </span>{' '}
                           <span style={{ fontSize: '12px', color: '#64748b' }}>{item.stockUnit}</span>
+                          {(() => {
+                            if (!item.packSize || currentStock === 0) return null;
+                            const match = item.packSize.match(/^(\d+(?:\.\d+)?)/);
+                            if (!match) return null;
+                            const packVal = parseFloat(match[1]);
+                            if (packVal <= 0 || packVal === 1) return null;
+                            const eq = (currentStock / packVal).toFixed(2).replace(/\.00$/, '').replace(/(\.[1-9])0$/, '$1');
+                            return (
+                              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', fontWeight: 500 }}>
+                                ({eq} × {item.packSize} equivalents)
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td>
                           <div style={{ fontSize: '12px', color: '#64748b' }}>

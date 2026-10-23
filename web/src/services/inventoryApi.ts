@@ -41,6 +41,12 @@ export async function inventoryRequest<T>(path: string, options: RequestInit = {
   return res.json() as Promise<T>;
 }
 
+import type {
+  DispensePrescriptionRequest,
+  DispensePrescriptionResponse,
+  PrescriptionDispenseRecord,
+} from '../types';
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type InventoryCategory =
@@ -871,5 +877,28 @@ export const inventoryApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  dispensePrescription: (data: DispensePrescriptionRequest) =>
+    inventoryRequest<DispensePrescriptionResponse>('/api/inventory/prescriptions/dispense', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  reversePrescriptionDispensing: (data: { dispensingId: string; reason?: string }) =>
+    inventoryRequest<{
+      success: boolean;
+      reversedDispensingId: string;
+      message: string;
+    }>('/api/inventory/prescriptions/reverse-dispense', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getPrescriptionDispenseHistory: (prescriptionId: string) =>
+    inventoryRequest<{
+      prescriptionId: string;
+      count: number;
+      dispensings: PrescriptionDispenseRecord[];
+    }>(`/api/inventory/prescriptions/${prescriptionId}/dispense-history`),
 };
 

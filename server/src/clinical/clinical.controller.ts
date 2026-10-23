@@ -31,6 +31,23 @@ function getId(req: AuthenticatedRequest): string {
 }
 
 // ------------------------------------------------------------------------------
+// 0. Dashboard Performance & Aggregates Summary
+// ------------------------------------------------------------------------------
+const handleDashboardSummary = async (req: AuthenticatedRequest, res: any, next: any) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const clinicianUserId = req.query.clinicianUserId as string | undefined;
+    const summary = await ClinicalService.getDashboardSummary(practiceId, clinicianUserId);
+    res.status(200).json(summary);
+  } catch (err) {
+    next(err);
+  }
+};
+
+clinicalRouter.get('/dashboard-summary', handleDashboardSummary);
+clinicalRouter.get('/clinical/dashboard-summary', handleDashboardSummary);
+
+// ------------------------------------------------------------------------------
 // 1. Owners Router
 // ------------------------------------------------------------------------------
 const createOwnerSchema = z.object({
@@ -116,7 +133,7 @@ clinicalRouter.delete('/owners/:id', requirePracticePermission(PERMISSIONS.OWNER
 // ------------------------------------------------------------------------------
 // 2. Patients Router
 // ------------------------------------------------------------------------------
-const createPatientSchema = z.object({
+const patientBaseSchema = z.object({
   ownerId: z.string().uuid(),
   name: z.string().min(1).max(120),
   species: z.string().min(1).max(60),
@@ -124,10 +141,43 @@ const createPatientSchema = z.object({
   sex: z.string().max(20).nullable().optional(),
   ageYears: z.number().int().min(0).max(100).nullable().optional(),
   ageMonths: z.number().int().min(0).max(11).nullable().optional(),
-  weightKg: z.number().min(0).max(5000).nullable().optional(),
+  weightKg: z.union([z.number(), z.string()]).nullable().optional().transform((v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const num = Number(v);
+    return isNaN(num) ? null : num;
+  }),
   identification: z.string().max(100).nullable().optional(),
+  microchipNumber: z.string().max(100).nullable().optional(),
+  identificationRef: z.string().max(100).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
+  ageNote: z.string().max(1000).nullable().optional(),
 });
+
+const createPatientSchema = patientBaseSchema.transform((d) => ({
+  ownerId: d.ownerId,
+  name: d.name.trim(),
+  species: d.species.trim(),
+  breed: d.breed?.trim() || null,
+  sex: d.sex?.trim() || null,
+  ageYears: d.ageYears ?? null,
+  ageMonths: d.ageMonths ?? null,
+  weightKg: d.weightKg ?? null,
+  identification: (d.identification || d.microchipNumber || d.identificationRef)?.trim() || null,
+  notes: [d.ageNote?.trim(), d.notes?.trim()].filter(Boolean).join(' | ') || null,
+}));
+
+const updatePatientSchema = patientBaseSchema.partial().transform((d) => ({
+  ownerId: d.ownerId,
+  name: d.name ? d.name.trim() : undefined,
+  species: d.species ? d.species.trim() : undefined,
+  breed: d.breed !== undefined ? (d.breed ? d.breed.trim() : null) : undefined,
+  sex: d.sex !== undefined ? (d.sex ? d.sex.trim() : null) : undefined,
+  ageYears: d.ageYears !== undefined ? d.ageYears : undefined,
+  ageMonths: d.ageMonths !== undefined ? d.ageMonths : undefined,
+  weightKg: d.weightKg !== undefined ? d.weightKg : undefined,
+  identification: (d.identification || d.microchipNumber || d.identificationRef) !== undefined ? ((d.identification || d.microchipNumber || d.identificationRef)?.trim() || null) : undefined,
+  notes: (d.ageNote !== undefined || d.notes !== undefined) ? ([d.ageNote?.trim(), d.notes?.trim()].filter(Boolean).join(' | ') || null) : undefined,
+}));
 
 clinicalRouter.get('/patients', requirePracticePermission(PERMISSIONS.PATIENT_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -165,7 +215,7 @@ clinicalRouter.post('/patients', requirePracticePermission(PERMISSIONS.PATIENT_C
 clinicalRouter.patch('/patients/:id', requirePracticePermission(PERMISSIONS.PATIENT_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const data = createPatientSchema.partial().parse(req.body);
+    const data = updatePatientSchema.parse(req.body);
     const updated = await ClinicalService.updatePatient(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
@@ -186,15 +236,42 @@ clinicalRouter.delete('/patients/:id', requirePracticePermission(PERMISSIONS.PAT
 // ------------------------------------------------------------------------------
 // 3. Medicines Router
 // ------------------------------------------------------------------------------
-const createMedicineSchema = z.object({
-  name: z.string().min(1).max(150),
+const medicineBaseSchema = z.object({
+  name: z.string().max(150).optional(),
+  brandName: z.string().max(150).optional(),
   genericName: z.string().max(150).nullable().optional(),
   category: z.string().max(80).nullable().optional(),
   form: z.string().max(50).nullable().optional(),
-  strength: z.string().max(50).nullable().optional(),
+  presentation: z.string().max(50).nullable().optional(),
+  strength: z.string().max(80).nullable().optional(),
+  strengthVolume: z.string().max(80).nullable().optional(),
   unitPrice: z.number().min(0).optional(),
-  defaultDosageInstructions: z.string().max(500).nullable().optional(),
+  defaultDosageInstructions: z.string().max(1000).nullable().optional(),
+  notes: z.string().max(1000).nullable().optional(),
+  isActive: z.boolean().optional(),
 });
+
+const createMedicineSchema = medicineBaseSchema.transform((d) => ({
+  name: (d.name || d.brandName || 'Medicine').trim(),
+  genericName: d.genericName?.trim() || null,
+  category: d.category?.trim() || null,
+  form: (d.form || d.presentation || 'Tablet').trim(),
+  strength: (d.strength || d.strengthVolume)?.trim() || null,
+  unitPrice: d.unitPrice ?? 0,
+  defaultDosageInstructions: (d.defaultDosageInstructions || d.notes)?.trim() || null,
+  isActive: d.isActive ?? true,
+}));
+
+const updateMedicineSchema = medicineBaseSchema.partial().transform((d) => ({
+  name: (d.name || d.brandName) ? (d.name || d.brandName)!.trim() : undefined,
+  genericName: d.genericName !== undefined ? (d.genericName ? d.genericName.trim() : null) : undefined,
+  category: d.category !== undefined ? (d.category ? d.category.trim() : null) : undefined,
+  form: (d.form || d.presentation) ? (d.form || d.presentation)!.trim() : undefined,
+  strength: (d.strength || d.strengthVolume) !== undefined ? ((d.strength || d.strengthVolume)?.trim() || null) : undefined,
+  unitPrice: d.unitPrice !== undefined ? d.unitPrice : undefined,
+  defaultDosageInstructions: (d.defaultDosageInstructions || d.notes) !== undefined ? ((d.defaultDosageInstructions || d.notes)?.trim() || null) : undefined,
+  isActive: d.isActive !== undefined ? d.isActive : undefined,
+}));
 
 clinicalRouter.get('/medicines', requirePracticePermission(PERMISSIONS.MEDICINE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -232,7 +309,7 @@ clinicalRouter.post('/medicines', requirePracticePermission(PERMISSIONS.MEDICINE
 clinicalRouter.patch('/medicines/:id', requirePracticePermission(PERMISSIONS.MEDICINE_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const data = createMedicineSchema.partial().parse(req.body);
+    const data = updateMedicineSchema.parse(req.body);
     const updated = await ClinicalService.updateMedicine(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
@@ -253,12 +330,30 @@ clinicalRouter.delete('/medicines/:id', requirePracticePermission(PERMISSIONS.ME
 // ------------------------------------------------------------------------------
 // 4. Treatment Packages Router
 // ------------------------------------------------------------------------------
-const createPackageSchema = z.object({
+const packageBaseSchema = z.object({
   name: z.string().min(1).max(150),
   description: z.string().max(500).nullable().optional(),
   totalPrice: z.number().min(0).optional(),
+  category: z.string().max(80).optional(),
+  targetSpecies: z.array(z.string()).optional(),
+  items: z.array(z.any()).optional(),
   itemsJson: z.any().optional(),
+  isActive: z.boolean().optional(),
 });
+
+const createPackageSchema = packageBaseSchema.transform((d) => ({
+  name: d.name.trim(),
+  description: d.description?.trim() || null,
+  totalPrice: d.totalPrice ?? 0,
+  itemsJson: d.itemsJson ?? d.items ?? [],
+}));
+
+const updatePackageSchema = packageBaseSchema.partial().transform((d) => ({
+  name: d.name ? d.name.trim() : undefined,
+  description: d.description !== undefined ? (d.description ? d.description.trim() : null) : undefined,
+  totalPrice: d.totalPrice !== undefined ? d.totalPrice : undefined,
+  itemsJson: (d.itemsJson !== undefined || d.items !== undefined) ? (d.itemsJson ?? d.items ?? []) : undefined,
+}));
 
 clinicalRouter.get('/packages', requirePracticePermission(PERMISSIONS.PACKAGE_VIEW), async (req: AuthenticatedRequest, res, next) => {
   try {
@@ -295,7 +390,7 @@ clinicalRouter.post('/packages', requirePracticePermission(PERMISSIONS.PACKAGE_C
 clinicalRouter.patch('/packages/:id', requirePracticePermission(PERMISSIONS.PACKAGE_UPDATE), async (req: AuthenticatedRequest, res, next) => {
   try {
     const practiceId = getPracticeId(req);
-    const data = createPackageSchema.partial().parse(req.body);
+    const data = updatePackageSchema.parse(req.body);
     const updated = await ClinicalService.updatePackage(getId(req), practiceId, data, req.user?.id);
     res.status(200).json(updated);
   } catch (err) {
@@ -317,8 +412,8 @@ clinicalRouter.delete('/packages/:id', requirePracticePermission(PERMISSIONS.PAC
 // 5. Prescriptions Router
 // ------------------------------------------------------------------------------
 const createPrescriptionSchema = z.object({
-  patientId: z.string().uuid(),
-  rxNumber: z.string().min(1).max(50),
+  patientId: z.string().min(1),
+  rxNumber: z.string().min(1).max(50).optional(),
   diagnosis: z.string().max(300).nullable().optional(),
   notes: z.string().max(1000).nullable().optional(),
   status: z.string().max(50).optional(),
@@ -330,15 +425,30 @@ const createPrescriptionSchema = z.object({
   visitCaseId: z.string().nullable().optional(),
   items: z.array(
     z.object({
-      medicineId: z.string().uuid().nullable().optional(),
-      medicineName: z.string().min(1).max(150),
-      dosage: z.string().min(1).max(80),
-      frequency: z.string().min(1).max(80),
+      medicineId: z.string().nullable().optional().transform((v) => (v && v.includes('-') && v.length >= 32 ? v : null)),
+      medicineName: z.string().max(150).optional(),
+      brandName: z.string().max(150).optional(),
+      dosage: z.string().max(80).optional(),
+      dose: z.union([z.string(), z.number()]).optional().transform((v) => (v !== undefined && v !== null ? String(v) : undefined)),
+      doseUnit: z.string().max(30).optional(),
+      frequency: z.string().max(80).optional(),
       durationDays: z.number().int().min(1).optional(),
       totalQuantity: z.number().min(0).optional(),
+      quantity: z.number().min(0).optional(),
       quantityUnit: z.string().max(30).nullable().optional(),
+      unit: z.string().max(30).nullable().optional(),
       instructions: z.string().max(500).nullable().optional(),
-    })
+      directions: z.string().max(500).nullable().optional(),
+    }).transform((itm) => ({
+      medicineId: itm.medicineId || null,
+      medicineName: (itm.medicineName || itm.brandName || 'Medicine').trim(),
+      dosage: (itm.dosage || (itm.dose ? `${itm.dose} ${itm.doseUnit || ''}`.trim() : 'As directed')).trim(),
+      frequency: (itm.frequency || 'OD').trim(),
+      durationDays: itm.durationDays ?? 1,
+      totalQuantity: itm.totalQuantity ?? itm.quantity ?? 1,
+      quantityUnit: itm.quantityUnit || itm.unit || null,
+      instructions: itm.instructions || itm.directions || null,
+    }))
   ).min(1),
 });
 
@@ -535,7 +645,7 @@ clinicalRouter.delete(
 // 6. Invoices Router
 // ------------------------------------------------------------------------------
 const createInvoiceSchema = z.object({
-  patientId: z.string().uuid().nullable().optional(),
+  patientId: z.string().nullable().optional().transform((v) => (v && v.includes('-') && v.length >= 32 ? v : null)),
   invoiceNumber: z.string().min(1).max(50),
   subtotal: z.number().min(0),
   taxAmount: z.number().min(0).optional(),
@@ -544,7 +654,7 @@ const createInvoiceSchema = z.object({
   status: z.enum(['Draft', 'Issued', 'Cancelled']).optional(),
   items: z.array(
     z.object({
-      prescriptionId: z.string().uuid().nullable().optional(),
+      prescriptionId: z.string().nullable().optional().transform((v) => (v && v.includes('-') && v.length >= 32 ? v : null)),
       description: z.string().min(1).max(200),
       category: z.string().max(50).optional(),
       unitPrice: z.number().min(0),

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VetRx</string>
+    <string name="title_activity_main">VetRx</string>
+    <string name="package_name">com.vetrx.app</string>
+    <string name="custom_url_scheme">com.vetrx.app</string>
+</resources>

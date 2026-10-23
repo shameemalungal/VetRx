@@ -6,6 +6,8 @@
 
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { Capacitor } from '@capacitor/core';
+import { nativeService, blobToBase64 } from '../services/nativeService';
 
 /**
  * Sanitizes a file name for safe cross-platform saving.
@@ -318,10 +320,31 @@ export function savePdfNative(): void {
 export async function savePdfWithFilePicker(
   blob: Blob,
   suggestedFilename: string
-): Promise<{ success: boolean; canceled?: boolean; error?: string }> {
+): Promise<{ success: boolean; canceled?: boolean; error?: string; destination?: string; filename?: string; uri?: string; path?: string }> {
   const cleanName = sanitizeFilename(suggestedFilename);
 
-  // 1. Try File System Access API (Chrome, Edge, Opera, Desktop Safari 15.2+)
+  // 1. Native Mobile / Android Environment: Physical Save to Downloads Directory
+  if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+    try {
+      const base64 = await blobToBase64(blob);
+      const res = await nativeService.savePdfToDownloads(base64, cleanName);
+      if (res.success && res.path) {
+        return {
+          success: true,
+          destination: res.path,
+          filename: res.filename || cleanName,
+          uri: res.uri,
+          path: res.path,
+        };
+      }
+      return { success: false, error: res.error || 'Failed to save PDF to Downloads on device.' };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Native export failed';
+      return { success: false, error: message };
+    }
+  }
+
+  // 2. Try File System Access API (Chrome, Edge, Opera, Desktop Safari 15.2+)
   if (typeof (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function') {
     try {
       const picker = (window as unknown as {
@@ -344,7 +367,7 @@ export async function savePdfWithFilePicker(
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
-      return { success: true };
+      return { success: true, destination: 'Selected Folder', filename: cleanName };
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         // User deliberately cancelled the file picker dialog
@@ -354,7 +377,7 @@ export async function savePdfWithFilePicker(
     }
   }
 
-  // 2. Direct browser download fallback (<a download>)
+  // 3. Direct browser download fallback (<a download>)
   try {
     const blobUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -369,7 +392,7 @@ export async function savePdfWithFilePicker(
       URL.revokeObjectURL(blobUrl);
     }, 1000);
 
-    return { success: true };
+    return { success: true, destination: 'Downloads', filename: cleanName };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Download failed';
     return { success: false, error: message };

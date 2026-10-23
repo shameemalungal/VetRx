@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import { db } from '../db/schema';
+import { API_BASE } from '../config/api';
 import type {
   Call,
   OwnerLocation,
@@ -231,7 +232,7 @@ export class CvpService {
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
         const resolvedOwnerUuid = await this.resolveOwnerServerUuid(data.ownerId);
-        const res = await fetch('/api/calls', {
+        const res = await fetch(`${API_BASE}/api/calls`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -270,13 +271,102 @@ export class CvpService {
     return newCall;
   }
 
-  static async updateCall(id: number | string, updates: Partial<Call>): Promise<void> {
-    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    if (isNaN(numId)) return;
-    await db.calls.update(numId, {
-      ...updates,
-      updatedAt: new Date(),
-    });
+  static async updateCall(
+    id: number | string,
+    updates: Partial<Call>
+  ): Promise<Call> {
+    const all = await db.calls.toArray();
+    const localCall = all.find((c) => String(c.id) === String(id) || (c as any).serverId === String(id));
+    const targetServerId = (localCall as any)?.serverId || (typeof id === 'string' && id.includes('-') ? id : null);
+
+    let updatedFromServer: any = null;
+    if (targetServerId) {
+      const res = await fetch(`${API_BASE}/api/calls/${targetServerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          callerPhone: updates.callerPhone,
+          ownerId: updates.ownerId,
+          tempOwnerName: updates.tempOwnerName || updates.ownerName,
+          tempPatientName: updates.tempPatientName,
+          species: updates.species,
+          animalCount: updates.animalCount,
+          symptoms: updates.symptoms,
+          tentativeAssessment: updates.tentativeAssessment,
+          priority: updates.priority,
+          flexibility: updates.flexibility,
+          preferredDate: updates.preferredDate,
+          locationAddress: updates.locationAddress,
+          latitude: updates.latitude,
+          longitude: updates.longitude,
+          status: updates.status,
+          plannedProcedure: updates.plannedProcedure,
+          notes: updates.notes,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to update call on server (${res.status})`);
+      }
+      updatedFromServer = await res.json();
+    }
+
+    // Mirror to Dexie for immediate reactive UI updates
+    if (localCall?.id) {
+      await db.calls.update(localCall.id, {
+        ...updates,
+        ...(updatedFromServer
+          ? {
+              callerPhone: updatedFromServer.callerPhone,
+              priority: updatedFromServer.priority,
+              flexibility: updatedFromServer.flexibility,
+              status: updatedFromServer.status,
+              symptoms: updatedFromServer.symptoms,
+              locationAddress: updatedFromServer.locationAddress,
+              notes: updatedFromServer.notes,
+            }
+          : {}),
+        updatedAt: new Date(),
+      } as any);
+    }
+
+    return (updatedFromServer || { ...(localCall || {}), ...updates, id }) as Call;
+  }
+
+  static async deleteCall(id: number | string): Promise<{ success: boolean; message?: string }> {
+    const all = await db.calls.toArray();
+    const localCall = all.find((c) => String(c.id) === String(id) || (c as any).serverId === String(id));
+    const targetServerId = (localCall as any)?.serverId || (typeof id === 'string' && id.includes('-') ? id : null);
+
+    if (targetServerId) {
+      const res = await fetch(`${API_BASE}/api/calls/${targetServerId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to delete call (${res.status})`);
+      }
+    }
+
+    // Server confirmed deletion -> remove from local Dexie store
+    if (localCall?.id) {
+      await db.calls.delete(localCall.id as any);
+    }
+    if (typeof id === 'string' && id.includes('-')) {
+      const remaining = await db.calls.filter((c) => (c as any).serverId === id).toArray();
+      for (const r of remaining) {
+        if (r.id) await db.calls.delete(r.id);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Call deleted successfully.',
+    };
   }
 
   static async postponeCall(
@@ -304,7 +394,7 @@ export class CvpService {
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
         const dateIso = typeof targetDate === 'string' ? new Date(targetDate).toISOString() : targetDate.toISOString();
-        await fetch(`/api/calls/${id}/postpone`, {
+        await fetch(`${API_BASE}/api/calls/${id}/postpone`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -324,7 +414,7 @@ export class CvpService {
     // Try backend if online or if localCall not found
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch(`/api/calls/${id}`, {
+        const res = await fetch(`${API_BASE}/api/calls/${id}`, {
           credentials: 'include',
         });
         if (res.ok) {
@@ -473,7 +563,7 @@ export class CvpService {
           }))
         );
 
-        const res = await fetch(`/api/calls/${serverCallId}/schedule`, {
+        const res = await fetch(`${API_BASE}/api/calls/${serverCallId}/schedule`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -661,7 +751,7 @@ export class CvpService {
       try {
         const serverCallId = (targetCall as any)?.serverId || (targetCall?.id && String(targetCall.id).includes('-') ? targetCall.id : null);
         if (serverCallId) {
-          await fetch(`/api/calls/${serverCallId}`, {
+          await fetch(`${API_BASE}/api/calls/${serverCallId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -695,7 +785,7 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch(`/api/calls/${id}/close`, {
+        const res = await fetch(`${API_BASE}/api/calls/${id}/close`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -854,7 +944,7 @@ export class CvpService {
     const serverUuid = localOwner.serverId || (typeof ownerId === 'string' && ownerId.includes('-') ? ownerId : null);
     if (serverUuid && typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch(`/api/clinical/owners/${serverUuid}/link-phone`, {
+        const res = await fetch(`${API_BASE}/api/clinical/owners/${serverUuid}/link-phone`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -933,7 +1023,7 @@ export class CvpService {
     // Online sync to backend
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch('/api/owners', {
+        const res = await fetch(`${API_BASE}/api/owners`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -997,7 +1087,7 @@ export class CvpService {
         const ownerRecord = await db.owners.get(data.ownerId);
         const serverOwnerId = (ownerRecord as any)?.serverId;
         if (serverOwnerId) {
-          const res = await fetch('/api/patients', {
+          const res = await fetch(`${API_BASE}/api/patients`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1097,7 +1187,7 @@ export class CvpService {
         if (filters?.date) params.set('date', filters.date);
         if (filters?.callId) params.set('callId', filters.callId);
         if (filters?.status) params.set('status', filters.status);
-        const res = await fetch(`/api/visits?${params.toString()}`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE}/api/visits?${params.toString()}`, { credentials: 'include' });
         if (res.ok) {
           const remoteVisits: Visit[] = await res.json();
           if (Array.isArray(remoteVisits)) {
@@ -1135,7 +1225,7 @@ export class CvpService {
     // Try backend if online
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        const res = await fetch(`/api/visits?date=${todayStr}`, {
+        const res = await fetch(`${API_BASE}/api/visits?date=${todayStr}`, {
           credentials: 'include',
         });
         if (res.ok) {
@@ -1202,7 +1292,7 @@ export class CvpService {
     // Try backend sync if online
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch('/api/daily-plans', {
+        await fetch(`${API_BASE}/api/daily-plans`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1243,7 +1333,7 @@ export class CvpService {
     // Try backend confirmation sync if online
     if (typeof window !== 'undefined' && navigator.onLine && saved.id) {
       try {
-        await fetch(`/api/daily-plans/${saved.id}/confirm`, {
+        await fetch(`${API_BASE}/api/daily-plans/${saved.id}/confirm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1285,7 +1375,7 @@ export class CvpService {
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
         const dateIso = typeof targetDate === 'string' ? new Date(targetDate).toISOString() : targetDate.toISOString();
-        await fetch(`/api/visits/${visitId}/postpone`, {
+        await fetch(`${API_BASE}/api/visits/${visitId}/postpone`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1316,7 +1406,7 @@ export class CvpService {
     // Authoritative Server Fallback if not found locally or if online
     if (typeof window !== 'undefined' && navigator.onLine && (!visit || !visit.ownerName || !visit.cases || visit.cases.length === 0)) {
       try {
-        const res = await fetch(`/api/visits/${visitId}`, {
+        const res = await fetch(`${API_BASE}/api/visits/${visitId}`, {
           credentials: 'include',
           headers: { 'Accept': 'application/json' },
         });
@@ -1522,7 +1612,7 @@ export class CvpService {
     // Online background sync
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch(`/api/visits/${visit.id}/arrive`, {
+        await fetch(`${API_BASE}/api/visits/${visit.id}/arrive`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1571,7 +1661,7 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch(`/api/visits/${visit.id}/start`, {
+        await fetch(`${API_BASE}/api/visits/${visit.id}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1619,7 +1709,7 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch(`/api/visits/${visit.id}/procedures`, {
+        await fetch(`${API_BASE}/api/visits/${visit.id}/procedures`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1687,7 +1777,7 @@ export class CvpService {
         const serverPatientId = await this.resolvePatientServerUuid(newUsage.patientId);
         const serverMedicineId = await this.resolveMedicineServerUuid(newUsage.medicineId);
 
-        const res = await fetch(`/api/visits/${visit.id}/medicine-usage`, {
+        const res = await fetch(`${API_BASE}/api/visits/${visit.id}/medicine-usage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1780,7 +1870,7 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch(`/api/visits/${visit.id}/complete`, {
+        await fetch(`${API_BASE}/api/visits/${visit.id}/complete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -1820,7 +1910,7 @@ export class CvpService {
 
     if (typeof window !== 'undefined' && navigator.onLine) {
       try {
-        await fetch(`/api/visits/${visit.id}/resume`, {
+        await fetch(`${API_BASE}/api/visits/${visit.id}/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

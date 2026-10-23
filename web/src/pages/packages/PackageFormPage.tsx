@@ -8,9 +8,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
-import type { Medicine } from '../../types';
+import type { Medicine, TreatmentPackage, TreatmentPackageItem } from '../../types';
 import { useSettingsStore } from '../../store/settingsStore';
 import { Icon } from '../../components/ui/Icon';
+import { packagesApi } from '../../services/api/packagesApi';
 import './Packages.css';
 
 interface PackageFormPageProps {
@@ -18,7 +19,7 @@ interface PackageFormPageProps {
 }
 
 interface DraftMedItem {
-  medicineId?: number;
+  medicineId?: number | string;
   brandName: string;
   genericName?: string;
   presentation: string;
@@ -58,20 +59,23 @@ const SPECIES_OPTIONS = [
 export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const packageId = id ? parseInt(id, 10) : undefined;
+  const packageNumericId = id ? parseInt(id, 10) : undefined;
+  const isNumericId = !isNaN(packageNumericId || NaN);
   const { practitioner, organisation } = useSettingsStore();
+
+  const [serverPkg, setServerPkg] = useState<(TreatmentPackage & { items: TreatmentPackageItem[] }) | null>(null);
 
   // ── Database Queries ──────────────────────────────────────────
   const existingPkg = useLiveQuery(
-    () => (packageId ? db.treatmentPackages.get(packageId) : undefined),
-    [packageId]
+    () => (isNumericId && packageNumericId ? db.treatmentPackages.get(packageNumericId) : undefined),
+    [isNumericId, packageNumericId]
   );
   const existingItems = useLiveQuery(
     () =>
-      packageId
-        ? db.treatmentPackageItems.where('packageId').equals(packageId).sortBy('sortOrder')
+      isNumericId && packageNumericId
+        ? db.treatmentPackageItems.where('packageId').equals(packageNumericId).sortBy('sortOrder')
         : [],
-    [packageId]
+    [isNumericId, packageNumericId]
   );
   const availableMedicines = useLiveQuery(
     () => db.medicines.filter((m) => m.isActive !== false).toArray(),
@@ -134,9 +138,53 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
     }
   };
 
-  // Populate form on Edit/View mode
+  // Populate form on Edit/View mode from Server or Dexie
   useEffect(() => {
-    if (existingPkg) {
+    if (id && mode !== 'new') {
+      packagesApi
+        .getById(id)
+        .then((pkg) => {
+          setServerPkg(pkg);
+          setName(pkg.name || '');
+          if (pkg.targetSpecies && pkg.targetSpecies.length > 0) {
+            setTargetSpecies(pkg.targetSpecies);
+          } else if (pkg.species) {
+            setTargetSpecies([pkg.species]);
+          } else {
+            setTargetSpecies(['General']);
+          }
+          setCategory(pkg.category || 'Dermatology / Otic');
+          setDescription(pkg.description || '');
+          setDefaultAdvice(pkg.defaultInstructions || '');
+          setProtocolCode(pkg.protocolCode || `PROTO-${String(pkg.id || 1).slice(0, 6)}`);
+
+          if (pkg.items && pkg.items.length > 0) {
+            setItems(
+              pkg.items.map((itm) => ({
+                medicineId: itm.medicineId,
+                brandName: itm.brandName,
+                genericName: itm.genericName,
+                presentation: itm.presentation || 'Tablet',
+                strengthVolume: itm.strengthVolume || itm.presentation,
+                dose: itm.dose || itm.strengthVolume,
+                quantity: itm.quantity,
+                unit: itm.unit || 'units',
+                frequency: itm.frequency,
+                durationDays: itm.durationDays,
+                route: itm.route,
+                directions: itm.directions,
+              }))
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not fetch package from server, checking local Dexie:', err);
+        });
+    }
+  }, [id, mode]);
+
+  useEffect(() => {
+    if (!serverPkg && existingPkg) {
       setName(existingPkg.name || '');
       if (existingPkg.targetSpecies && existingPkg.targetSpecies.length > 0) {
         setTargetSpecies(existingPkg.targetSpecies);
@@ -158,10 +206,10 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
         existingPkg.protocolCode || `PROTO-${String(existingPkg.id || 1).padStart(2, '0')}`
       );
     }
-  }, [existingPkg]);
+  }, [existingPkg, serverPkg]);
 
   useEffect(() => {
-    if (existingItems && existingItems.length > 0) {
+    if (!serverPkg && existingItems && existingItems.length > 0) {
       setItems(
         existingItems.map((itm) => ({
           medicineId: itm.medicineId,
@@ -179,7 +227,7 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
         }))
       );
     }
-  }, [existingItems]);
+  }, [existingItems, serverPkg]);
 
   // Max duration days calculation
   const maxTreatmentDays = useMemo(() => {
@@ -325,57 +373,26 @@ export const PackageFormPage: React.FC<PackageFormPageProps> = ({ mode }) => {
 
     setIsSaving(true);
     try {
-      const now = new Date();
-      let targetPkgId = packageId;
-
-      if (mode === 'new' || !targetPkgId) {
-        targetPkgId = (await db.treatmentPackages.add({
-          name: name.trim(),
-          category,
-          species: targetSpecies.join(', '),
-          targetSpecies,
-          description: description.trim() || undefined,
-          defaultInstructions: defaultAdvice.trim() || undefined,
-          protocolCode: protocolCode.trim() || `PROTO-${Date.now().toString().slice(-4)}`,
-          usageCount: 0,
-          createdAt: now,
-          updatedAt: now,
-        })) as number;
-      } else {
-        await db.treatmentPackages.update(targetPkgId, {
-          name: name.trim(),
-          category,
-          species: targetSpecies.join(', '),
-          targetSpecies,
-          description: description.trim() || undefined,
-          defaultInstructions: defaultAdvice.trim() || undefined,
-          protocolCode: protocolCode.trim() || undefined,
-          updatedAt: now,
-        });
-
-        // Delete existing items for clean replace
-        await db.treatmentPackageItems.where('packageId').equals(targetPkgId).delete();
-      }
-
-      // Add constituent items
-      await db.treatmentPackageItems.bulkAdd(
-        items.map((itm, idx) => ({
-          packageId: targetPkgId as number,
+      const payload = {
+        name: name.trim(),
+        category,
+        species: targetSpecies.join(', '),
+        targetSpecies,
+        protocolCode: protocolCode.trim() || undefined,
+        description: description.trim() || undefined,
+        defaultInstructions: defaultAdvice.trim() || undefined,
+        items: items.map((itm, idx) => ({
+          ...itm,
           medicineId: itm.medicineId,
-          brandName: itm.brandName,
-          genericName: itm.genericName,
-          presentation: itm.presentation,
-          strengthVolume: itm.strengthVolume,
-          dose: itm.dose || itm.strengthVolume,
-          quantity: itm.quantity,
-          unit: itm.unit,
-          frequency: itm.frequency,
-          durationDays: itm.durationDays,
-          route: itm.route,
-          directions: itm.directions,
           sortOrder: idx,
-        }))
-      );
+        })) as any,
+      };
+
+      if (mode === 'new' || !id) {
+        await packagesApi.create(payload);
+      } else {
+        await packagesApi.update(id, payload);
+      }
 
       setIsDirty(false);
       setSaveSuccess(true);

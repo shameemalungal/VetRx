@@ -33,30 +33,30 @@ import type {
 import { ensureMasterDataSeeded } from './masterData';
 
 export class VetRxDatabase extends Dexie {
-  practitioners!:              Table<Practitioner, number>;
-  organisations!:              Table<Organisation, number>;
-  owners!:                     Table<Owner, number>;
-  patients!:                   Table<Patient, number>;
-  medicines!:                  Table<Medicine, number>;
-  prescriptions!:              Table<Prescription, number>;
-  prescriptionItems!:          Table<PrescriptionItem, number>;
-  treatmentPackages!:          Table<TreatmentPackage, number>;
-  treatmentPackageItems!:      Table<TreatmentPackageItem, number>;
-  invoices!:                   Table<Invoice, number>;
-  invoiceItems!:               Table<InvoiceItem, number>;
-  auditEvents!:                Table<AuditEvent, number>;
-  masterDataItems!:            Table<MasterDataItem, number>;
-  calls!:                      Table<Call, number>;
-  visits!:                     Table<Visit, number>;
-  visitCases!:                 Table<VisitCase, number>;
-  visitProcedures!:            Table<VisitProcedure, number>;
-  visitMedicineUsages!:        Table<VisitMedicineUsage, number>;
-  visitTimelineEvents!:        Table<VisitTimelineEvent, number>;
-  ownerLocations!:             Table<OwnerLocation, number>;
-  dailyPlans!:                 Table<DailyPlan, number>;
-  followUps!:                  Table<FollowUp, number>;
-  recurringSchedules!:         Table<RecurringSchedule, number>;
-  procedureDurationEstimates!: Table<ProcedureDurationEstimate, number>;
+  practitioners!:              Table<Practitioner, number | string>;
+  organisations!:              Table<Organisation, number | string>;
+  owners!:                     Table<Owner, number | string>;
+  patients!:                   Table<Patient, number | string>;
+  medicines!:                  Table<Medicine, number | string>;
+  prescriptions!:              Table<Prescription, number | string>;
+  prescriptionItems!:          Table<PrescriptionItem, number | string>;
+  treatmentPackages!:          Table<TreatmentPackage, number | string>;
+  treatmentPackageItems!:      Table<TreatmentPackageItem, number | string>;
+  invoices!:                   Table<Invoice, number | string>;
+  invoiceItems!:               Table<InvoiceItem, number | string>;
+  auditEvents!:                Table<AuditEvent, number | string>;
+  masterDataItems!:            Table<MasterDataItem, number | string>;
+  calls!:                      Table<Call, number | string>;
+  visits!:                     Table<Visit, number | string>;
+  visitCases!:                 Table<VisitCase, number | string>;
+  visitProcedures!:            Table<VisitProcedure, number | string>;
+  visitMedicineUsages!:        Table<VisitMedicineUsage, number | string>;
+  visitTimelineEvents!:        Table<VisitTimelineEvent, number | string>;
+  ownerLocations!:             Table<OwnerLocation, number | string>;
+  dailyPlans!:                 Table<DailyPlan, number | string>;
+  followUps!:                  Table<FollowUp, number | string>;
+  recurringSchedules!:         Table<RecurringSchedule, number | string>;
+  procedureDurationEstimates!: Table<ProcedureDurationEstimate, number | string>;
 
   constructor(dbName: string = 'VetRxDB_guest') {
     super(dbName);

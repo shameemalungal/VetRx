@@ -28,6 +28,9 @@ import { CloseCallModal } from '../../components/cvp/CloseCallModal';
 import { PostponeModal } from '../../components/cvp/PostponeModal';
 import { CreateFollowUpModal } from '../../components/cvp/CreateFollowUpModal';
 import { ChangePriorityModal } from '../../components/cvp/ChangePriorityModal';
+import { EditCallModal } from '../../components/cvp/EditCallModal';
+import { DeleteCallModal } from '../../components/cvp/DeleteCallModal';
+import { Edit3, Trash2 } from 'lucide-react';
 import './Cvp.css';
 
 export const CaseDetailPage: React.FC = () => {
@@ -44,6 +47,8 @@ export const CaseDetailPage: React.FC = () => {
   const [isPostponeOpen, setIsPostponeOpen] = useState<boolean>(false);
   const [isFollowUpOpen, setIsFollowUpOpen] = useState<boolean>(false);
   const [isChangePriorityOpen, setIsChangePriorityOpen] = useState<boolean>(false);
+  const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState<boolean>(false);
 
   // Notification Banner
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -249,7 +254,25 @@ export const CaseDetailPage: React.FC = () => {
           <span>Back to Calls</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsEditOpen(true)}
+            className="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-slate-700 hover:bg-teal-50 hover:text-teal-900 border border-slate-300 flex items-center gap-1.5 shadow-xs transition-all"
+            id="btn-edit-call-detail"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-teal-700" />
+            <span>Edit Call</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsDeleteOpen(true)}
+            className="px-3 py-1.5 rounded-full text-xs font-bold bg-white text-red-600 hover:bg-red-50 border border-red-200 flex items-center gap-1.5 shadow-xs transition-all"
+            id="btn-delete-call-detail"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-600" />
+            <span>Delete Call</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsChangePriorityOpen(true)}
@@ -621,6 +644,33 @@ export const CaseDetailPage: React.FC = () => {
         entityName={call.ownerName || call.tempOwnerName || `Case #${call.id}`}
         onClose={() => setIsChangePriorityOpen(false)}
         onConfirm={handlePriorityUpdate}
+      />
+
+      {/* Edit Call Modal */}
+      <EditCallModal
+        isOpen={isEditOpen}
+        call={call}
+        onClose={() => setIsEditOpen(false)}
+        onSaved={async (updated) => {
+          setCall(updated);
+          showToast('Call updated successfully.');
+          if (id) await loadCallData(id);
+        }}
+      />
+
+      {/* Delete Call Modal */}
+      <DeleteCallModal
+        isOpen={isDeleteOpen}
+        call={call}
+        onClose={() => setIsDeleteOpen(false)}
+        onDeleted={() => {
+          navigate('/calls');
+        }}
+        onCancelled={async (updated) => {
+          setCall(updated);
+          showToast('Call marked as cancelled.');
+          if (id) await loadCallData(id);
+        }}
       />
     </div>
   );

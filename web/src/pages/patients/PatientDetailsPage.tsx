@@ -11,6 +11,7 @@ import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } from '../../utils/patientFormat';
 import type { Patient } from '../../types';
+import { ownersApi } from '../../services/api/ownersApi';
 import './Patients.css';
 
 function fmtRupees(paisa: number): string {
@@ -28,7 +29,7 @@ function formatDate(d?: Date): string {
 
 export const PatientDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const patientId = Number(id);
+  const patientId = id ? (isNaN(Number(id)) ? id : Number(id)) : undefined;
 
   // ── Live Queries ──────────────────────────────────────────────
   const patient = useLiveQuery(
@@ -136,6 +137,18 @@ export const PatientDetailsPage: React.FC = () => {
         return;
       }
 
+      try {
+        await ownersApi.update(String(owner.id), {
+          name: trimmedName,
+          phone: cleanPhone,
+          email: ownerEmail.trim() || undefined,
+          address: ownerAddress.trim() || undefined,
+          notes: ownerNotes.trim() || undefined,
+        });
+      } catch (apiErr) {
+        console.warn('Backend owner update warning:', apiErr);
+      }
+
       await db.owners.update(owner.id, {
         name: trimmedName,
         phone: cleanPhone,
@@ -200,7 +213,7 @@ export const PatientDetailsPage: React.FC = () => {
   const isCanine = patient.species === 'Canine';
   const isFeline = patient.species === 'Feline';
   const avatarClass = isCanine ? 'avatar-canine' : isFeline ? 'avatar-feline' : 'avatar-other';
-  const identification = patient.identificationRef || (patient.id ? `#CAN-${8800 + patient.id}` : undefined);
+  const identification = patient.identificationRef || (patient.id ? (typeof patient.id === 'number' ? `#CAN-${8800 + patient.id}` : `#CAN-${String(patient.id).slice(0, 8)}`) : undefined);
 
   return (
     <div className="patients-page">
@@ -278,7 +291,14 @@ export const PatientDetailsPage: React.FC = () => {
                   <div className="flex items-center gap-space-sm flex-wrap">
                     <h1 className="profile-animal-name">{formatOwnerPrimary(owner, 'Client')}</h1>
                     {owner?.phone && (
-                      <span className="text-sm font-mono text-outline font-semibold">({owner.phone})</span>
+                      <a
+                        href={`tel:${owner.phone.replace(/[^\d+]/g, '')}`}
+                        className="text-sm font-mono text-primary font-semibold hover:underline inline-flex items-center gap-1"
+                        title={`Call ${owner.name || 'Owner'}`}
+                      >
+                        <Icon name="phone" size={13} />
+                        <span>({owner.phone})</span>
+                      </a>
                     )}
                     {identification && (
                       <span className="patient-id-badge">{identification}</span>
@@ -534,7 +554,15 @@ export const PatientDetailsPage: React.FC = () => {
                         <Icon name="map-pin" size={15} />
                       </div>
                       <div className="contact-value-wrap">
-                        <span className="contact-text contact-address">{owner.address}</span>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(owner.address)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="contact-link contact-address hover:underline"
+                          title="Open address in Maps"
+                        >
+                          {owner.address}
+                        </a>
                       </div>
                     </div>
                   )}

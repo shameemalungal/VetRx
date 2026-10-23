@@ -20,9 +20,10 @@ import { resizeImageFile } from '../utils/imageResize';
 import { useAuth } from '../context/AuthContext';
 import { SubscriptionBillingSection } from '../components/commercial/SubscriptionBillingSection';
 import { UsersPermissionsSection } from '../components/settings/UsersPermissionsSection';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { API_BASE } from '../config/api';
 import './SettingsPage.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 function FormGroup({
   label,
@@ -1550,8 +1551,12 @@ function AccountSecuritySection() {
     void fetchIdentities();
   }, []);
 
-  const handleConnectGoogle = () => {
-    window.location.href = `${API_BASE}/api/auth/google/start?action=link&returnTo=/settings?tab=account`;
+  const handleConnectGoogle = async () => {
+    if (Capacitor.isNativePlatform()) {
+      await Browser.open({ url: `${API_BASE}/api/auth/google/start?action=link&returnTo=/settings?tab=account&platform=android` });
+    } else {
+      window.location.href = `${API_BASE}/api/auth/google/start?action=link&returnTo=/settings?tab=account`;
+    }
   };
 
   const handleDisconnectGoogle = async () => {

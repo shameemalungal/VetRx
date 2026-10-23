@@ -3,18 +3,54 @@
 // Displays field call with priority accents, mobile actions (tel, WA, postpone)
 // ==============================================================================
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Call } from '../../types';
+import { MoreVertical, Edit3, Trash2 } from 'lucide-react';
 
 interface CallCardProps {
   call: Call;
   onPostpone?: (call: Call) => void;
   onSelect?: (call: Call) => void;
   onReviewCase?: (call: Call) => void;
+  onEdit?: (call: Call) => void;
+  onDelete?: (call: Call) => void;
 }
 
-export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect, onReviewCase }) => {
+export const CallCard: React.FC<CallCardProps> = ({
+  call,
+  onPostpone,
+  onSelect,
+  onReviewCase,
+  onEdit,
+  onDelete,
+}) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const priorityClass = `priority-${call.priority.toLowerCase()}`;
+
+  // Close dropdown menu on click outside or Escape
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMenuOpen]);
 
   const formatTimeAgo = (dateInput: Date | string) => {
     const d = new Date(dateInput);
@@ -68,8 +104,8 @@ export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect, 
         }
       }}
     >
-      <div className="cvp-card-top">
-        <div className="cvp-badges-row">
+      <div className="cvp-card-top flex items-center justify-between">
+        <div className="cvp-badges-row flex-1 min-w-0">
           <span className={`cvp-priority-tag ${call.priority.toLowerCase()}`}>
             {call.priority.replace(/_/g, ' ')}
           </span>
@@ -99,7 +135,64 @@ export const CallCard: React.FC<CallCardProps> = ({ call, onPostpone, onSelect, 
             </span>
           )}
         </div>
-        <span className="cvp-time-stamp">{formatTimeAgo(call.createdAt)}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="cvp-time-stamp">{formatTimeAgo(call.createdAt)}</span>
+          {/* Accessible Actions Menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMenuOpen((prev) => !prev);
+              }}
+              aria-label="Call options"
+              aria-haspopup="true"
+              aria-expanded={isMenuOpen}
+              title="More actions"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {isMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-30 animate-in fade-in zoom-in-95 duration-100"
+                role="menu"
+                aria-orientation="vertical"
+              >
+                {onEdit && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 flex items-center gap-2 transition-colors"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMenuOpen(false);
+                      onEdit(call);
+                    }}
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                    <span>Edit Call</span>
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsMenuOpen(false);
+                      onDelete(call);
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                    <span>Delete Call</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <h3 className="cvp-owner-name">

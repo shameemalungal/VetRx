@@ -10,6 +10,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import type { Species, Sex } from '../../types';
+import { ownersApi } from '../../services/api/ownersApi';
+import { patientsApi } from '../../services/api/patientsApi';
 import './Patients.css';
 
 const SPECIES_OPTIONS: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
@@ -24,9 +26,10 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const patientId = id ? Number(id) : undefined;
-  const preselectedOwnerId = searchParams.get('ownerId')
-    ? Number(searchParams.get('ownerId'))
+  const patientId = id ? (isNaN(Number(id)) ? id : Number(id)) : undefined;
+  const ownerIdParam = searchParams.get('ownerId');
+  const preselectedOwnerId = ownerIdParam
+    ? (isNaN(Number(ownerIdParam)) ? ownerIdParam : Number(ownerIdParam))
     : undefined;
 
   // ── Master Data Queries ───────────────────────────────────────
@@ -110,7 +113,7 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
 
   // Owner association
   const [ownerMode, setOwnerMode] = useState<'existing' | 'new'>('existing');
-  const [selectedOwnerId, setSelectedOwnerId] = useState<number | ''>('');
+  const [selectedOwnerId, setSelectedOwnerId] = useState<number | string | ''>('');
   const [ownerSearchQuery, setOwnerSearchQuery] = useState('');
   const [newOwnerName, setNewOwnerName] = useState('');
   const [newOwnerPhone, setNewOwnerPhone] = useState('');
@@ -255,44 +258,66 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
     const now = new Date();
 
     try {
-      let finalOwnerId: number;
+      let finalOwnerId: number | string;
+      let targetOwnerServerUuid: string | null = null;
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
       // 1. Resolve Owner ID
       if (ownerMode === 'new') {
-        finalOwnerId = await db.owners.add({
-          name: newOwnerName.trim(),
-          phone: newOwnerPhone.trim(),
-          email: newOwnerEmail.trim() || undefined,
-          address: newOwnerAddress.trim() || undefined,
-          createdAt: now,
-          updatedAt: now,
-        }) as number;
-
-        if (typeof window !== 'undefined' && navigator.onLine) {
-          try {
-            const res = await fetch('/api/owners', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                name: newOwnerName.trim(),
-                phone: newOwnerPhone.trim(),
-                address: newOwnerAddress.trim() || null,
-                email: newOwnerEmail.trim() || null,
-              }),
-            });
-            if (res.ok) {
-              const serverOwner = await res.json();
-              if (serverOwner?.id) {
-                await db.owners.update(finalOwnerId, { serverId: serverOwner.id } as any);
-              }
-            }
-          } catch (err) {
-            console.warn('Backend owner sync failed:', err);
-          }
+        if (isOnline) {
+          // Server-authoritative PostgreSQL creation
+          const serverOwner = await ownersApi.create({
+            name: newOwnerName.trim(),
+            phone: newOwnerPhone.trim(),
+            email: newOwnerEmail.trim() || undefined,
+            address: newOwnerAddress.trim() || undefined,
+          });
+          finalOwnerId = serverOwner.id!;
+          targetOwnerServerUuid = serverOwner.id ? String(serverOwner.id) : null;
+          await db.owners.put({
+            id: serverOwner.id,
+            serverId: String(serverOwner.id),
+            name: newOwnerName.trim(),
+            phone: newOwnerPhone.trim(),
+            email: newOwnerEmail.trim() || undefined,
+            address: newOwnerAddress.trim() || undefined,
+            syncStatus: 'SYNCED',
+            createdAt: new Date(serverOwner.createdAt || now),
+            updatedAt: new Date(serverOwner.updatedAt || now),
+          } as any);
+        } else {
+          // Explicit offline mode with client UUID
+          const localUuid = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+          finalOwnerId = (await db.owners.add({
+            serverId: localUuid,
+            name: newOwnerName.trim(),
+            phone: newOwnerPhone.trim(),
+            email: newOwnerEmail.trim() || undefined,
+            address: newOwnerAddress.trim() || undefined,
+            syncStatus: 'LOCAL_PENDING',
+            createdAt: now,
+            updatedAt: now,
+          })) as any;
+          targetOwnerServerUuid = localUuid;
         }
       } else {
-        finalOwnerId = Number(selectedOwnerId);
+        finalOwnerId = selectedOwnerId;
+        const existingOwner = await db.owners.get(selectedOwnerId as any);
+        if (existingOwner?.serverId && existingOwner.serverId.includes('-')) {
+          targetOwnerServerUuid = existingOwner.serverId;
+        } else if (typeof selectedOwnerId === 'string' && selectedOwnerId.includes('-')) {
+          targetOwnerServerUuid = selectedOwnerId;
+        } else if (isOnline && existingOwner) {
+          // Push unsynced owner to server to obtain valid server UUID
+          const serverOwner = await ownersApi.create({
+            name: existingOwner.name,
+            phone: existingOwner.phone,
+            email: existingOwner.email,
+            address: existingOwner.address,
+          });
+          targetOwnerServerUuid = serverOwner.id ? String(serverOwner.id) : null;
+          await db.owners.update(existingOwner.id as any, { serverId: String(serverOwner.id), syncStatus: 'SYNCED' } as any);
+        }
       }
 
       // Parse optional fields
@@ -301,63 +326,26 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
 
       // 2. Create or Update Patient
       if (mode === 'new') {
-        const newPatientId = await db.patients.add({
-          ownerId: finalOwnerId,
-          name: name.trim(),
-          species,
-          breed: breed.trim() || undefined,
-          sex,
-          weightKg: parsedWeight,
-          ageNote: ageNote.trim() || undefined,
-          dateOfBirth: parsedDob,
-          microchipNumber: microchipNumber.trim() || undefined,
-          identificationRef: identificationRef.trim() || undefined,
-          notes: notes.trim() || undefined,
-          createdAt: now,
-          updatedAt: now,
-        }) as number;
+        let newPatientId: number | string;
 
-        if (typeof window !== 'undefined' && navigator.onLine) {
-          try {
-            const ownerRec = await db.owners.get(finalOwnerId);
-            const serverOwnerId = (ownerRec as any)?.serverId;
-            if (serverOwnerId) {
-              const res = await fetch('/api/patients', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                  ownerId: serverOwnerId,
-                  name: name.trim(),
-                  species,
-                  breed: breed.trim() || null,
-                  sex,
-                  notes: [ageNote.trim(), notes.trim()].filter(Boolean).join(' | ') || null,
-                }),
-              });
-              if (res.ok) {
-                const sPatient = await res.json();
-                if (sPatient?.id) {
-                  await db.patients.update(newPatientId, { serverId: sPatient.id } as any);
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('Backend patient sync failed:', err);
-          }
-        }
-
-        const fromParam = searchParams.get('from');
-        if (fromParam === 'rx') {
-          navigate(`/prescriptions/new?patientId=${newPatientId}`);
-        } else {
-          navigate(`/patients/${newPatientId}`);
-        }
-      } else if (mode === 'edit' && patientId) {
-        const existing = await db.patients.get(patientId);
-        if (existing) {
-          await db.patients.update(patientId, {
+        if (isOnline) {
+          // Fail-fast server creation: requires valid owner UUID
+          const effectiveOwnerId = targetOwnerServerUuid || String(finalOwnerId);
+          const serverPatient = await patientsApi.create({
+            ownerId: effectiveOwnerId,
+            name: name.trim(),
+            species,
+            breed: breed.trim() || undefined,
+            sex,
+            weightKg: parsedWeight,
+            notes: [ageNote.trim(), notes.trim()].filter(Boolean).join(' | ') || undefined,
+          });
+          newPatientId = serverPatient.id!;
+          await db.patients.put({
+            id: serverPatient.id,
+            serverId: String(serverPatient.id),
             ownerId: finalOwnerId,
+            serverOwnerId: effectiveOwnerId,
             name: name.trim(),
             species,
             breed: breed.trim() || undefined,
@@ -368,14 +356,91 @@ export const PatientFormPage: React.FC<PatientFormProps> = ({ mode }) => {
             microchipNumber: microchipNumber.trim() || undefined,
             identificationRef: identificationRef.trim() || undefined,
             notes: notes.trim() || undefined,
+            syncStatus: 'SYNCED',
+            createdAt: new Date(serverPatient.createdAt || now),
+            updatedAt: new Date(serverPatient.updatedAt || now),
+          } as any);
+        } else {
+          // Explicit offline mode with pending sync flag
+          newPatientId = (await db.patients.add({
+            ownerId: finalOwnerId,
+            serverOwnerId: targetOwnerServerUuid || undefined,
+            name: name.trim(),
+            species,
+            breed: breed.trim() || undefined,
+            sex,
+            weightKg: parsedWeight,
+            ageNote: ageNote.trim() || undefined,
+            dateOfBirth: parsedDob,
+            microchipNumber: microchipNumber.trim() || undefined,
+            identificationRef: identificationRef.trim() || undefined,
+            notes: notes.trim() || undefined,
+            syncStatus: 'LOCAL_PENDING',
+            createdAt: now,
             updatedAt: now,
-          });
+          })) as any;
         }
+
+        const fromParam = searchParams.get('from');
+        if (fromParam === 'rx') {
+          navigate(`/prescriptions/new?patientId=${newPatientId}`);
+        } else {
+          navigate(`/patients/${newPatientId}`);
+        }
+      } else if (mode === 'edit' && patientId) {
+        const existingPatient = await db.patients.get(patientId as any);
+        const serverPatientId = existingPatient?.serverId || (typeof patientId === 'string' && patientId.includes('-') ? patientId : null);
+
+        if (isOnline) {
+          const effectiveOwnerId = targetOwnerServerUuid || (existingPatient?.serverOwnerId ? String(existingPatient.serverOwnerId) : String(finalOwnerId));
+          if (serverPatientId) {
+            await patientsApi.update(serverPatientId, {
+              ownerId: effectiveOwnerId,
+              name: name.trim(),
+              species,
+              breed: breed.trim() || undefined,
+              sex,
+              weightKg: parsedWeight,
+              notes: [ageNote.trim(), notes.trim()].filter(Boolean).join(' | ') || undefined,
+            });
+          } else {
+            // First time syncing this patient to server
+            const created = await patientsApi.create({
+              ownerId: effectiveOwnerId,
+              name: name.trim(),
+              species,
+              breed: breed.trim() || undefined,
+              sex,
+              weightKg: parsedWeight,
+              notes: [ageNote.trim(), notes.trim()].filter(Boolean).join(' | ') || undefined,
+            });
+            await db.patients.update(patientId as any, { serverId: String(created.id) } as any);
+          }
+        }
+
+        await db.patients.update(patientId as any, {
+          ownerId: finalOwnerId,
+          serverOwnerId: targetOwnerServerUuid || undefined,
+          name: name.trim(),
+          species,
+          breed: breed.trim() || undefined,
+          sex,
+          weightKg: parsedWeight,
+          ageNote: ageNote.trim() || undefined,
+          dateOfBirth: parsedDob,
+          microchipNumber: microchipNumber.trim() || undefined,
+          identificationRef: identificationRef.trim() || undefined,
+          notes: notes.trim() || undefined,
+          syncStatus: isOnline ? 'SYNCED' : 'LOCAL_PENDING',
+          updatedAt: now,
+        } as any);
+
         navigate(`/patients/${patientId}`);
       }
-    } catch (err) {
-      console.error('Error saving patient:', err);
-      setErrors({ submit: 'Failed to save patient. Please check input values.' });
+    } catch (err: unknown) {
+      console.error('Error saving patient to server:', err);
+      const errMsg = err instanceof Error ? err.message : 'Failed to persist patient to VetRx server. Please check your connection.';
+      setErrors({ submit: errMsg });
     } finally {
       setSaving(false);
     }

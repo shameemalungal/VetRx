@@ -23,7 +23,9 @@ import { useAuth } from '../../context/AuthContext';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
+import { API_BASE } from '../../config/api';
+import { ownersApi } from '../../services/api/ownersApi';
+import { patientsApi } from '../../services/api/patientsApi';
 import {
   calculateSmartDose,
   validateDoseRange,
@@ -64,9 +66,11 @@ interface PrescriptionBuilderPageProps {
 }
 
 interface DraftItem {
-  id?: number;
+  id?: number | string;
   sourceUsageId?: string | number;
-  medicineId?: number;
+  medicineId?: number | string;
+  inventoryItemId?: string | null;
+  isExternal?: boolean;
   brandName: string;
   genericName?: string;
   presentation: string;
@@ -92,15 +96,13 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [searchParams] = useSearchParams();
   const rawPatientId = searchParams.get('patientId');
   const rawOwnerId = searchParams.get('ownerId');
-  const preselectedPatientId = rawPatientId && /^\d+$/.test(rawPatientId)
-    ? parseInt(rawPatientId, 10)
+  const preselectedPatientId: number | string | null = rawPatientId
+    ? (/^\d+$/.test(rawPatientId) ? parseInt(rawPatientId, 10) : rawPatientId)
     : null;
   const cloneFromRxId = searchParams.get('cloneFrom')
-    ? parseInt(searchParams.get('cloneFrom')!, 10)
+    ? (/^\d+$/.test(searchParams.get('cloneFrom')!) ? parseInt(searchParams.get('cloneFrom')!, 10) : searchParams.get('cloneFrom')!)
     : null;
-  const packageIdParam = searchParams.get('packageId')
-    ? parseInt(searchParams.get('packageId')!, 10)
-    : null;
+  const packageIdParam = searchParams.get('packageId') || null;
   const visitIdParam = searchParams.get('visitId');
   const visitCaseIdParam = searchParams.get('visitCaseId');
 
@@ -197,7 +199,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const allPastPrescriptions = useLiveQuery(() => db.prescriptions.toArray(), []);
 
   // ── Local Builder State ───────────────────────────────────────
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(
+  const [selectedPatientId, setSelectedPatientId] = useState<number | string | null>(
     preselectedPatientId
   );
 
@@ -326,6 +328,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const [medModalSearch, setMedModalSearch] = useState('');
   const [highlightedMedIndex, setHighlightedMedIndex] = useState<number>(-1);
   const [selectedMedRef, setSelectedMedRef] = useState<Medicine | null>(null);
+  const [medicineSelectionMode, setMedicineSelectionMode] = useState<'INVENTORY' | 'EXTERNAL'>('INVENTORY');
   const [medForm, setMedForm] = useState({
     brandName: '',
     genericName: '',
@@ -341,6 +344,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     unit: 'tablet',
     dispenseUnit: 'tablet',
     directions: 'Give after food with drinking water. Complete full course.',
+    isExternal: false,
   });
 
   // Controlled string inputs for duration and quantity to allow clean backspace clearing without '01' / '11'
@@ -861,7 +865,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                 } else {
                   // Fetch patient from API
                   try {
-                    const patRes = await fetch(`/api/patients/${targetCase.patientId}`, {
+                    const patRes = await fetch(`${API_BASE}/api/patients/${targetCase.patientId}`, {
                       credentials: 'include',
                       headers: { 'Accept': 'application/json' },
                     });
@@ -911,7 +915,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             setSelectedPatientId(found.id!);
           } else {
             try {
-              const res = await fetch(`/api/patients/${rawPatientId}`, {
+              const res = await fetch(`${API_BASE}/api/patients/${rawPatientId}`, {
                 credentials: 'include',
                 headers: { 'Accept': 'application/json' },
               });
@@ -950,7 +954,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             setAuthoritativeOwner(foundOwner);
           } else {
             try {
-              const res = await fetch(`/api/owners/${rawOwnerId}`, {
+              const res = await fetch(`${API_BASE}/api/owners/${rawOwnerId}`, {
                 credentials: 'include',
                 headers: { 'Accept': 'application/json' },
               });
@@ -1447,6 +1451,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     setCalcBandDoseUnit('tablet');
 
     setIsDoseCalcOpen(false);
+    setMedicineSelectionMode('INVENTORY');
 
     setMedForm({
       brandName: '',
@@ -1463,6 +1468,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       quantity: 10,
       unit: 'mg',
       directions: 'Give after food with drinking water. Complete full course.',
+      isExternal: false,
     });
     setModalOpen(true);
   };
@@ -1470,29 +1476,36 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
   const openEditMedModal = (index: number) => {
     const itm = items[index];
     setEditingItemIndex(index);
-    const matched = availableMedicines?.find(
-      (m) =>
-        (itm.medicineId && m.id === itm.medicineId) ||
-        (m.brandName.toLowerCase() === itm.brandName.toLowerCase() &&
-          (!itm.presentation || m.presentation.toLowerCase() === itm.presentation.toLowerCase()) &&
-          (!itm.strength || (m.strength && m.strength.toLowerCase() === itm.strength.toLowerCase()))) ||
-        m.brandName.toLowerCase() === itm.brandName.toLowerCase()
-    );
-    const refMed: Medicine = matched || ({
-      id: itm.medicineId,
-      brandName: itm.brandName,
-      genericName: itm.genericName,
-      presentation: itm.presentation || 'Tablet',
-      strength: itm.strength || itm.strengthVolume,
-      packSize: itm.packSize,
-      doseUnit: itm.doseUnit,
-      defaultRoute: itm.route,
-      defaultFrequency: itm.frequency,
-      defaultDurationDays: itm.durationDays,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as unknown as Medicine);
-    setSelectedMedRef(refMed);
+    const isExt = Boolean(itm.isExternal);
+    setMedicineSelectionMode(isExt ? 'EXTERNAL' : 'INVENTORY');
+    let matched: Medicine | undefined;
+    if (isExt) {
+      setSelectedMedRef(null);
+    } else {
+      matched = availableMedicines?.find(
+        (m) =>
+          (itm.medicineId && m.id === itm.medicineId) ||
+          (m.brandName.toLowerCase() === itm.brandName.toLowerCase() &&
+            (!itm.presentation || m.presentation.toLowerCase() === itm.presentation.toLowerCase()) &&
+            (!itm.strength || (m.strength && m.strength.toLowerCase() === itm.strength.toLowerCase()))) ||
+          m.brandName.toLowerCase() === itm.brandName.toLowerCase()
+      );
+      const refMed: Medicine = matched || ({
+        id: itm.medicineId,
+        brandName: itm.brandName,
+        genericName: itm.genericName,
+        presentation: itm.presentation || 'Tablet',
+        strength: itm.strength || itm.strengthVolume,
+        packSize: itm.packSize,
+        doseUnit: itm.doseUnit,
+        defaultRoute: itm.route,
+        defaultFrequency: itm.frequency,
+        defaultDurationDays: itm.durationDays,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as unknown as Medicine);
+      setSelectedMedRef(refMed);
+    }
     setMedModalSearch(itm.brandName);
     const currWeight = selectedPatient?.weightKg ? String(selectedPatient.weightKg) : '';
     setInlineWeight(currWeight);
@@ -1600,6 +1613,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       quantity: initQty,
       unit: doseUnit,
       directions: itm.directions || '',
+      isExternal: isExt,
     });
     setModalOpen(true);
   };
@@ -1751,8 +1765,11 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
     const dispenseUnitVal = medForm.dispenseUnit || medForm.unit || 'tablet';
     const formattedStrengthVolume = medForm.strength?.trim() || selectedMedRef?.strengthVolume || `${numericApprovedDose} ${doseUnitVal}`;
 
+    const isExt = medicineSelectionMode === 'EXTERNAL' || Boolean(medForm.isExternal);
     const newItem: DraftItem = {
-      medicineId: selectedMedRef?.id,
+      medicineId: isExt ? undefined : selectedMedRef?.id,
+      inventoryItemId: isExt ? null : (selectedMedRef as any)?.inventoryItemId || null,
+      isExternal: isExt,
       brandName: brand,
       genericName: medForm.genericName || selectedMedRef?.genericName,
       presentation: medForm.presentation,
@@ -2171,6 +2188,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       }
 
       const approverName = user?.name || practitioner?.name || 'Veterinarian';
+      let assignedRxNumber = existingRx?.rxNumber || '';
 
       if (mode === 'edit' && id) {
         if (existingRx && existingRx.status !== 'Draft' && existingRx.status !== 'Changes Requested' && !(existingRx.status === 'Pending Approval' && canApprove)) {
@@ -2263,6 +2281,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
           return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
         }, 0);
         const rxNumber = `${prefix}${String(maxSequence + 1).padStart(4, '0')}`;
+        assignedRxNumber = rxNumber;
 
         const initialHistory: PrescriptionWorkflowHistoryItem[] = [];
         if (isPending && targetClinicianUser) {
@@ -2331,6 +2350,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
           for (let i = 0; i < items.length; i++) {
             const itm = items[i];
+            if (itm.isExternal) continue; // External medicines must NEVER automatically create inventory/formulary products
             const normBrand = (itm.brandName || '').trim().toLowerCase();
             const normStrength = (itm.strengthVolume || itm.presentation || '').trim().toLowerCase();
             if (!normBrand) continue;
@@ -2382,7 +2402,9 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
 
           const lineItemsToInsert = items.map((itm, idx) => ({
             prescriptionId: rxId,
-            medicineId: itm.medicineId || assignedMedIds.get(idx),
+            medicineId: itm.isExternal ? undefined : (itm.medicineId || assignedMedIds.get(idx)),
+            inventoryItemId: itm.isExternal ? null : (itm.inventoryItemId || null),
+            isExternal: Boolean(itm.isExternal),
             brandName: itm.brandName,
             genericName: itm.genericName,
             presentation: itm.presentation,
@@ -2446,45 +2468,108 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
         } catch (linkErr) {
           console.warn('[VetRx] Non-blocking: Could not link prescription to visitCase:', linkErr);
         }
+      }
 
-        // Online sync to backend
-        if (navigator.onLine) {
-          try {
-            await fetch(`${API_BASE}/api/prescriptions`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                patientId: String(safePatientId),
-                ownerId: String(ownerId),
-                visitId: String(visitIdParam),
-                visitCaseId: visitCaseIdParam ? String(visitCaseIdParam) : undefined,
-                symptoms: symptoms.trim() || undefined,
-                diagnosis: diagnosis.trim() || undefined,
-                instructions: advice.trim() || undefined,
-                followUpDays: followUpDays,
-                status: targetStatus === 'Approved' && !canApprove ? 'Draft' : targetStatus,
-                items: items.map((itm) => ({
-                  medicineId: itm.medicineId ? String(itm.medicineId) : undefined,
-                  brandName: itm.brandName,
-                  genericName: itm.genericName,
-                  presentation: itm.presentation,
-                  strength: itm.strength,
-                  dose: itm.dose,
-                  doseUnit: itm.doseUnit,
-                  quantity: itm.quantity,
-                  unit: itm.dispenseUnit || itm.unit,
-                  frequency: itm.frequency,
-                  durationDays: itm.durationDays,
-                  route: itm.route,
-                  directions: itm.directions,
-                })),
-              }),
-            });
-          } catch (syncErr) {
-            console.warn('[VetRx] Non-blocking: Server prescription sync failed:', syncErr);
+      // Server-Authoritative PostgreSQL Sync
+      const isOnline = typeof window !== 'undefined' && typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+      if (isOnline) {
+        let serverPatientUuid: string | null = null;
+        if (typeof safePatientId === 'string' && safePatientId.includes('-')) {
+          serverPatientUuid = safePatientId;
+        } else {
+          const pat = (await db.patients.get(Number(safePatientId))) || (await db.patients.get(String(safePatientId)));
+          if (pat?.serverId && pat.serverId.includes('-')) {
+            serverPatientUuid = pat.serverId;
+          } else if (pat) {
+            // Patient exists locally but not pushed to server yet: resolve owner and push patient first
+            let ownerUuid = pat.serverOwnerId;
+            if (!ownerUuid && pat.ownerId) {
+              const ownerRec = (await db.owners.get(Number(pat.ownerId))) || (await db.owners.get(String(pat.ownerId)));
+              if (ownerRec?.serverId && ownerRec.serverId.includes('-')) {
+                ownerUuid = ownerRec.serverId;
+              } else if (ownerRec) {
+                const createdOwner = await ownersApi.create({
+                  name: ownerRec.name,
+                  phone: ownerRec.phone,
+                  email: ownerRec.email,
+                  address: ownerRec.address,
+                });
+                ownerUuid = createdOwner.id ? String(createdOwner.id) : undefined;
+                await db.owners.update(ownerRec.id as any, { serverId: String(createdOwner.id), syncStatus: 'SYNCED' } as any);
+              }
+            }
+
+            if (ownerUuid) {
+              const createdPat = await patientsApi.create({
+                ownerId: ownerUuid,
+                name: pat.name,
+                species: pat.species,
+                breed: pat.breed,
+                sex: pat.sex,
+                weightKg: pat.weightKg,
+                notes: pat.notes,
+              });
+              serverPatientUuid = createdPat.id ? String(createdPat.id) : null;
+              await db.patients.update(pat.id as any, { serverId: String(createdPat.id), serverOwnerId: ownerUuid, syncStatus: 'SYNCED' } as any);
+            }
           }
         }
+
+        const syncRes = await fetch(`${API_BASE}/api/prescriptions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            patientId: serverPatientUuid || String(safePatientId),
+            rxNumber: assignedRxNumber || undefined,
+            diagnosis: diagnosis.trim() || undefined,
+            notes: advice.trim() || undefined,
+            status: targetStatus === 'Approved' && !canApprove ? 'Draft' : targetStatus,
+            visitId: visitIdParam ? String(visitIdParam) : undefined,
+            visitCaseId: visitCaseIdParam ? String(visitCaseIdParam) : undefined,
+            items: items.map((itm) => ({
+              medicineId: itm.isExternal ? undefined : (itm.medicineId ? String(itm.medicineId) : undefined),
+              inventoryItemId: itm.isExternal ? null : (itm.inventoryItemId || undefined),
+              isExternal: Boolean(itm.isExternal),
+              brandName: itm.brandName || 'Medicine',
+              genericName: itm.genericName || undefined,
+              presentation: itm.presentation || undefined,
+              dosage: itm.dose || itm.strengthVolume || 'As directed',
+              dose: itm.dose,
+              doseUnit: itm.doseUnit,
+              frequency: itm.frequency || 'OD',
+              durationDays: itm.durationDays || 5,
+              quantity: itm.quantity || 1,
+              unit: itm.dispenseUnit || itm.unit || 'unit',
+              directions: itm.directions || undefined,
+            })),
+          }),
+        });
+
+        if (!syncRes.ok) {
+          let errMsg = `Server prescription persistence failed (HTTP ${syncRes.status})`;
+          try {
+            const errData = await syncRes.json();
+            if (errData?.error?.message) errMsg = errData.error.message;
+            else if (errData?.message) errMsg = errData.message;
+          } catch {}
+          throw new Error(errMsg);
+        }
+
+        const serverRx = await syncRes.json();
+        if (serverRx?.id) {
+          await db.prescriptions.update(rxId, {
+            serverId: serverRx.id,
+            rxNumber: serverRx.rxNumber || assignedRxNumber,
+            syncStatus: 'SYNCED',
+          } as any);
+        }
+      } else {
+        // Explicit offline mode: mark local record as pending sync
+        await db.prescriptions.update(rxId, {
+          syncStatus: 'LOCAL_PENDING',
+        } as any);
       }
 
       console.log('[VetRx] Prescription generation completed successfully', { rxId, targetStatus });
@@ -2494,14 +2579,15 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       } else {
         navigate(`/prescriptions/${rxId}`);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('VetRx Generate failed:', err);
       const msg = err instanceof Error
         ? err.message
-        : 'Unable to generate the prescription. Please check the entered details.';
+        : 'Unable to persist the prescription to the VetRx server. Please check your connection and credentials.';
       setErrorMsg(msg);
       setGenerationError(msg);
       setShowGenerationErrorModal(true);
+      return;
     } finally {
       setIsSaving(false);
     }
@@ -3360,7 +3446,26 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                             <span className="rx-med-qty-badge">
                               Dispense: {itm.quantity} {itm.dispenseUnit || itm.unit}
                             </span>
-                            {isInventoryEntitled && (() => {
+                            {itm.isExternal ? (
+                              <span
+                                className="inv-status-pill"
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  background: '#fef3c7',
+                                  color: '#b45309',
+                                  border: '1px solid #fde68a',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '9999px',
+                                }}
+                              >
+                                <Icon name="external-link" size={12} />
+                                <span>External (Not in Stock)</span>
+                              </span>
+                            ) : isInventoryEntitled && (() => {
                               const res = getResolutionForItem(itm, idx);
                               if (!res) return null;
                               if (res.status === 'IN_STOCK') {
@@ -3749,38 +3854,101 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             </div>
 
             <div className="rx-modal-body">
-              {/* ── TWO CLEAR OPTIONS AT TOP: Select Existing Medicine vs + Add New Medicine ── */}
-              {editingItemIndex === null && (
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: 'var(--color-surface-container-low, #f8fafc)', padding: '4px', borderRadius: 'var(--radius-md, 8px)', border: '1px solid var(--color-surface-container, #e2e8f0)' }}>
-                  <button
-                    type="button"
-                    id="rx-select-existing-tab-btn"
-                    className="btn btn-sm btn-primary flex-1"
-                    style={{ height: '34px', fontSize: '12.5px', fontWeight: 600, gap: '6px' }}
-                    onClick={() => {
-                      /* Focus search */
-                      const el = document.getElementById('rx-med-search');
-                      if (el) el.focus();
-                    }}
-                  >
-                    <Icon name="search" size={15} />
-                    <span>Select Existing Medicine</span>
-                  </button>
-                  <button
-                    type="button"
-                    id="rx-add-new-med-tab-btn"
-                    className="btn btn-sm btn-ghost flex-1"
-                    style={{ height: '34px', fontSize: '12.5px', fontWeight: 600, gap: '6px', color: 'var(--color-primary)' }}
-                    onClick={() => setCreateMedicineModalOpen(true)}
-                  >
-                    <Icon name="plus" size={15} />
-                    <span>+ Add New Medicine</span>
-                  </button>
+              {/* ── TWO CLEAR OPTIONS AT TOP: Inventory Medicine vs External / Not in Stock ── */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: 'var(--color-surface-container-low, #f8fafc)', padding: '4px', borderRadius: 'var(--radius-md, 8px)', border: '1px solid var(--color-surface-container, #e2e8f0)' }}>
+                <button
+                  type="button"
+                  id="rx-select-existing-tab-btn"
+                  className={`btn btn-sm flex-1 ${medicineSelectionMode === 'INVENTORY' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ height: '34px', fontSize: '12.5px', fontWeight: 600, gap: '6px' }}
+                  onClick={() => {
+                    setMedicineSelectionMode('INVENTORY');
+                    setMedForm((p) => ({ ...p, isExternal: false }));
+                  }}
+                >
+                  <Icon name="box" size={15} />
+                  <span>Hospital Inventory Medicine</span>
+                </button>
+                <button
+                  type="button"
+                  id="rx-select-external-tab-btn"
+                  className={`btn btn-sm flex-1 ${medicineSelectionMode === 'EXTERNAL' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ height: '34px', fontSize: '12.5px', fontWeight: 600, gap: '6px' }}
+                  onClick={() => {
+                    setMedicineSelectionMode('EXTERNAL');
+                    setSelectedMedRef(null);
+                    setMedForm((p) => ({ ...p, isExternal: true }));
+                  }}
+                >
+                  <Icon name="arrow-up-right" size={15} />
+                  <span>External / Not in Stock</span>
+                </button>
+              </div>
+
+              {/* ── EXTERNAL MEDICINE DIRECT ENTRY FORM ── */}
+              {medicineSelectionMode === 'EXTERNAL' && (
+                <div style={{ marginBottom: '16px', padding: '14px', background: '#fffbeb', borderRadius: 'var(--radius-md, 8px)', border: '1px solid #fde68a' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: '#b45309' }}>
+                    <Icon name="info" size={16} />
+                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Prescription for medicine not available in hospital stock</span>
+                  </div>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#92400e', lineHeight: 1.4 }}>
+                    Enter medicine details manually. This item will be prescribed for external supply. It will <strong>NOT</strong> deduct hospital stock, require an inventory ID, or create a catalog product.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600 }}>Brand Name <span className="text-error">*</span></label>
+                      <input
+                        id="rx-external-brand-name"
+                        type="text"
+                        className="form-input font-bold"
+                        placeholder="e.g. Augmentin, Melonex"
+                        value={medForm.brandName}
+                        onChange={(e) => setMedForm((p) => ({ ...p, brandName: e.target.value }))}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600 }}>Generic / Active Ingredient</label>
+                      <input
+                        id="rx-external-generic-name"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Amoxicillin + Clavulanate"
+                        value={medForm.genericName}
+                        onChange={(e) => setMedForm((p) => ({ ...p, genericName: e.target.value }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600 }}>Presentation / Dosage Form</label>
+                      <select
+                        id="rx-external-presentation"
+                        className="form-select"
+                        value={medForm.presentation}
+                        onChange={(e) => setMedForm((p) => ({ ...p, presentation: e.target.value }))}
+                      >
+                        {['Tablet', 'Capsule', 'Syrup', 'Suspension', 'Injection', 'Ointment', 'Cream', 'Drops', 'Spray', 'Powder', 'Lotion', 'Gel', 'Spot-on', 'Shampoo', 'Bolus'].map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontWeight: 600 }}>Strength / Concentration</label>
+                      <input
+                        id="rx-external-strength"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 625 mg, 10 mg/mL, 2.5%"
+                        value={medForm.strength}
+                        onChange={(e) => setMedForm((p) => ({ ...p, strength: e.target.value }))}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* ── SECTION 1: MEDICINE SEARCH / SELECTION ── */}
-              {!selectedMedRef && (
+              {/* ── SECTION 1: MEDICINE SEARCH / SELECTION (Hospital Inventory Mode) ── */}
+              {medicineSelectionMode === 'INVENTORY' && !selectedMedRef && (
                 <div className="form-group" style={{ marginBottom: '16px' }}>
                   <label className="form-label" style={{ fontWeight: 600 }}>Search Existing Medicine</label>
                   <div style={{ position: 'relative', zIndex: 60 }}>
@@ -4002,7 +4170,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
               )}
 
               {/* ── SECTION 2: PRESCRIPTION INSTRUCTIONS & BACKGROUND ARITHMETIC ── */}
-              {selectedMedRef && (
+              {(Boolean(selectedMedRef) || medicineSelectionMode === 'EXTERNAL') && (
                 <div className="rx-prescription-instructions-section" style={{ marginTop: '14px', paddingTop: '14px', borderTop: '2px solid var(--color-surface-container, #e2e8f0)' }}>
                   <div style={{ marginBottom: '12px' }}>
                     <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: 700, color: 'var(--color-on-surface)' }}>
@@ -4123,7 +4291,7 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
                         )}
                         <div>
                           <span style={{ color: '#4b5563', display: 'block', fontSize: '11px' }}>Medicine strength</span>
-                          <strong style={{ color: '#111827' }}>{selectedMedRef.strength || selectedMedRef.strengthVolume || '—'}</strong>
+                          <strong style={{ color: '#111827' }}>{selectedMedRef?.strength || selectedMedRef?.strengthVolume || medForm.strength || '—'}</strong>
                         </div>
                         <div>
                           <span style={{ color: '#4b5563', display: 'block', fontSize: '11px' }}>Calculated volume / dose</span>
@@ -4350,8 +4518,8 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
             }
             initialBrandName={!selectedMedRef && medModalSearch.trim() ? medModalSearch.trim() : undefined}
             onClose={() => setCreateMedicineModalOpen(false)}
-            onSaved={async (medicineId: number) => {
-              // Fetch the newly created medicine from Dexie and auto-select it in the prescription builder
+            onSaved={async (medicineId: number | string) => {
+              // Fetch the newly created medicine and auto-select it in the prescription builder
               const newMed = await db.medicines.get(medicineId);
               if (newMed) {
                 handleSelectMedRef(newMed);
@@ -4875,10 +5043,22 @@ export const PrescriptionBuilderPage: React.FC<PrescriptionBuilderPageProps> = (
       <ExternalPrescriptionModal
         isOpen={showExternalPrescriptionModal}
         onClose={() => setShowExternalPrescriptionModal(false)}
-        patientName={selectedPatient?.name}
-        patientSubtitle={selectedPatient ? formatAnimalSubtitle(selectedPatient) : undefined}
-        ownerName={selectedOwner?.name}
-        resolutions={stockResolutions}
+        prescription={existingRx || ({
+          id: 'draft',
+          rxNumber: 'DRAFT-EXT',
+          practiceId: '',
+          patientId: selectedPatientId || '',
+          veterinarianId: '',
+          status: 'Draft',
+          issuedAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          items: items as any,
+        } as any)}
+        items={items as any}
+        patient={selectedPatient}
+        owner={selectedOwner}
+        activePractitioner={practitioner as any}
       />
     </div>
   );

@@ -24,7 +24,12 @@ import type {
   DeductFieldUsageDTO,
   FieldUsageDeductionResult,
   CreateLocationDTO,
+  DispensePrescriptionRequestDTO,
+  DispensePrescriptionResponseDTO,
+  PrescriptionDispenseRecordDTO,
+  ReverseDispenseRequestDTO,
 } from './inventory.types.js';
+import { UnitConversionService } from './unit-conversion.service.js';
 
 export class InventoryService {
   // In-memory mock store for fast isolated unit testing & zero-dependency local dev
@@ -34,6 +39,7 @@ export class InventoryService {
   private static mockSuppliers: Map<string, SupplierDTO[]> = new Map();
   private static mockPurchases: Map<string, PurchaseInvoiceDTO[]> = new Map();
   private static mockLocations: Map<string, StockLocationDTO[]> = new Map();
+  private static mockDispensings: Map<string, any[]> = new Map();
 
   static clearMockStore(): void {
     this.mockItems.clear();
@@ -42,6 +48,7 @@ export class InventoryService {
     this.mockSuppliers.clear();
     this.mockPurchases.clear();
     this.mockLocations.clear();
+    this.mockDispensings.clear();
   }
 
   // --------------------------------------------------------------------------
@@ -3592,6 +3599,803 @@ export class InventoryService {
     };
   }
 
+  // --------------------------------------------------------------------------
+  // 17. Atomic Prescription Dispensing & Clinical Administration
+  // --------------------------------------------------------------------------
+
+  static async dispensePrescription(
+    practiceId: string,
+    data: DispensePrescriptionRequestDTO,
+    actorUserId?: string
+  ): Promise<DispensePrescriptionResponseDTO> {
+    if (!data.prescriptionId) {
+      throw new AppError(400, 'PRESCRIPTION_ID_REQUIRED', 'Prescription ID is required for dispensing.');
+    }
+    if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
+      throw new AppError(400, 'ITEMS_REQUIRED', 'At least one prescription item must be selected for dispensing.');
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // ── 1. Idempotency Check (Prevent duplicate deductions from double clicks/retries) ──
+    if (data.idempotencyKey && data.idempotencyKey.trim()) {
+      const cleanKey = data.idempotencyKey.trim();
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescriptionDispensing) {
+        try {
+          const existingDispensings = await prisma.prescriptionDispensing.findMany({
+            where: {
+              practiceId,
+              idempotencyKey: { startsWith: cleanKey },
+            },
+            include: { inventoryItem: true },
+          });
+
+          if (existingDispensings.length > 0) {
+            const rx = await prisma.prescription.findUnique({
+              where: { id: data.prescriptionId },
+            });
+            return {
+              success: true,
+              prescriptionId: data.prescriptionId,
+              dispenseStatus: (rx?.dispenseStatus as any) || 'PARTIALLY_DISPENSED',
+              dispensedRecords: existingDispensings.map((d) => ({
+                id: d.id,
+                practiceId: d.practiceId,
+                prescriptionId: d.prescriptionId,
+                prescriptionItemId: d.prescriptionItemId,
+                inventoryItemId: d.inventoryItemId,
+                itemName: d.inventoryItem?.name || null,
+                inventoryBatchId: d.inventoryBatchId,
+                batchNumber: d.batchNumber,
+                dispenseType: d.dispenseType,
+                quantity: d.quantity,
+                unit: d.unit,
+                baseQuantity: d.baseQuantity,
+                baseUnit: d.baseUnit,
+                status: d.status,
+                notes: d.notes,
+                reversalReason: d.reversalReason,
+                reversedAt: d.reversedAt?.toISOString() || null,
+                reversedByUserId: d.reversedByUserId,
+                dispensedByUserId: d.dispensedByUserId,
+                createdAt: d.createdAt.toISOString(),
+              })),
+              updatedStockBalances: [],
+            };
+          }
+        } catch (idempErr) {
+          console.warn('[InventoryService.dispensePrescription] Idempotency pre-check fallback:', idempErr);
+        }
+      } else {
+        const mockStore = this.getDispensingsStore(practiceId);
+        const existing = mockStore.filter((d) => d.idempotencyKey?.startsWith(cleanKey));
+        if (existing.length > 0) {
+          return {
+            success: true,
+            prescriptionId: data.prescriptionId,
+            dispenseStatus: 'PARTIALLY_DISPENSED',
+            dispensedRecords: existing,
+            updatedStockBalances: [],
+          };
+        }
+      }
+    }
+
+    // ── 2. Load Prescription & Items ──
+    let prescription: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescription) {
+      try {
+        prescription = await prisma.prescription.findFirst({
+          where: { id: data.prescriptionId, practiceId },
+          include: {
+            items: { include: { inventoryItem: true } },
+            patient: true,
+          },
+        });
+      } catch (err) {
+        console.warn('[InventoryService.dispensePrescription] Prisma load rx error:', err);
+      }
+    }
+
+    if (!prescription) {
+      // In fast test or fallback
+      prescription = {
+        id: data.prescriptionId,
+        practiceId,
+        dispenseStatus: 'UNDISPENSED',
+        items: data.items.map((i) => ({
+          id: i.prescriptionItemId,
+          prescriptionId: data.prescriptionId,
+          medicineName: 'Test Item',
+          inventoryItemId: i.inventoryItemId || null,
+          isExternal: Boolean(i.isExternal),
+          totalQuantity: i.dispenseQuantity,
+          dispensedQuantity: 0,
+          dispenseStatus: 'PENDING',
+        })),
+        patient: { name: 'Patient' },
+      };
+    }
+
+    if (!prescription) {
+      throw new AppError(404, 'PRESCRIPTION_NOT_FOUND', 'Prescription not found or does not belong to active practice.');
+    }
+
+    // ── 3. Validate Each Item & Plan Allocations ──
+    interface AllocationPlan {
+      rxItem: any;
+      isExternal: boolean;
+      dispenseQuantity: number;
+      dispenseUnit: string;
+      baseQuantityNeeded: number;
+      baseUnit: string;
+      invItem: any | null;
+      candidateBatch: any | null;
+      isWastage: boolean;
+      notes: string | null;
+    }
+
+    const plans: AllocationPlan[] = [];
+
+    for (const reqItem of data.items) {
+      const rxItem = prescription.items.find((x: any) => x.id === reqItem.prescriptionItemId);
+      if (!rxItem) {
+        throw new AppError(404, 'PRESCRIPTION_ITEM_NOT_FOUND', `Prescription item ${reqItem.prescriptionItemId} not found on prescription.`);
+      }
+
+      const isExternal = Boolean(reqItem.isExternal || rxItem.isExternal || (!reqItem.inventoryItemId && !rxItem.inventoryItemId));
+      const dispenseQty = Number(reqItem.dispenseQuantity);
+      if (isNaN(dispenseQty) || dispenseQty <= 0) {
+        throw new AppError(400, 'INVALID_DISPENSE_QUANTITY', `Invalid dispense quantity for item ${rxItem.medicineName}. Must be greater than 0.`);
+      }
+
+      if (isExternal) {
+        // External items NEVER deduct stock and NEVER validate inventory products/batches
+        plans.push({
+          rxItem,
+          isExternal: true,
+          dispenseQuantity: dispenseQty,
+          dispenseUnit: reqItem.dispenseUnit || rxItem.quantityUnit || 'Unit',
+          baseQuantityNeeded: 0,
+          baseUnit: reqItem.dispenseUnit || rxItem.quantityUnit || 'Unit',
+          invItem: null,
+          candidateBatch: null,
+          isWastage: Boolean(reqItem.isWastage),
+          notes: reqItem.notes || null,
+        });
+        continue;
+      }
+
+      // Internal Inventory Item
+      const targetItemId = reqItem.inventoryItemId || rxItem.inventoryItemId;
+      if (!targetItemId) {
+        throw new AppError(400, 'INVENTORY_ITEM_ID_REQUIRED', `Medicine '${rxItem.medicineName}' is marked internal but lacks a stable inventoryItemId.`);
+      }
+
+      let invItem: any = null;
+      if (process.env.VETRX_FAST_TEST !== '1' && prisma?.inventoryItem) {
+        invItem = await prisma.inventoryItem.findFirst({
+          where: { id: targetItemId, practiceId },
+          include: { batches: true },
+        });
+      } else {
+        invItem = this.getItemsStore(practiceId).find((i) => i.id === targetItemId);
+      }
+
+      if (!invItem) {
+        throw new AppError(404, 'INVENTORY_ITEM_NOT_FOUND', `Inventory product not found for item ${rxItem.medicineName} (${targetItemId}).`);
+      }
+
+      // Unit Conversion
+      const conv = UnitConversionService.convertToBaseUnit(
+        dispenseQty,
+        reqItem.dispenseUnit || rxItem.quantityUnit || invItem.stockUnit,
+        {
+          stockUnit: invItem.stockUnit,
+          packSize: invItem.packSize,
+          presentation: invItem.presentation,
+        }
+      );
+      const baseQtyNeeded = Math.round(conv.baseQuantity * 10000) / 10000;
+
+      // Batch Resolution
+      let candidateBatch: any = null;
+      const batchesList = (invItem.batches || (this.getBatchesStore(practiceId).filter((b) => b.inventoryItemId === invItem.id))) || [];
+
+      if (reqItem.inventoryBatchId) {
+        candidateBatch = batchesList.find((b: any) => b.id === reqItem.inventoryBatchId);
+      } else if (reqItem.batchNumber) {
+        candidateBatch = batchesList.find((b: any) => b.batchNumber === reqItem.batchNumber);
+      } else {
+        // FEFO: earliest non-expired batch with available stock
+        const validFEFO = batchesList
+          .filter((b: any) => {
+            const expStr = typeof b.expiryDate === 'string' ? b.expiryDate : (b.expiryDate?.toISOString().split('T')[0] || '');
+            return expStr >= todayStr && b.currentQuantity > 0;
+          })
+          .sort((a: any, b: any) => {
+            const expA = typeof a.expiryDate === 'string' ? a.expiryDate : (a.expiryDate?.toISOString().split('T')[0] || '');
+            const expB = typeof b.expiryDate === 'string' ? b.expiryDate : (b.expiryDate?.toISOString().split('T')[0] || '');
+            return expA.localeCompare(expB);
+          });
+        candidateBatch = validFEFO[0] || null;
+      }
+
+      if (!candidateBatch) {
+        throw new AppError(
+          400,
+          'NO_VALID_BATCH_AVAILABLE',
+          `No valid stock batch available for medicine '${invItem.name}'. Please ensure non-expired stock exists.`
+        );
+      }
+
+      // Validate batch expiry
+      const batchExpStr = typeof candidateBatch.expiryDate === 'string'
+        ? candidateBatch.expiryDate
+        : (candidateBatch.expiryDate?.toISOString().split('T')[0] || '');
+
+      if (batchExpStr < todayStr) {
+        throw new AppError(
+          400,
+          'BATCH_EXPIRED',
+          `Cannot dispense expired batch ${candidateBatch.batchNumber} (Expired: ${batchExpStr}) for medicine '${invItem.name}'.`
+        );
+      }
+
+      // Validate available stock
+      if (candidateBatch.currentQuantity < baseQtyNeeded) {
+        throw new AppError(
+          400,
+          'INSUFFICIENT_BATCH_STOCK',
+          `Insufficient stock in batch ${candidateBatch.batchNumber} for '${invItem.name}': required ${baseQtyNeeded} ${invItem.stockUnit}, but available balance is ${candidateBatch.currentQuantity} ${invItem.stockUnit}.`
+        );
+      }
+
+      plans.push({
+        rxItem,
+        isExternal: false,
+        dispenseQuantity: dispenseQty,
+        dispenseUnit: reqItem.dispenseUnit || invItem.stockUnit,
+        baseQuantityNeeded: baseQtyNeeded,
+        baseUnit: invItem.stockUnit,
+        invItem,
+        candidateBatch,
+        isWastage: Boolean(reqItem.isWastage),
+        notes: reqItem.notes || null,
+      });
+    }
+
+    // ── 4. Atomic Execution of All Movements & Dispensings ──
+    const committedRecords: PrescriptionDispenseRecordDTO[] = [];
+    const updatedStockBalances: DispensePrescriptionResponseDTO['updatedStockBalances'] = [];
+
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescriptionDispensing) {
+      await prisma.$transaction(async (tx) => {
+        for (const plan of plans) {
+          const itemKey = data.idempotencyKey ? `${data.idempotencyKey}_${plan.rxItem.id}` : null;
+
+          if (plan.isExternal) {
+            // External medicine: record dispensing history without touching stock
+            const dispRec = await tx.prescriptionDispensing.create({
+              data: {
+                practiceId,
+                prescriptionId: prescription.id,
+                prescriptionItemId: plan.rxItem.id,
+                inventoryItemId: null,
+                inventoryBatchId: null,
+                batchNumber: null,
+                dispenseType: plan.isWastage ? 'WASTAGE' : data.dispenseType,
+                quantity: plan.dispenseQuantity,
+                unit: plan.dispenseUnit,
+                baseQuantity: 0,
+                baseUnit: plan.baseUnit,
+                idempotencyKey: itemKey,
+                status: 'COMPLETED',
+                notes: plan.notes || 'External medicine (not in hospital stock)',
+                dispensedByUserId: actorUserId || null,
+              },
+            });
+
+            // Update prescription item dispensed quantity
+            const newDispQty = (plan.rxItem.dispensedQuantity || 0) + plan.dispenseQuantity;
+            const newStatus = newDispQty >= plan.rxItem.totalQuantity ? 'FULLY_DISPENSED' : 'PARTIALLY_DISPENSED';
+            await tx.prescriptionItem.update({
+              where: { id: plan.rxItem.id },
+              data: {
+                dispensedQuantity: newDispQty,
+                dispenseStatus: newStatus,
+              },
+            });
+
+            committedRecords.push({
+              id: dispRec.id,
+              practiceId,
+              prescriptionId: prescription.id,
+              prescriptionItemId: plan.rxItem.id,
+              inventoryItemId: null,
+              itemName: plan.rxItem.medicineName,
+              inventoryBatchId: null,
+              batchNumber: null,
+              dispenseType: dispRec.dispenseType,
+              quantity: dispRec.quantity,
+              unit: dispRec.unit,
+              baseQuantity: 0,
+              baseUnit: dispRec.baseUnit,
+              status: dispRec.status,
+              notes: dispRec.notes,
+              createdAt: dispRec.createdAt.toISOString(),
+            });
+            continue;
+          }
+
+          // Internal item: Atomic batch decrement and transaction ledger
+          const updatedBatch = await tx.inventoryBatch.update({
+            where: { id: plan.candidateBatch.id },
+            data: { currentQuantity: { decrement: plan.baseQuantityNeeded } },
+          });
+
+          // Stock Movement Ledger
+          const movType = plan.isWastage ? 'WASTAGE' : 'SALE_OR_INVOICE';
+          const refType = data.dispenseType === 'ADMINISTRATION' ? 'PRESCRIPTION_ADMINISTER' : 'PRESCRIPTION_DISPENSE';
+          const reasonText = plan.isWastage
+            ? `Wastage: ${plan.notes || 'Discarded/spilled during administration'}`
+            : data.dispenseType === 'ADMINISTRATION'
+            ? `Administered to patient ${prescription.patient?.name || ''} (Rx: ${prescription.rxNumber || prescription.id})`
+            : `Dispensed to owner (Rx: ${prescription.rxNumber || prescription.id})`;
+
+          await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: plan.invItem.id,
+              batchId: plan.candidateBatch.id,
+              transactionType: movType,
+              quantityChange: -plan.baseQuantityNeeded,
+              quantityBefore: plan.candidateBatch.currentQuantity,
+              quantityAfter: updatedBatch.currentQuantity,
+              unitCost: plan.candidateBatch.purchaseRate || 0,
+              referenceType: refType,
+              referenceId: prescription.id,
+              reason: reasonText,
+              performedByUserId: actorUserId || null,
+            },
+          });
+
+          // Dispensing Record
+          const dispRec = await tx.prescriptionDispensing.create({
+            data: {
+              practiceId,
+              prescriptionId: prescription.id,
+              prescriptionItemId: plan.rxItem.id,
+              inventoryItemId: plan.invItem.id,
+              inventoryBatchId: plan.candidateBatch.id,
+              batchNumber: plan.candidateBatch.batchNumber,
+              dispenseType: plan.isWastage ? 'WASTAGE' : data.dispenseType,
+              quantity: plan.dispenseQuantity,
+              unit: plan.dispenseUnit,
+              baseQuantity: plan.baseQuantityNeeded,
+              baseUnit: plan.baseUnit,
+              idempotencyKey: itemKey,
+              status: 'COMPLETED',
+              notes: plan.notes || null,
+              dispensedByUserId: actorUserId || null,
+            },
+          });
+
+          // Update prescription item dispensed quantity
+          const newDispQty = (plan.rxItem.dispensedQuantity || 0) + plan.dispenseQuantity;
+          const newStatus = newDispQty >= plan.rxItem.totalQuantity ? 'FULLY_DISPENSED' : 'PARTIALLY_DISPENSED';
+          await tx.prescriptionItem.update({
+            where: { id: plan.rxItem.id },
+            data: {
+              dispensedQuantity: newDispQty,
+              dispenseStatus: newStatus,
+            },
+          });
+
+          committedRecords.push({
+            id: dispRec.id,
+            practiceId,
+            prescriptionId: prescription.id,
+            prescriptionItemId: plan.rxItem.id,
+            inventoryItemId: plan.invItem.id,
+            itemName: plan.invItem.name,
+            inventoryBatchId: plan.candidateBatch.id,
+            batchNumber: plan.candidateBatch.batchNumber,
+            dispenseType: dispRec.dispenseType,
+            quantity: dispRec.quantity,
+            unit: dispRec.unit,
+            baseQuantity: dispRec.baseQuantity,
+            baseUnit: dispRec.baseUnit,
+            status: dispRec.status,
+            notes: dispRec.notes,
+            createdAt: dispRec.createdAt.toISOString(),
+          });
+
+          // Container Breakdown
+          const breakdown = UnitConversionService.calculateContainerBreakdown(
+            updatedBatch.currentQuantity,
+            plan.invItem.stockUnit,
+            plan.invItem.packSize
+          );
+
+          updatedStockBalances.push({
+            inventoryItemId: plan.invItem.id,
+            itemName: plan.invItem.name,
+            batchId: plan.candidateBatch.id,
+            batchNumber: plan.candidateBatch.batchNumber,
+            remainingQuantity: updatedBatch.currentQuantity,
+            baseUnit: plan.invItem.stockUnit,
+            containerBreakdown: breakdown,
+          });
+        }
+
+        // Recalculate overarching prescription dispenseStatus
+        const allItems = await tx.prescriptionItem.findMany({
+          where: { prescriptionId: prescription.id },
+        });
+        const allFully = allItems.every((it) => it.dispenseStatus === 'FULLY_DISPENSED');
+        const anyDisp = allItems.some((it) => it.dispensedQuantity > 0);
+        const finalStatus = allFully ? 'FULLY_DISPENSED' : anyDisp ? 'PARTIALLY_DISPENSED' : 'UNDISPENSED';
+
+        await tx.prescription.update({
+          where: { id: prescription.id },
+          data: { dispenseStatus: finalStatus },
+        });
+      });
+    } else {
+      // Mock Store execution for unit testing
+      const batchesStore = this.getBatchesStore(practiceId);
+      const txsStore = this.getTransactionsStore(practiceId);
+      const dispStore = this.getDispensingsStore(practiceId);
+
+      for (const plan of plans) {
+        const itemKey = data.idempotencyKey ? `${data.idempotencyKey}_${plan.rxItem.id}` : null;
+
+        if (plan.isExternal) {
+          const rec: PrescriptionDispenseRecordDTO = {
+            id: `disp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            practiceId,
+            prescriptionId: prescription.id,
+            prescriptionItemId: plan.rxItem.id,
+            inventoryItemId: null,
+            itemName: plan.rxItem.medicineName,
+            inventoryBatchId: null,
+            batchNumber: null,
+            dispenseType: plan.isWastage ? 'WASTAGE' : data.dispenseType,
+            quantity: plan.dispenseQuantity,
+            unit: plan.dispenseUnit,
+            baseQuantity: 0,
+            baseUnit: plan.baseUnit,
+            status: 'COMPLETED',
+            notes: plan.notes || 'External medicine',
+            createdAt: new Date().toISOString(),
+          };
+          dispStore.push({ ...rec, idempotencyKey: itemKey });
+          committedRecords.push(rec);
+
+          plan.rxItem.dispensedQuantity = (plan.rxItem.dispensedQuantity || 0) + plan.dispenseQuantity;
+          plan.rxItem.dispenseStatus = plan.rxItem.dispensedQuantity >= plan.rxItem.totalQuantity ? 'FULLY_DISPENSED' : 'PARTIALLY_DISPENSED';
+          continue;
+        }
+
+        const b = batchesStore.find((x) => x.id === plan.candidateBatch.id)!;
+        const oldQty = b.currentQuantity;
+        b.currentQuantity = Math.round((b.currentQuantity - plan.baseQuantityNeeded) * 10000) / 10000;
+        b.updatedAt = new Date().toISOString();
+
+        txsStore.push({
+          id: `tx_${Date.now()}_disp`,
+          practiceId,
+          itemId: plan.invItem.id,
+          itemName: plan.invItem.name,
+          itemCategory: plan.invItem.category,
+          batchId: b.id,
+          batchNumber: b.batchNumber,
+          transactionType: plan.isWastage ? 'WASTAGE' : 'SALE_OR_INVOICE',
+          quantityChange: -plan.baseQuantityNeeded,
+          quantityBefore: oldQty,
+          quantityAfter: b.currentQuantity,
+          unitCost: b.purchaseRate || 0,
+          referenceType: data.dispenseType === 'ADMINISTRATION' ? 'PRESCRIPTION_ADMINISTER' : 'PRESCRIPTION_DISPENSE',
+          referenceId: prescription.id,
+          reason: `Dispensed Rx #${prescription.rxNumber || prescription.id}`,
+          performedByUserId: actorUserId || null,
+          createdAt: new Date().toISOString(),
+        });
+
+        const rec: PrescriptionDispenseRecordDTO = {
+          id: `disp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          practiceId,
+          prescriptionId: prescription.id,
+          prescriptionItemId: plan.rxItem.id,
+          inventoryItemId: plan.invItem.id,
+          itemName: plan.invItem.name,
+          inventoryBatchId: b.id,
+          batchNumber: b.batchNumber,
+          dispenseType: plan.isWastage ? 'WASTAGE' : data.dispenseType,
+          quantity: plan.dispenseQuantity,
+          unit: plan.dispenseUnit,
+          baseQuantity: plan.baseQuantityNeeded,
+          baseUnit: plan.baseUnit,
+          status: 'COMPLETED',
+          notes: plan.notes || null,
+          createdAt: new Date().toISOString(),
+        };
+        dispStore.push({ ...rec, idempotencyKey: itemKey });
+        committedRecords.push(rec);
+
+        plan.rxItem.dispensedQuantity = (plan.rxItem.dispensedQuantity || 0) + plan.dispenseQuantity;
+        plan.rxItem.dispenseStatus = plan.rxItem.dispensedQuantity >= plan.rxItem.totalQuantity ? 'FULLY_DISPENSED' : 'PARTIALLY_DISPENSED';
+
+        const breakdown = UnitConversionService.calculateContainerBreakdown(
+          b.currentQuantity,
+          plan.invItem.stockUnit,
+          plan.invItem.packSize
+        );
+
+        updatedStockBalances.push({
+          inventoryItemId: plan.invItem.id,
+          itemName: plan.invItem.name,
+          batchId: b.id,
+          batchNumber: b.batchNumber,
+          remainingQuantity: b.currentQuantity,
+          baseUnit: plan.invItem.stockUnit,
+          containerBreakdown: breakdown,
+        });
+      }
+
+      const allFully = prescription.items.every((it: any) => it.dispenseStatus === 'FULLY_DISPENSED');
+      const anyDisp = prescription.items.some((it: any) => (it.dispensedQuantity || 0) > 0);
+      prescription.dispenseStatus = allFully ? 'FULLY_DISPENSED' : anyDisp ? 'PARTIALLY_DISPENSED' : 'UNDISPENSED';
+    }
+
+    void AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'PRESCRIPTION_DISPENSED',
+      resource: 'Prescription',
+      resourceId: prescription.id,
+      details: {
+        dispenseType: data.dispenseType,
+        itemsCount: data.items.length,
+        committedCount: committedRecords.length,
+      },
+    });
+
+    const finalDispenseStatus = prescription.dispenseStatus || 'PARTIALLY_DISPENSED';
+
+    return {
+      success: true,
+      prescriptionId: prescription.id,
+      dispenseStatus: finalDispenseStatus,
+      dispensedRecords: committedRecords,
+      updatedStockBalances,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 18. Dispensing Reversal (Compensating Movement)
+  // --------------------------------------------------------------------------
+
+  static async reversePrescriptionDispensing(
+    practiceId: string,
+    dispensingId: string,
+    reason: string,
+    actorUserId?: string
+  ): Promise<{ success: boolean; reversedRecord: PrescriptionDispenseRecordDTO }> {
+    if (!dispensingId) {
+      throw new AppError(400, 'DISPENSING_ID_REQUIRED', 'Dispensing record ID is required.');
+    }
+    if (!reason || !reason.trim()) {
+      throw new AppError(400, 'REASON_REQUIRED', 'A mandatory reason is required to reverse a dispensing record.');
+    }
+
+    let dispRec: any = null;
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescriptionDispensing) {
+      dispRec = await prisma.prescriptionDispensing.findFirst({
+        where: { id: dispensingId, practiceId },
+        include: {
+          inventoryItem: true,
+          prescriptionItem: true,
+          prescription: true,
+        },
+      });
+    } else {
+      dispRec = this.getDispensingsStore(practiceId).find((d) => d.id === dispensingId);
+    }
+
+    if (!dispRec) {
+      throw new AppError(404, 'DISPENSING_RECORD_NOT_FOUND', 'Dispensing record not found.');
+    }
+    if (dispRec.status === 'REVERSED') {
+      throw new AppError(400, 'ALREADY_REVERSED', 'This dispensing record has already been reversed.');
+    }
+
+    const now = new Date();
+
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescriptionDispensing) {
+      await prisma.$transaction(async (tx) => {
+        // If internal stock was deducted, reverse it via compensating movement
+        if (dispRec.inventoryBatchId && dispRec.baseQuantity && dispRec.baseQuantity > 0) {
+          const updatedBatch = await tx.inventoryBatch.update({
+            where: { id: dispRec.inventoryBatchId },
+            data: { currentQuantity: { increment: dispRec.baseQuantity } },
+          });
+
+          await tx.inventoryTransaction.create({
+            data: {
+              practiceId,
+              itemId: dispRec.inventoryItemId,
+              batchId: dispRec.inventoryBatchId,
+              transactionType: 'REVERSAL',
+              quantityChange: dispRec.baseQuantity,
+              quantityBefore: updatedBatch.currentQuantity - dispRec.baseQuantity,
+              quantityAfter: updatedBatch.currentQuantity,
+              unitCost: 0,
+              referenceType: 'DISPENSE_REVERSAL',
+              referenceId: dispRec.id,
+              reason: `Reversal of Dispensing #${dispRec.id}: ${reason.trim()}`,
+              performedByUserId: actorUserId || null,
+            },
+          });
+        }
+
+        // Update dispensing record status
+        await tx.prescriptionDispensing.update({
+          where: { id: dispRec.id },
+          data: {
+            status: 'REVERSED',
+            reversalReason: reason.trim(),
+            reversedAt: now,
+            reversedByUserId: actorUserId || null,
+          },
+        });
+
+        // Decrement prescription item dispensedQuantity
+        const rxItem = await tx.prescriptionItem.findUnique({
+          where: { id: dispRec.prescriptionItemId },
+        });
+        if (rxItem) {
+          const newDisp = Math.max(0, (rxItem.dispensedQuantity || 0) - dispRec.quantity);
+          const newStatus = newDisp <= 0 ? 'PENDING' : newDisp >= rxItem.totalQuantity ? 'FULLY_DISPENSED' : 'PARTIALLY_DISPENSED';
+          await tx.prescriptionItem.update({
+            where: { id: rxItem.id },
+            data: {
+              dispensedQuantity: newDisp,
+              dispenseStatus: newStatus,
+            },
+          });
+        }
+
+        // Recalculate prescription dispenseStatus
+        const allItems = await tx.prescriptionItem.findMany({
+          where: { prescriptionId: dispRec.prescriptionId },
+        });
+        const allFully = allItems.every((it) => it.dispenseStatus === 'FULLY_DISPENSED');
+        const anyDisp = allItems.some((it) => it.dispensedQuantity > 0);
+        const finalStatus = allFully ? 'FULLY_DISPENSED' : anyDisp ? 'PARTIALLY_DISPENSED' : 'UNDISPENSED';
+
+        await tx.prescription.update({
+          where: { id: dispRec.prescriptionId },
+          data: { dispenseStatus: finalStatus },
+        });
+      });
+    } else {
+      // Mock store reversal
+      if (dispRec.inventoryBatchId && dispRec.baseQuantity && dispRec.baseQuantity > 0) {
+        const b = this.getBatchesStore(practiceId).find((x) => x.id === dispRec.inventoryBatchId);
+        if (b) {
+          const oldQty = b.currentQuantity;
+          b.currentQuantity = Math.round((b.currentQuantity + dispRec.baseQuantity) * 10000) / 10000;
+          this.getTransactionsStore(practiceId).push({
+            id: `tx_${Date.now()}_rev`,
+            practiceId,
+            itemId: dispRec.inventoryItemId,
+            batchId: b.id,
+            batchNumber: b.batchNumber,
+            transactionType: 'REVERSAL',
+            quantityChange: dispRec.baseQuantity,
+            quantityBefore: oldQty,
+            quantityAfter: b.currentQuantity,
+            unitCost: 0,
+            referenceType: 'DISPENSE_REVERSAL',
+            referenceId: dispRec.id,
+            reason: `Reversal: ${reason.trim()}`,
+            createdAt: now.toISOString(),
+          });
+        }
+      }
+      dispRec.status = 'REVERSED';
+      dispRec.reversalReason = reason.trim();
+      dispRec.reversedAt = now.toISOString();
+      dispRec.reversedByUserId = actorUserId || null;
+    }
+
+    void AuditService.record({
+      practiceId,
+      userId: actorUserId,
+      action: 'PRESCRIPTION_DISPENSE_REVERSED',
+      resource: 'PrescriptionDispensing',
+      resourceId: dispRec.id,
+      details: {
+        reason: reason.trim(),
+        prescriptionId: dispRec.prescriptionId,
+      },
+    });
+
+    return {
+      success: true,
+      reversedRecord: {
+        id: dispRec.id,
+        practiceId: dispRec.practiceId,
+        prescriptionId: dispRec.prescriptionId,
+        prescriptionItemId: dispRec.prescriptionItemId,
+        inventoryItemId: dispRec.inventoryItemId,
+        itemName: dispRec.inventoryItem?.name || null,
+        inventoryBatchId: dispRec.inventoryBatchId,
+        batchNumber: dispRec.batchNumber,
+        dispenseType: dispRec.dispenseType,
+        quantity: dispRec.quantity,
+        unit: dispRec.unit,
+        baseQuantity: dispRec.baseQuantity,
+        baseUnit: dispRec.baseUnit,
+        status: 'REVERSED',
+        notes: dispRec.notes,
+        reversalReason: reason.trim(),
+        reversedAt: now.toISOString(),
+        reversedByUserId: actorUserId || null,
+        createdAt: typeof dispRec.createdAt === 'string' ? dispRec.createdAt : dispRec.createdAt.toISOString(),
+      },
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // 19. Prescription Dispense History
+  // --------------------------------------------------------------------------
+
+  static async getPrescriptionDispenseHistory(
+    practiceId: string,
+    prescriptionId: string
+  ): Promise<PrescriptionDispenseRecordDTO[]> {
+    if (process.env.VETRX_FAST_TEST !== '1' && prisma?.prescriptionDispensing) {
+      try {
+        const records = await prisma.prescriptionDispensing.findMany({
+          where: { practiceId, prescriptionId },
+          include: { inventoryItem: true },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        return records.map((r) => ({
+          id: r.id,
+          practiceId: r.practiceId,
+          prescriptionId: r.prescriptionId,
+          prescriptionItemId: r.prescriptionItemId,
+          inventoryItemId: r.inventoryItemId,
+          itemName: r.inventoryItem?.name || null,
+          inventoryBatchId: r.inventoryBatchId,
+          batchNumber: r.batchNumber,
+          dispenseType: r.dispenseType,
+          quantity: r.quantity,
+          unit: r.unit,
+          baseQuantity: r.baseQuantity,
+          baseUnit: r.baseUnit,
+          status: r.status,
+          notes: r.notes,
+          reversalReason: r.reversalReason,
+          reversedAt: r.reversedAt?.toISOString() || null,
+          reversedByUserId: r.reversedByUserId,
+          dispensedByUserId: r.dispensedByUserId,
+          createdAt: r.createdAt.toISOString(),
+        }));
+      } catch (err) {
+        console.warn('[InventoryService.getPrescriptionDispenseHistory] Prisma error, using fallback:', err);
+      }
+    }
+
+    const store = this.getDispensingsStore(practiceId);
+    return store.filter((d) => d.prescriptionId === prescriptionId);
+  }
+
   private static getItemsStore(practiceId: string): InventoryItemDTO[] {
     if (!this.mockItems.has(practiceId)) {
       this.mockItems.set(practiceId, []);
@@ -3611,6 +4415,13 @@ export class InventoryService {
       this.mockTransactions.set(practiceId, []);
     }
     return this.mockTransactions.get(practiceId)!;
+  }
+
+  private static getDispensingsStore(practiceId: string): any[] {
+    if (!this.mockDispensings.has(practiceId)) {
+      this.mockDispensings.set(practiceId, []);
+    }
+    return this.mockDispensings.get(practiceId)!;
   }
 
   private static getSuppliersStore(practiceId: string): SupplierDTO[] {
@@ -3634,3 +4445,4 @@ export class InventoryService {
     return this.mockLocations.get(practiceId)!;
   }
 }
+

@@ -35,7 +35,7 @@ function getId(req: AuthenticatedRequest): string {
 
 const createCallSchema = z.object({
   callerPhone: z.string().min(1).max(30),
-  ownerId: z.union([z.string(), z.number()]).transform((v) => (v && typeof v === 'string' && v.includes('-') ? v : null)).nullable().optional(),
+  ownerId: z.union([z.string(), z.number(), z.null()]).transform((v) => (typeof v === 'string' && v.includes('-') ? v : null)).nullable().optional(),
   tempOwnerName: z.string().max(120).nullable().optional(),
   tempPatientName: z.string().max(120).nullable().optional(),
   species: z.string().max(60).nullable().optional(),
@@ -44,7 +44,7 @@ const createCallSchema = z.object({
   tentativeAssessment: z.string().max(2000).nullable().optional(),
   priority: z.enum(['EMERGENCY', 'URGENT', 'COULD_NOT_ASSESS', 'PLANNED']).default('PLANNED'),
   flexibility: z.enum(['MUST_ATTEND_TODAY', 'CAN_POSTPONE_TODAY', 'PREFERRED_TODAY', 'SPECIFIC_DATE']).default('MUST_ATTEND_TODAY'),
-  preferredDate: z.string().datetime().nullable().optional().transform((v) => (v ? new Date(v) : null)),
+  preferredDate: z.union([z.string(), z.date()]).nullable().optional().transform((v) => (v && v !== '' ? new Date(v) : null)),
   locationAddress: z.string().max(500).nullable().optional(),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
@@ -194,6 +194,17 @@ cvpRouter.post('/calls/:id/close', requirePracticePermission(PERMISSIONS.CVP_CAL
     const parsed = closeCallSchema.parse(req.body);
     const updated = await CvpBackendService.closeCall(getId(req), practiceId, parsed);
     res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── DELETE /api/calls/:id ─────────────────────────────────────────────────────
+cvpRouter.delete('/calls/:id', requirePracticePermission(PERMISSIONS.CVP_CALL_MANAGE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const deleted = await CvpBackendService.deleteCall(getId(req), practiceId);
+    res.status(200).json(deleted);
   } catch (err) {
     next(err);
   }

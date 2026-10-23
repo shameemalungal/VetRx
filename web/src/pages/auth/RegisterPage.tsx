@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth, type RegisterParams } from '../../context/AuthContext';
 import { VetRxLogo } from '../../components/ui/VetRxLogo';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { API_BASE } from '../../config/api';
 import './Auth.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 interface TeamMemberRow {
   name: string;
@@ -127,12 +128,18 @@ export const RegisterPage: React.FC = () => {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     const safeReturnTo =
       redirectUrl.startsWith('/') && !redirectUrl.startsWith('//') && redirectUrl !== '/'
         ? redirectUrl
         : '/dashboard';
-    window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
+
+    if (Capacitor.isNativePlatform()) {
+      const targetUrl = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}&platform=android`;
+      await Browser.open({ url: targetUrl });
+    } else {
+      window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
+    }
   };
 
   // If invited to an existing practice, display streamlined acceptance registration

@@ -12,16 +12,16 @@ import { formatAnimalSubtitle, formatOwnerPrimary, isArtificialOrBlankName } fro
 import './Invoices.css';
 
 export interface SelectedMedicineImport {
-  prescriptionId: number;
+  prescriptionId: number | string;
   prescriptionNumber: string;
   prescriptionDate: Date | string;
-  prescriptionItemId?: number;
-  patientId: number;
+  prescriptionItemId?: number | string;
+  patientId: number | string;
   patientName: string;
   patientSubtitle?: string;
-  ownerId: number;
+  ownerId: number | string;
   ownerName: string;
-  medicineId?: number;
+  medicineId?: number | string;
   brandName: string;
   strengthVolume?: string;
   description: string;
@@ -35,7 +35,7 @@ export interface ImportPrescriptionsModalProps {
   onClose: () => void;
   selectedPatientId?: number | string;
   selectedOwnerId?: number | string;
-  existingItemsSummary?: Array<{ prescriptionId?: number; description: string }>;
+  existingItemsSummary?: Array<{ prescriptionId?: number | string; description: string }>;
   onImportMedicines: (items: SelectedMedicineImport[]) => void;
 }
 
@@ -117,15 +117,15 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
 
   // Lookup Mappings
   const patientsMap = useMemo(() => {
-    return new Map<number, Patient>((allPatients || []).map((p) => [p.id!, p]));
+    return new Map<number | string, Patient>((allPatients || []).map((p) => [p.id!, p]));
   }, [allPatients]);
 
   const ownersMap = useMemo(() => {
-    return new Map<number, Owner>((allOwners || []).map((o) => [o.id!, o]));
+    return new Map<number | string, Owner>((allOwners || []).map((o) => [o.id!, o]));
   }, [allOwners]);
 
   const itemsByRxId = useMemo(() => {
-    const map = new Map<number, PrescriptionItem[]>();
+    const map = new Map<number | string, PrescriptionItem[]>();
     for (const it of allItems || []) {
       const list = map.get(it.prescriptionId) || [];
       list.push(it);
@@ -139,14 +139,14 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
     if (!allPrescriptions) return [];
 
     const q = searchQuery.trim().toLowerCase();
-    const currPatientNum = selectedPatientId ? Number(selectedPatientId) : undefined;
-    const currOwnerNum = selectedOwnerId ? Number(selectedOwnerId) : undefined;
+    const currPatientId = selectedPatientId !== undefined && selectedPatientId !== '' ? String(selectedPatientId) : undefined;
+    const currOwnerId = selectedOwnerId !== undefined && selectedOwnerId !== '' ? String(selectedOwnerId) : undefined;
 
     return allPrescriptions.filter((rx) => {
       // 1. Scope filter
       if (scope === 'current') {
-        const matchesPatient = currPatientNum ? rx.patientId === currPatientNum : false;
-        const matchesOwner = currOwnerNum ? rx.ownerId === currOwnerNum : false;
+        const matchesPatient = currPatientId ? String(rx.patientId) === currPatientId : false;
+        const matchesOwner = currOwnerId ? String(rx.ownerId) === currOwnerId : false;
         if (!matchesPatient && !matchesOwner) {
           return false;
         }
@@ -201,10 +201,10 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
     });
   };
 
-  const isAlreadyInInvoice = (rxId: number, brandName: string) => {
+  const isAlreadyInInvoice = (rxId: number | string, brandName: string) => {
     const bNorm = brandName.trim().toLowerCase();
     return existingItemsSummary.some(
-      (it) => it.prescriptionId === rxId && it.description.toLowerCase().includes(bNorm)
+      (it) => (it.prescriptionId !== undefined && String(it.prescriptionId) === String(rxId)) && it.description.toLowerCase().includes(bNorm)
     );
   };
 
@@ -215,11 +215,11 @@ export const ImportPrescriptionsModal: React.FC<ImportPrescriptionsModalProps> =
 
     for (const key of selectedItemKeys) {
       const [rxIdStr, itemIdStr] = key.split('_');
-      const rxId = Number(rxIdStr);
-      const itemId = Number(itemIdStr);
+      const rxId = isNaN(Number(rxIdStr)) ? rxIdStr : Number(rxIdStr);
+      const itemId = isNaN(Number(itemIdStr)) ? itemIdStr : Number(itemIdStr);
 
-      const rx = allPrescriptions.find((r) => r.id === rxId);
-      const itm = (itemsByRxId.get(rxId) || []).find((i) => i.id === itemId);
+      const rx = allPrescriptions.find((r) => String(r.id) === String(rxId));
+      const itm = (itemsByRxId.get(rxId) || itemsByRxId.get(String(rxId)) || []).find((i) => String(i.id) === String(itemId));
 
       if (rx && itm) {
         const patient = patientsMap.get(rx.patientId);

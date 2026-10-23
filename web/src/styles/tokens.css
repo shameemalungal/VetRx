@@ -228,4 +228,54 @@
   --transition-fast:   100ms ease;
   --transition-base:   180ms ease;
   --transition-slow:   280ms ease;
+
+  /* ── Samsung One UI 9 Mobile Tokens ───────────────────────── */
+  --color-brand-teal:               #00685F;
+  --color-brand-deep-teal:          #004D46;
+  --color-brand-blue:               #2867C7;
+  --color-brand-pale-teal:          #E0F3EF;
+  --color-brand-mint-light:         #CCFBF1;
+
+  /* Quick action pastels */
+  --qa-rx-bg:                       #E6F8F3;
+  --qa-rx-border:                   #A7F3D0;
+  --qa-rx-icon:                     #059669;
+  --qa-patient-bg:                  #E8F4FE;
+  --qa-patient-border:              #BAE6FD;
+  --qa-patient-icon:                #2563EB;
+  --qa-call-bg:                     #FDECEB;
+  --qa-call-border:                 #FECDD3;
+  --qa-call-icon:                   #E11D48;
+  --qa-visit-bg:                    #F1ECFE;
+  --qa-visit-border:                #DDD6FE;
+  --qa-visit-icon:                  #7C3AED;
+  --qa-invoice-bg:                  #FFF6E5;
+  --qa-invoice-border:              #FDE68A;
+  --qa-invoice-icon:                #D97706;
+  --qa-meds-bg:                     #EAF3FE;
+  --qa-meds-border:                 #BFDBFE;
+  --qa-meds-icon:                   #2563EB;
+  --qa-stock-bg:                    #E6F8F3;
+  --qa-stock-border:                #99F6E4;
+  --qa-stock-icon:                  #0D9488;
+  --qa-more-bg:                     #F1F5F9;
+  --qa-more-border:                 #E2E8F0;
+  --qa-more-icon:                   #475569;
+
+  /* Bento summary cards */
+  --bento-followups-bg:             #FFF8EB;
+  --bento-followups-border:         #FDE68A;
+  --bento-invoices-bg:              #EBF5FF;
+  --bento-invoices-border:          #BFDBFE;
+  --bento-alerts-bg:                #FFF5F5;
+  --bento-alerts-border:            #FECDD3;
+  --bento-sync-bg:                  #ECFDF5;
+  --bento-sync-border:              #A7F3D0;
+
+  /* Mobile radius & shadow */
+  --radius-mobile-card:             20px;
+  --radius-mobile-subcard:          16px;
+  --radius-mobile-button:           14px;
+  --shadow-oneui-card:              0 2px 10px -1px rgba(15, 23, 42, 0.05), 0 1px 3px 0 rgba(15, 23, 42, 0.03);
+  --shadow-oneui-active:            0 4px 16px -2px rgba(0, 104, 95, 0.15);
 }

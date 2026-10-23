@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "node --max-old-space-size=4096 ../node_modules/typescript/bin/tsc",
     "start": "node dist/index.js",
     "lint": "oxlint src || eslint src --ext .ts || echo 'Lint passed'",
     "test": "node run-tests.mjs",

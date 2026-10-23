@@ -106,7 +106,14 @@ export class CvpBackendService {
         },
         visits: {
           include: {
-            cases: true,
+            cases: {
+              include: {
+                prescription: true,
+                invoice: true,
+              },
+            },
+            procedures: true,
+            medicineUsages: true,
           },
         },
       },
@@ -206,13 +213,35 @@ export class CvpBackendService {
       notes: string | null;
     }>
   ) {
-    await this.getCallById(id, practiceId);
+    const existing = await this.getCallById(id, practiceId);
+
+    // Sanitize string fields
+    const sanitizedData: any = { ...data };
+    if (sanitizedData.callerPhone !== undefined) sanitizedData.callerPhone = sanitizedData.callerPhone.trim();
+    if (sanitizedData.tempOwnerName !== undefined) sanitizedData.tempOwnerName = sanitizedData.tempOwnerName?.trim() || null;
+    if (sanitizedData.tempPatientName !== undefined) sanitizedData.tempPatientName = sanitizedData.tempPatientName?.trim() || null;
+    if (sanitizedData.species !== undefined) sanitizedData.species = sanitizedData.species?.trim() || null;
+    if (sanitizedData.symptoms !== undefined) sanitizedData.symptoms = sanitizedData.symptoms.trim();
+    if (sanitizedData.tentativeAssessment !== undefined) sanitizedData.tentativeAssessment = sanitizedData.tentativeAssessment?.trim() || null;
+    if (sanitizedData.locationAddress !== undefined) sanitizedData.locationAddress = sanitizedData.locationAddress?.trim() || null;
+    if (sanitizedData.plannedProcedure !== undefined) sanitizedData.plannedProcedure = sanitizedData.plannedProcedure?.trim() || null;
+    if (sanitizedData.notes !== undefined) sanitizedData.notes = sanitizedData.notes?.trim() || null;
 
     const updated = await prisma.call.update({
       where: { id },
-      data,
+      data: sanitizedData,
       include: {
-        owner: true,
+        owner: {
+          include: {
+            patients: true,
+            locations: true,
+          },
+        },
+        visits: {
+          include: {
+            cases: true,
+          },
+        },
       },
     });
 
@@ -221,10 +250,136 @@ export class CvpBackendService {
       action: 'CALL_UPDATED',
       resource: 'Call',
       resourceId: id,
-      details: data,
+      details: {
+        oldPriority: existing.priority,
+        newPriority: data.priority,
+        changedFields: Object.keys(data),
+      },
     });
 
+    // If priority changed and visits exist, record timeline events for clinical audit trails
+    if (data.priority && data.priority !== existing.priority && existing.visits && existing.visits.length > 0) {
+      for (const v of existing.visits) {
+        await prisma.visitTimelineEvent.create({
+          data: {
+            practiceId,
+            visitId: v.id,
+            eventType: 'CALL_PRIORITY_UPDATED',
+            title: `Call Priority Changed: ${data.priority}`,
+            description: `Triage priority updated from ${existing.priority} to ${data.priority}.`,
+            metadata: {
+              oldPriority: existing.priority,
+              newPriority: data.priority,
+            },
+          },
+        }).catch((err) => console.warn('Failed to add visit timeline event for priority update:', err));
+      }
+    }
+
     return updated;
+  }
+
+  // ── Delete Call (Safe Deletion with Comprehensive Clinical Protection) ──
+  static async deleteCall(id: string, practiceId: string) {
+    const call = await prisma.call.findFirst({
+      where: { id, practiceId },
+      include: {
+        visits: {
+          include: {
+            cases: {
+              include: {
+                prescription: true,
+                invoice: true,
+              },
+            },
+            procedures: true,
+            medicineUsages: true,
+          },
+        },
+      },
+    });
+
+    if (!call) {
+      // Idempotent: already deleted or not found
+      return {
+        success: true,
+        message: 'Call already deleted or does not exist.',
+        id,
+      };
+    }
+
+    const visits = call.visits || [];
+
+    // Guard 1: Completed visits or protected clinical/financial history exist
+    const hasClinicalOrFinancial = visits.some(
+      (v) =>
+        v.status === 'COMPLETED' ||
+        v.procedures.length > 0 ||
+        v.medicineUsages.length > 0 ||
+        v.cases.some(
+          (c) =>
+            c.prescriptionId != null ||
+            c.invoiceId != null ||
+            c.prescription != null ||
+            c.invoice != null
+        )
+    );
+
+    if (hasClinicalOrFinancial) {
+      throw new AppError(
+        409,
+        'CANNOT_DELETE_CALL_WITH_CLINICAL_RECORDS',
+        'Cannot delete this call because completed clinical or financial records (prescriptions, invoices, procedures, or medicines) exist. To preserve medical and financial history, you can cancel or archive the call instead.'
+      );
+    }
+
+    // Guard 2: Active or scheduled visits exist
+    const activeVisit = visits.find((v) =>
+      ['REGISTERED', 'SCHEDULED', 'DISPATCHED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'POSTPONED'].includes(v.status)
+    );
+
+    if (activeVisit) {
+      throw new AppError(
+        409,
+        'CALL_LINKED_TO_ACTIVE_VISIT',
+        `Cannot delete this call because it has an active or scheduled visit (Visit ID: ${activeVisit.id}, Status: ${activeVisit.status}). Please cancel or reschedule the visit first, or cancel the call instead.`
+      );
+    }
+
+    // Guard 3: Linked visit records exist even if cancelled (preserve audit trails)
+    if (visits.length > 0) {
+      throw new AppError(
+        409,
+        'CALL_HAS_LINKED_VISITS',
+        'Cannot delete this call because linked visit history exists. Use the Cancel Call action to safely close this record without losing historical audit trails.'
+      );
+    }
+
+    // Fully unlinked draft call: Safe to delete
+    await prisma.call.delete({
+      where: { id },
+    });
+
+    void AuditService.record({
+      practiceId,
+      action: 'CALL_DELETED',
+      resource: 'Call',
+      resourceId: id,
+      details: {
+        callerPhone: call.callerPhone,
+        ownerId: call.ownerId,
+        tempOwnerName: call.tempOwnerName,
+        tempPatientName: call.tempPatientName,
+        species: call.species,
+        symptoms: call.symptoms,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Call deleted successfully.',
+      id,
+    };
   }
 
   // ── Postpone Call ─────────────────────────────────────────────────────

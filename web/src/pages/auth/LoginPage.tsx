@@ -4,7 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 import { VetRxLogo } from '../../components/ui/VetRxLogo';
 import './Auth.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { API_BASE } from '../../config/api';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -54,14 +56,20 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     const params = new URLSearchParams(location.search);
     const rawRedirect = params.get('redirect');
     const safeReturnTo =
       rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') && rawRedirect !== '/'
         ? rawRedirect
         : '/dashboard';
-    window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
+
+    if (Capacitor.isNativePlatform()) {
+      const targetUrl = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}&platform=android`;
+      await Browser.open({ url: targetUrl });
+    } else {
+      window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
+    }
   };
 
   const handleRequestOtp = async (e: React.FormEvent) => {

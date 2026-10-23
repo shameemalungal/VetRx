@@ -223,6 +223,7 @@ model Practice {
   suppliers             Supplier[]
   purchaseInvoices      PurchaseInvoice[]
   stockLocations        StockLocation[]
+  prescriptionDispensings PrescriptionDispensing[]
 
   @@index([ownerUserId])
 }
@@ -365,6 +366,7 @@ model Patient {
 
   @@index([practiceId])
   @@index([ownerId])
+  @@index([practiceId, createdAt(sort: Desc)])
 }
 
 model Medicine {
@@ -416,6 +418,7 @@ model Prescription {
   diagnosis       String?
   notes                 String?
   status                String             @default("DRAFT") // "DRAFT", "PENDING_APPROVAL", "CHANGES_REQUESTED", "APPROVED", "CANCELLED", legacy: "Draft", "Final"
+  dispenseStatus        String             @default("UNDISPENSED") // "UNDISPENSED", "PARTIALLY_DISPENSED", "FULLY_DISPENSED"
   version               Int                @default(1)
   prescribedAt          DateTime           @default(now())
   createdAt             DateTime           @default(now())
@@ -444,11 +447,14 @@ model Prescription {
   invoiceItems          InvoiceItem[]
   workflowHistory       PrescriptionWorkflowHistory[]
   visitCases            VisitCase[]
+  dispensings           PrescriptionDispensing[]
 
   @@unique([practiceId, rxNumber])
   @@index([practiceId])
   @@index([patientId])
   @@index([status])
+  @@index([practiceId, createdAt(sort: Desc)])
+  @@index([practiceId, status])
 }
 
 model PrescriptionWorkflowHistory {
@@ -482,11 +488,18 @@ model PrescriptionItem {
   totalQuantity  Float        @default(1)
   quantityUnit   String?
   instructions   String?
+  isExternal     Boolean      @default(false)
+  inventoryItemId String?
+  inventoryItem  InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  dispensedQuantity Float     @default(0)
+  dispenseStatus String       @default("PENDING") // "PENDING", "PARTIALLY_DISPENSED", "FULLY_DISPENSED"
+  dispensings    PrescriptionDispensing[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   @@index([prescriptionId])
   @@index([medicineId])
+  @@index([inventoryItemId])
 }
 
 model Invoice {
@@ -511,6 +524,8 @@ model Invoice {
 
   @@unique([practiceId, invoiceNumber])
   @@index([practiceId])
+  @@index([practiceId, createdAt(sort: Desc)])
+  @@index([practiceId, status])
 }
 
 model InvoiceItem {
@@ -843,6 +858,8 @@ model InventoryItem {
   batches            InventoryBatch[]
   transactions       InventoryTransaction[]
   purchaseItems      PurchaseInvoiceItem[]
+  prescriptionItems  PrescriptionItem[]
+  prescriptionDispensings PrescriptionDispensing[]
 
   @@index([practiceId])
   @@index([practiceId, category])
@@ -899,6 +916,40 @@ model InventoryTransaction {
   @@index([itemId])
   @@index([batchId])
   @@index([transactionType])
+  @@index([createdAt])
+}
+
+model PrescriptionDispensing {
+  id                 String           @id @default(uuid())
+  practiceId         String
+  practice           Practice         @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  prescriptionId     String
+  prescription       Prescription     @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  prescriptionItemId String
+  prescriptionItem   PrescriptionItem @relation(fields: [prescriptionItemId], references: [id], onDelete: Cascade)
+  inventoryItemId    String?
+  inventoryItem      InventoryItem?   @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  inventoryBatchId   String?
+  batchNumber        String?
+  dispenseType       String           @default("DISPENSE") // "DISPENSE", "ADMINISTRATION", "REVERSAL", "WASTAGE"
+  quantity           Float
+  unit               String?
+  baseQuantity       Float?
+  baseUnit           String?
+  idempotencyKey     String?          @unique
+  status             String           @default("COMPLETED") // "COMPLETED", "REVERSED"
+  notes              String?
+  reversalReason     String?
+  reversedAt         DateTime?
+  reversedByUserId   String?
+  dispensedByUserId  String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([practiceId])
+  @@index([prescriptionId])
+  @@index([prescriptionItemId])
+  @@index([inventoryItemId])
   @@index([createdAt])
 }
 

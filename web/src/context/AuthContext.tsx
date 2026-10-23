@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { switchTenantDb, ensureSeeded } from '../db/schema';
 import { useSettingsStore } from '../store/settingsStore';
+import { inMemoryCache } from '../services/api/cache';
 
 export interface AuthUser {
   id: string;
@@ -88,7 +89,12 @@ export interface RegisterParams {
   invitationToken?: string;
 }
 
-interface AuthContextType {
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
+import { API_BASE } from '../config/api';
+
+export interface AuthContextType {
   user: AuthUser | null;
   practice: AuthPractice | null;
   membership: AuthMembership | null;
@@ -113,12 +119,10 @@ interface AuthContextType {
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   updatePracticeSettings: (updates: Partial<AuthPracticeSettings>) => Promise<void>;
+  exchangeMobileTicket: (ticket: string) => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-// In dev, API runs on port 4000 (proxied or direct); in prod it's at /api
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -178,10 +182,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPermissions(data.permissions || data.membership?.permissions || []);
         if (data.practices) setPractices(data.practices);
         switchTenantDb(data.practice?.id);
-        await ensureSeeded();
+        inMemoryCache.setPractice(data.practice?.id || null);
         void useSettingsStore.getState().loadSettings(data.settings, data.user);
       } else {
-        const isDev = (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
+        const isDev = !Capacitor.isNativePlatform() && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
         if (isDev) {
           const demoUser: AuthUser = {
             id: 'demo-user-1',
@@ -224,12 +228,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setPermissions([]);
           setPractices([]);
           switchTenantDb(null);
+          inMemoryCache.clear();
           useSettingsStore.getState().reset();
         }
       }
     } catch (err) {
       console.warn('Session check could not reach backend, starting in offline dev/guest mode:', err);
-      const isDev = (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
+      const isDev = !Capacitor.isNativePlatform() && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && localStorage.getItem('vetrx_dev_unauth') !== 'true';
       if (isDev) {
         const demoUser: AuthUser = {
           id: 'demo-user-1',
@@ -272,8 +277,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPermissions([]);
         setPractices([]);
         switchTenantDb(null);
+        inMemoryCache.clear();
         useSettingsStore.getState().reset();
       }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const exchangeMobileTicket = useCallback(async (ticket: string) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/mobile/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ticket }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error?.message || 'Authentication ticket exchange failed');
+      }
+
+      setUser(data.user);
+      setPractice(data.practice);
+      setMembership(data.membership);
+      setSettings(data.settings);
+      setPermissions(data.permissions || data.membership?.permissions || []);
+      if (data.practices) setPractices(data.practices);
+      switchTenantDb(data.practice?.id);
+      inMemoryCache.setPractice(data.practice?.id || null);
+      await useSettingsStore.getState().loadSettings(data.settings, data.user);
+
+      return (data.redirectTo as string) || '/dashboard';
+    } catch (err: any) {
+      setError(err?.message || 'Failed to exchange mobile authentication ticket');
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -282,6 +323,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     void refreshSession();
   }, [refreshSession]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let subHandle: any = null;
+    const registerDeepLink = async () => {
+      subHandle = await App.addListener('appUrlOpen', async ({ url }) => {
+        try {
+          if (url.includes('auth/callback')) {
+            const parsed = new URL(url);
+            const ticket = parsed.searchParams.get('ticket');
+            const errorParam = parsed.searchParams.get('error');
+
+            try {
+              await Browser.close();
+            } catch {
+              // Custom tab may already be dismissed
+            }
+
+            if (errorParam) {
+              setError(`Google authentication failed: ${errorParam}`);
+              return;
+            }
+
+            if (ticket) {
+              const redirectPath = await exchangeMobileTicket(ticket);
+              window.location.hash = redirectPath;
+            }
+          }
+        } catch (err: any) {
+          console.error('Deep link exchange error:', err);
+          setError(err?.message || 'Deep link authentication failed');
+        }
+      });
+    };
+
+    void registerDeepLink();
+
+    return () => {
+      if (subHandle && typeof subHandle.remove === 'function') {
+        subHandle.remove();
+      }
+    };
+  }, [exchangeMobileTicket]);
 
   const login = async (email: string, password: string) => {
     setError(null);
@@ -304,7 +389,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(data.permissions || data.membership?.permissions || []);
     if (data.practices) setPractices(data.practices);
     switchTenantDb(data.practice?.id);
-    await ensureSeeded();
+    inMemoryCache.setPractice(data.practice?.id || null);
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
     return {
       needsPracticeSelection: Boolean(data.needsPracticeSelection || (data.practices && data.practices.length > 1)),
@@ -350,7 +435,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(data.permissions || data.membership?.permissions || []);
     if (data.practices) setPractices(data.practices);
     switchTenantDb(data.practice?.id);
-    await ensureSeeded();
+    inMemoryCache.setPractice(data.practice?.id || null);
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
@@ -375,7 +460,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPermissions(data.permissions || data.membership?.permissions || []);
     if (data.practices) setPractices(data.practices);
     switchTenantDb(data.practice?.id);
-    await ensureSeeded();
+    inMemoryCache.setPractice(data.practice?.id || null);
     await useSettingsStore.getState().loadSettings(data.settings, data.user);
   };
 
@@ -394,6 +479,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPermissions([]);
       setPractices([]);
       switchTenantDb(null);
+      inMemoryCache.clear();
       useSettingsStore.getState().reset();
     }
   };
@@ -442,6 +528,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         refreshSession,
         updatePracticeSettings,
+        exchangeMobileTicket,
       }}
     >
       {children}

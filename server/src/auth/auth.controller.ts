@@ -54,6 +54,7 @@ interface OAuthStatePayload {
   linkingUserId?: string;
   returnTo?: string;
   invitationToken?: string;
+  platform?: 'android' | 'web';
 }
 
 const setPasswordSchema = z.object({
@@ -321,6 +322,7 @@ authRouter.delete('/identities/google', requireAuth, async (req: AuthenticatedRe
 authRouter.get('/google/start', async (req, res, next) => {
   try {
     const action = req.query.action === 'link' ? 'link' : 'login';
+    const platform = req.query.platform === 'android' ? 'android' : 'web';
     let linkingUserId: string | undefined;
 
     if (action === 'link') {
@@ -360,6 +362,7 @@ authRouter.get('/google/start', async (req, res, next) => {
       linkingUserId,
       returnTo,
       invitationToken,
+      platform,
     };
 
     res.cookie('vetrx_oauth_state', Buffer.from(JSON.stringify(statePayload)).toString('base64url'), {
@@ -383,8 +386,22 @@ authRouter.get('/google/start', async (req, res, next) => {
  */
 authRouter.get('/google/callback', async (req, res) => {
   let returnTo = '/';
+  let isAndroid = req.query.platform === 'android';
   try {
     const { code, state, error } = req.query;
+
+    const rawStateCookie = req.cookies?.vetrx_oauth_state;
+    let parsedPayload: OAuthStatePayload | undefined;
+    if (rawStateCookie) {
+      try {
+        parsedPayload = JSON.parse(Buffer.from(rawStateCookie, 'base64url').toString('utf8'));
+        if (parsedPayload?.platform === 'android') {
+          isAndroid = true;
+        }
+      } catch {
+        parsedPayload = { state: rawStateCookie };
+      }
+    }
 
     if (error) {
       throw new AppError(400, 'OAUTH_DENIED', `Google OAuth access was denied: ${String(error)}`);
@@ -394,17 +411,8 @@ authRouter.get('/google/callback', async (req, res) => {
       throw new AppError(400, 'MISSING_OAUTH_CODE', 'Missing authorization code from Google.');
     }
 
-    const rawStateCookie = req.cookies?.vetrx_oauth_state;
-    if (!rawStateCookie) {
+    if (!rawStateCookie || !parsedPayload) {
       throw new AppError(400, 'INVALID_OAUTH_STATE', 'OAuth state missing or expired. Please try again.');
-    }
-
-    let parsedPayload: OAuthStatePayload;
-    try {
-      parsedPayload = JSON.parse(Buffer.from(rawStateCookie, 'base64url').toString('utf8'));
-    } catch {
-      // Fallback for simple string state if legacy
-      parsedPayload = { state: rawStateCookie };
     }
 
     if (!parsedPayload.state || parsedPayload.state !== state) {
@@ -421,7 +429,7 @@ authRouter.get('/google/callback', async (req, res) => {
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    const { token } = await AuthService.handleOAuthIdentity(identity, {
+    const { token, user } = await AuthService.handleOAuthIdentity(identity, {
       ipAddress,
       userAgent,
       action: parsedPayload.action,
@@ -429,9 +437,26 @@ authRouter.get('/google/callback', async (req, res) => {
       invitationToken: parsedPayload.invitationToken,
     });
 
+    // Android Native Flow: Issue single-use exchange ticket and deep-link back to app
+    if (parsedPayload.platform === 'android' || isAndroid) {
+      const ticket = SessionService.createMobileAuthTicket(
+        token,
+        user.id,
+        (user as any).practiceId || null,
+        returnTo
+      );
+      const deepLink = new URL('com.vetrx.app://auth/callback');
+      deepLink.searchParams.set('ticket', ticket);
+      if (returnTo) deepLink.searchParams.set('returnTo', returnTo);
+      if (parsedPayload.action === 'link') {
+        deepLink.searchParams.set('google_connected', 'true');
+      }
+      return res.redirect(deepLink.toString());
+    }
+
+    // Web Flow: Set HttpOnly session cookie and redirect
     SessionService.setCookie(res, token);
 
-    // Redirect to frontend application
     const appBase = env.APP_URL.includes('vetrx.brightbase.in') && !env.APP_URL.includes('app.vetrx.brightbase.in')
       ? 'https://app.vetrx.brightbase.in'
       : env.APP_URL;
@@ -443,6 +468,13 @@ authRouter.get('/google/callback', async (req, res) => {
     res.redirect(destination.toString());
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Google authentication failed';
+
+    if (isAndroid) {
+      const deepLink = new URL('com.vetrx.app://auth/callback');
+      deepLink.searchParams.set('error', message);
+      return res.redirect(deepLink.toString());
+    }
+
     const appBase = env.APP_URL.includes('vetrx.brightbase.in') && !env.APP_URL.includes('app.vetrx.brightbase.in')
       ? 'https://app.vetrx.brightbase.in'
       : env.APP_URL;
@@ -452,3 +484,41 @@ authRouter.get('/google/callback', async (req, res) => {
     res.redirect(redirectUrl.toString());
   }
 });
+
+const mobileExchangeSchema = z.object({
+  ticket: z.string().min(1, 'Ticket is required'),
+});
+
+/**
+ * POST /api/auth/mobile/exchange
+ * Exchanges an ephemeral single-use mobile ticket for an authenticated session.
+ * Issues the HttpOnly session cookie directly into Android native CookieManager.
+ */
+authRouter.post('/mobile/exchange', authRateLimiter, async (req, res, next) => {
+  try {
+    const { ticket } = mobileExchangeSchema.parse(req.body);
+    const ticketData = SessionService.consumeMobileAuthTicket(ticket);
+
+    if (!ticketData) {
+      throw new AppError(
+        400,
+        'INVALID_AUTH_TICKET',
+        'Mobile authentication ticket is invalid or has expired. Please sign in again.'
+      );
+    }
+
+    // Attach HttpOnly session cookie so native CookieManager stores it
+    SessionService.setCookie(res, ticketData.token);
+
+    // Retrieve full context for frontend bootstrap
+    const context = await AuthService.getMeContext(ticketData.userId, ticketData.practiceId);
+    res.status(200).json({
+      success: true,
+      returnTo: ticketData.returnTo || '/dashboard',
+      ...context,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+

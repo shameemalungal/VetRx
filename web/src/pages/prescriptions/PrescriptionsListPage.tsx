@@ -9,6 +9,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Prescription, Patient, Owner } from '../../types';
+import { syncPrescriptions } from '../../services/clinicalSync';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import './Prescriptions.css';
@@ -31,6 +32,10 @@ export const PrescriptionsListPage: React.FC = () => {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    void syncPrescriptions();
+  }, []);
+
   // ── Database Queries ──────────────────────────────────────────
   const prescriptions = useLiveQuery(
     () => db.prescriptions.reverse().sortBy('createdAt'),
@@ -42,7 +47,7 @@ export const PrescriptionsListPage: React.FC = () => {
 
   // Map lookup caches for instant join
   const patientsMap = useMemo(() => {
-    const map = new Map<number, Patient>();
+    const map = new Map<number | string, Patient>();
     if (patients) {
       for (const p of patients) {
         if (p.id) map.set(p.id, p);
@@ -52,7 +57,7 @@ export const PrescriptionsListPage: React.FC = () => {
   }, [patients]);
 
   const ownersMap = useMemo(() => {
-    const map = new Map<number, Owner>();
+    const map = new Map<number | string, Owner>();
     if (owners) {
       for (const o of owners) {
         if (o.id) map.set(o.id, o);

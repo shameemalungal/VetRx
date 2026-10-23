@@ -4,9 +4,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import { useAuth } from '../../context/AuthContext';
 import { cvpService } from '../../services/cvpService';
+import { syncCalls } from '../../services/clinicalSync';
 import type { Call, CallPriority, VisitFlexibility } from '../../types/cvp';
 import { CallCard } from '../../components/cvp/CallCard';
 import { PostponeModal } from '../../components/cvp/PostponeModal';
+import { EditCallModal } from '../../components/cvp/EditCallModal';
+import { DeleteCallModal } from '../../components/cvp/DeleteCallModal';
 import { QuickActionLauncher } from '../../components/cvp/QuickActionLauncher';
 import { CvpGlobalSearchModal } from '../../components/cvp/CvpGlobalSearchModal';
 import {
@@ -39,6 +42,8 @@ export const CallsListPage: React.FC = () => {
 
   // Modals & drawers
   const [postponeModalCall, setPostponeModalCall] = useState<Call | null>(null);
+  const [editModalCall, setEditModalCall] = useState<Call | null>(null);
+  const [deleteModalCall, setDeleteModalCall] = useState<Call | null>(null);
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isIntakeOpen, setIsIntakeOpen] = useState(false);
@@ -69,6 +74,10 @@ export const CallsListPage: React.FC = () => {
       setIsIntakeOpen(true);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    void syncCalls();
+  }, [practiceId]);
 
   // Dexie live query
   const allCalls: Call[] = useLiveQuery(
@@ -131,6 +140,21 @@ export const CallsListPage: React.FC = () => {
   const handlePostponeConfirm = async (callId: string, postponeDate: string, reason: string) => {
     await cvpService.postponeCall(callId, postponeDate, reason);
     setPostponeModalCall(null);
+  };
+
+  const handleCallSaved = async (_updatedCall: Call) => {
+    setEditModalCall(null);
+    await syncCalls();
+  };
+
+  const handleCallDeleted = async (_deletedId: string | number) => {
+    setDeleteModalCall(null);
+    await syncCalls();
+  };
+
+  const handleCallCancelled = async (_updatedCall: Call) => {
+    setDeleteModalCall(null);
+    await syncCalls();
   };
 
   const handleCreateCall = async (e: React.FormEvent) => {
@@ -392,6 +416,8 @@ export const CallsListPage: React.FC = () => {
             onPostpone={(c: Call) => setPostponeModalCall(c)}
             onSelect={(c: Call) => navigate(`/calls/${c.id}`)}
             onReviewCase={(c: Call) => navigate(`/calls/${c.id}`)}
+            onEdit={(c: Call) => setEditModalCall(c)}
+            onDelete={(c: Call) => setDeleteModalCall(c)}
           />
         ))}
 
@@ -644,6 +670,23 @@ export const CallsListPage: React.FC = () => {
         isOpen={Boolean(postponeModalCall)}
         onClose={() => setPostponeModalCall(null)}
         onConfirm={handlePostponeConfirm}
+      />
+
+      {/* Edit Call Modal */}
+      <EditCallModal
+        isOpen={Boolean(editModalCall)}
+        call={editModalCall}
+        onClose={() => setEditModalCall(null)}
+        onSaved={handleCallSaved}
+      />
+
+      {/* Delete Call Modal */}
+      <DeleteCallModal
+        isOpen={Boolean(deleteModalCall)}
+        call={deleteModalCall}
+        onClose={() => setDeleteModalCall(null)}
+        onDeleted={handleCallDeleted}
+        onCancelled={handleCallCancelled}
       />
 
       {/* Quick Action launcher */}

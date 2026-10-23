@@ -143,13 +143,13 @@ export const VisitDetailPage: React.FC = () => {
   const [medPatientName, setMedPatientName] = useState('');
 
   // Treatment package application state
-  const [pkgSelectedId, setPkgSelectedId] = useState<number | null>(null);
+  const [pkgSelectedId, setPkgSelectedId] = useState<number | string | null>(null);
   const [pkgPatientName, setPkgPatientName] = useState<string>('');
   const [pkgKitId, setPkgKitId] = useState<string>('');
   const [pkgItemsList, setPkgItemsList] = useState<Array<{
-    id?: number;
+    id?: number | string;
     checked: boolean;
-    medicineId?: number;
+    medicineId?: number | string;
     medicineName: string;
     presentation: string;
     strength?: string;

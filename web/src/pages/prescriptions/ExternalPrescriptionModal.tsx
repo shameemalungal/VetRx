@@ -1,172 +1,196 @@
 // =============================================================
 // VetRx — ExternalPrescriptionModal.tsx
-// Prescription 2: External Purchase Prescription
-// Only externally required medicines & quantities appear here.
+// Authoritative External Medicine Prescription Viewer & Generator
+// Renders the authentic full veterinary prescription format with
+// the exact mandatory heading:
+// "Prescription for medicines that are not available in hospital stock"
 // =============================================================
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Icon } from '../../components/ui/Icon';
-import type { PrescriptionStockResolution } from '../../services/inventoryApi';
+import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
+import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildPrescriptionFilename } from '../../utils/pdfGenerator';
+import { isMobileDevice } from '../../utils/platformDetect';
+import type { Prescription, PrescriptionItem, Patient, Owner, Practitioner, Organisation } from '../../types';
 
-interface ExternalPrescriptionModalProps {
+export interface ExternalPrescriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  patientName?: string;
-  patientSubtitle?: string;
-  ownerName?: string;
-  rxNumber?: string;
-  resolutions: PrescriptionStockResolution[];
+  prescription: Prescription;
+  items: PrescriptionItem[];
+  patient?: Patient | null;
+  owner?: Owner | null;
+  activePractitioner?: Practitioner | null;
+  activeOrganisation?: Organisation | null;
 }
 
 export const ExternalPrescriptionModal: React.FC<ExternalPrescriptionModalProps> = ({
   isOpen,
   onClose,
-  patientName,
-  patientSubtitle,
-  ownerName,
-  rxNumber,
-  resolutions,
+  prescription,
+  items,
+  patient,
+  owner,
+  activePractitioner,
+  activeOrganisation,
 }) => {
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   if (!isOpen) return null;
 
-  const externalItems = resolutions.filter((r) => r.externalQuantity > 0);
+  // Filter to strictly external medicines
+  const externalItems = items.filter((i) => i.isExternal);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleSavePdf = async () => {
+    if (!isMobileDevice()) {
+      savePdfNative();
+      return;
+    }
+
+    try {
+      setIsGeneratingPdf(true);
+      const sheet = document.getElementById('external-prescription-sheet');
+      if (!sheet) return;
+      const blob = await generatePdfBlob(sheet);
+      const filename = buildPrescriptionFilename(`${prescription.rxNumber}-EXT`, patient?.name);
+      await savePdfWithFilePicker(blob, filename);
+    } catch (err) {
+      console.error('Failed to export external prescription PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   return (
-    <div className="inv-modal-overlay">
-      <div className="inv-modal-card">
-        <div className="inv-modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="inv-modal-overlay" style={{ zIndex: 10000, overflowY: 'auto', padding: '20px' }}>
+      <div
+        className="inv-modal-card"
+        style={{
+          maxWidth: '920px',
+          width: '100%',
+          maxHeight: '94vh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '18px 22px',
+        }}
+      >
+        {/* Header Bar */}
+        <div
+          className="no-print"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingBottom: '12px',
+            borderBottom: '1px solid #e2e8f0',
+            marginBottom: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '32px',
-                height: '32px',
+                width: '36px',
+                height: '36px',
                 borderRadius: '8px',
-                background: 'rgba(2, 132, 199, 0.1)',
-                color: '#0284c7',
+                background: '#eff6ff',
+                color: '#1d4ed8',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Icon name="prescription" size={18} />
+              <Icon name="prescription" size={20} />
             </div>
             <div>
-              <h2 className="inv-modal-title">External Purchase Prescription (Prescription 2)</h2>
-              <span style={{ fontSize: '12.5px', color: '#64748b' }}>
-                Only medications requiring external purchase/pharmacy sourcing
+              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                External Purchase Prescription
+              </h2>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>
+                Prescription for medicines that are not available in hospital stock
               </span>
             </div>
           </div>
-          <button type="button" className="inv-close-btn" onClick={onClose}>
-            <Icon name="close" size={20} />
-          </button>
-        </div>
 
-        {/* Patient header */}
-        <div
-          style={{
-            padding: '12px 16px',
-            borderRadius: '10px',
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            fontSize: '13px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, color: '#0f172a' }}>{patientName || 'Patient'}</div>
-            <div style={{ fontSize: '11px', color: '#64748b' }}>
-              {patientSubtitle} {ownerName ? `• Owner: ${ownerName}` : ''}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '4px',
-                background: '#e0f2fe',
-                color: '#0369a1',
-                fontFamily: 'monospace',
-              }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ height: '36px', fontSize: '12.5px' }}
+              onClick={handlePrint}
             >
-              Rx Ref: {rxNumber || 'NEW-RX'}-EXT
-            </span>
+              <Icon name="printer" size={16} />
+              <span>Print</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ height: '36px', fontSize: '12.5px' }}
+              onClick={handleSavePdf}
+              disabled={isGeneratingPdf}
+            >
+              <Icon name="download" size={16} />
+              <span>{isGeneratingPdf ? 'Saving…' : 'Save PDF'}</span>
+            </button>
+            <button
+              type="button"
+              className="inv-close-btn"
+              onClick={onClose}
+              style={{ marginLeft: '6px' }}
+            >
+              <Icon name="close" size={20} />
+            </button>
           </div>
         </div>
 
+        {/* Informational Banner */}
         <div
+          className="no-print"
           style={{
-            padding: '10px 14px',
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
             borderRadius: '8px',
-            background: '#fffbeb',
-            border: '1px solid #fde68a',
+            padding: '10px 14px',
+            marginBottom: '14px',
             fontSize: '12px',
-            color: '#92400e',
-            lineHeight: 1.5,
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
           }}
         >
-          <strong>Notice:</strong> This external purchase order excludes internally available clinical stock and
-          contains strictly the remaining quantities to be procured by the owner from an external pharmacy.
+          <Icon name="check-circle" size={16} color="#16a34a" />
+          <span>
+            This document contains strictly external medicines to be procured from an outside pharmacy. No hospital inventory stock has been or will be deducted.
+          </span>
         </div>
 
-        {/* Items Table */}
-        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-          <table className="inventory-table">
-            <thead>
-              <tr>
-                <th>Medicine / Formulation</th>
-                <th style={{ textAlign: 'center' }}>Total Prescribed</th>
-                <th style={{ textAlign: 'center' }}>Available In Clinic</th>
-                <th style={{ textAlign: 'center' }}>External Purchase Qty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {externalItems.map((item, idx) => (
-                <tr key={idx}>
-                  <td style={{ fontWeight: 700, color: '#0f172a' }}>{item.medicineName}</td>
-                  <td style={{ textAlign: 'center', color: '#64748b' }}>{item.requiredQuantity}</td>
-                  <td style={{ textAlign: 'center', color: '#15803d', fontWeight: 600 }}>
-                    {item.internalStockQuantity}
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        fontSize: '14px',
-                        color: '#dc2626',
-                        background: '#fee2e2',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                      }}
-                    >
-                      {item.externalQuantity} units
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Close
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              window.print();
-            }}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Icon name="print" size={16} />
-            <span>Print External Prescription</span>
-          </button>
+        {/* Scrollable Stationery Preview */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            background: '#f8fafc',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            padding: '16px',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          <PrescriptionDocument
+            id="external-prescription-sheet"
+            prescription={prescription}
+            items={externalItems}
+            patient={patient}
+            owner={owner}
+            activePractitioner={activePractitioner}
+            activeOrganisation={activeOrganisation}
+            isExternalPrescription={true}
+          />
         </div>
       </div>
     </div>

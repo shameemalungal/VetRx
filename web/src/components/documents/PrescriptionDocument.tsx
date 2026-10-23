@@ -21,6 +21,7 @@ export interface PrescriptionDocumentProps {
   activePractitioner?: Practitioner | null;
   activeOrganisation?: Organisation | null;
   id?: string;
+  isExternalPrescription?: boolean;
 }
 
 export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
@@ -31,6 +32,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
   activePractitioner,
   activeOrganisation,
   id = 'prescription-sheet',
+  isExternalPrescription = false,
 }) => {
   // Format Dates
   const createdDate = new Date(prescription.createdAt);
@@ -135,7 +137,9 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
             Doc Ref: <strong>{prescription.rxNumber}</strong> {prescription.version ? `(v${prescription.version})` : ''}
           </span>
           <span className={`document-badge-prescription ${prescription.status === 'Approved' ? 'badge-approved' : ''}`}>
-            {prescription.status === 'Approved'
+            {isExternalPrescription
+              ? 'External Medicine Rx'
+              : prescription.status === 'Approved'
               ? 'Approved Clinical Rx'
               : prescription.status === 'Pending Approval'
               ? 'Pending Vet Approval'
@@ -253,14 +257,18 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
       )}
 
       {/* Prescription Document Title Ribbon */}
-      <div className="prescription-ribbon avoid-break">
+      <div className={`prescription-ribbon avoid-break ${isExternalPrescription ? 'prescription-ribbon-external' : ''}`}>
         <div className="prescription-ribbon-title">
           <Icon name="prescription" size={16} color="var(--color-primary)" />
-          <span>VETERINARY PRESCRIPTION</span>
+          <span style={isExternalPrescription ? { textTransform: 'none', fontSize: '11.5px', fontWeight: 700, letterSpacing: '0.01em' } : undefined}>
+            {isExternalPrescription
+              ? 'Prescription for medicines that are not available in hospital stock'
+              : 'VETERINARY PRESCRIPTION'}
+          </span>
         </div>
         <div className="prescription-ribbon-meta">
           <span>Date: <strong>{formattedDate}</strong></span>
-          <span>Rx No: <strong>{prescription.rxNumber}</strong></span>
+          <span>Rx No: <strong>{prescription.rxNumber}{isExternalPrescription ? '-EXT' : ''}</strong></span>
         </div>
       </div>
 
@@ -340,7 +348,7 @@ export const PrescriptionDocument: React.FC<PrescriptionDocumentProps> = ({
         <div className="rx-meds-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '3px', marginBottom: '3px' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 700, color: 'var(--color-on-surface)', display: 'flex', alignItems: 'center', gap: '5px' }}>
             <Icon name="pill" size={16} color="var(--color-primary)" />
-            Prescribed Medication Schedule
+            {isExternalPrescription ? 'External Medicines (To be procured outside)' : 'Prescribed Medication Schedule'}
           </span>
           <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-outline)' }}>
             {items?.length || 0} Line Items

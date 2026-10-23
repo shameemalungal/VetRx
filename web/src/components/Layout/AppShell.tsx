@@ -18,14 +18,16 @@ import { useInventoryEntitlement } from '../../context/InventoryEntitlementConte
 import type { Patient, Medicine, Prescription, Invoice, Owner } from '../../types';
 import { formatAnimalSubtitle } from '../../utils/patientFormat';
 import { PracticeSwitcher } from '../PracticeSwitcher/PracticeSwitcher';
+import { SyncStatusIndicator } from '../common/SyncStatusIndicator';
+import { PostCallPromptModal } from '../cvp/PostCallPromptModal';
 import './AppShell.css';
 
 // ── Bottom nav shows the 4 core mobile tabs plus dynamic 'More' menu ──────────
 const PRIMARY_BOTTOM_NAV_ITEMS = [
-  { label: 'Home',     path: '/dashboard',     icon: 'home',         ariaLabel: 'Home' },
-  { label: 'Calls',    path: '/calls',         icon: 'phone',        ariaLabel: 'Calls & Visits' },
-  { label: 'Patients', path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
-  { label: 'Rx',       path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
+  { label: 'Home',          path: '/dashboard',     icon: 'home',         ariaLabel: 'Home' },
+  { label: 'Patients',      path: '/patients',      icon: 'patients',     ariaLabel: 'Patients' },
+  { label: 'Prescriptions', path: '/prescriptions', icon: 'prescription', ariaLabel: 'Prescriptions' },
+  { label: 'Calls & Visits',path: '/calls',         icon: 'phone',        ariaLabel: 'Calls & Visits' },
 ] as const;
 
 function initials(name: string): string {
@@ -167,7 +169,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       const speciesMatches = p.species?.toLowerCase().includes(q);
       const chipMatches = p.microchipNumber?.toLowerCase().includes(q);
       const idMatches = p.identificationRef?.toLowerCase().includes(q);
-      const numMatches = p.id && (`#can-${8800 + p.id}`.includes(q) || `#fel-${4200 + p.id}`.includes(q));
+      const numMatches = p.id && (typeof p.id === 'number' ? (`#can-${8800 + p.id}`.includes(q) || `#fel-${4200 + p.id}`.includes(q)) : String(p.id).toLowerCase().includes(q));
 
       return (
         nameMatches ||
@@ -538,6 +540,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           </div>
 
           <div className="desktop-header-right">
+            <SyncStatusIndicator />
             {/* Top-Right Global Search */}
             <div className="desktop-search-bar" ref={searchContainerRef}>
               <Icon name="search" size={16} className="desktop-search-icon" />
@@ -905,36 +908,60 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           </div>
         </header>
 
-        {/* Mobile top header */}
-        <header className="mobile-header" aria-label="Page header">
-          <div className="mobile-header-left">
-            <span className="mobile-header-subtitle">
-              {getGreeting()},{' '}
-              {practitioner ? firstWord : 'Doctor'}
-            </span>
-            <span className="mobile-header-title">{currentNav.label}</span>
-          </div>
-          <div className="mobile-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <PracticeSwitcher />
-            <button
-              className="mobile-header-avatar"
-              aria-label={`${displayName} — go to settings`}
-              onClick={() => {
-                navigate('/settings');
-              }}
-            >
-              {activeAvatarPhoto ? (
-                <img
-                  src={activeAvatarPhoto}
-                  alt={activeIdentityName}
-                  className="mobile-header-avatar-img"
-                />
-              ) : (
-                avatarLetters
-              )}
-            </button>
-          </div>
-        </header>
+        {/* Mobile top header (Rendered on subpages; on Dashboard the One UI 9 Clinical Hero Header renders inside DashboardPage) */}
+        {!(location.pathname === '/' || location.pathname === '/dashboard') && (
+          <header className="mobile-header" aria-label="Page header">
+            <div className="mobile-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                className="mobile-header-back-btn"
+                onClick={() => navigate(-1)}
+                aria-label="Go back"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                  borderRadius: '50%',
+                }}
+              >
+                <Icon name="arrow-back" size={18} />
+              </button>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span className="mobile-header-subtitle">
+                  {getGreeting()},{' '}
+                  {practitioner ? firstWord : 'Doctor'}
+                </span>
+                <span className="mobile-header-title">{currentNav.label}</span>
+              </div>
+            </div>
+            <div className="mobile-header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <SyncStatusIndicator compact />
+              <PracticeSwitcher />
+              <button
+                className="mobile-header-avatar"
+                aria-label={`${displayName} — go to settings`}
+                onClick={() => {
+                  navigate('/settings');
+                }}
+              >
+                {activeAvatarPhoto ? (
+                  <img
+                    src={activeAvatarPhoto}
+                    alt={activeIdentityName}
+                    className="mobile-header-avatar-img"
+                  />
+                ) : (
+                  avatarLetters
+                )}
+              </button>
+            </div>
+          </header>
+        )}
 
         {/* Page content */}
         <div className="page-content">{children}</div>
@@ -1147,6 +1174,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           </div>
         </div>
       </aside>
+      <PostCallPromptModal />
     </div>
   );
 };

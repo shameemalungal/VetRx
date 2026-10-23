@@ -3,7 +3,7 @@
 // Clinical Formulary management with Master Data integration
 // =============================================================
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Medicine } from '../../types';
@@ -12,6 +12,7 @@ import { Icon } from '../../components/ui/Icon';
 import { useInventoryEntitlement } from '../../context/InventoryEntitlementContext';
 import { inventoryApi } from '../../services/inventoryApi';
 import { syncInventoryMedicinesToFormulary } from '../../services/inventorySync';
+import { medicinesApi } from '../../services/api/medicinesApi';
 import './Medicines.css';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -58,9 +59,39 @@ function getDosingBadge(medicine: Medicine) {
 }
 
 export function MedicinesListPage() {
-  const allMedicines = useLiveQuery(() => db.medicines.toArray(), []) ?? EMPTY_ARRAY;
+  const dexieMedicines = useLiveQuery(() => db.medicines.toArray(), []) ?? EMPTY_ARRAY;
+  const [serverMedicines, setServerMedicines] = useState<Medicine[] | null>(null);
   const prescriptionItems = useLiveQuery(() => db.prescriptionItems.toArray(), []) ?? EMPTY_ARRAY;
   const packageItems = useLiveQuery(() => db.treatmentPackageItems.toArray(), []) ?? EMPTY_ARRAY;
+
+  // Authoritative medicines: prefer serverMedicines once loaded, fallback to Dexie cache
+  const allMedicines = serverMedicines ?? dexieMedicines;
+
+  const fetchMedicines = useCallback(async () => {
+    try {
+      const list = await medicinesApi.list();
+      setServerMedicines(list);
+      // Sync into Dexie cache for offline resilience
+      for (const med of list) {
+        if (typeof med.id === 'number') {
+          await db.medicines.put(med).catch(() => {});
+        } else if (typeof med.id === 'string') {
+          const existing = await db.medicines.where('brandName').equals(med.brandName).first();
+          if (existing && existing.id) {
+            await db.medicines.update(existing.id, { ...med, id: existing.id, serverId: med.id }).catch(() => {});
+          } else {
+            await db.medicines.add({ ...med, serverId: med.id } as any).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch medicines from server, using local cache:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchMedicines();
+  }, [fetchMedicines]);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,10 +213,14 @@ export function MedicinesListPage() {
     if (!medicine.id) return;
     const nextActive = medicine.isActive === false; // toggle
     try {
-      await db.medicines.update(medicine.id, {
-        isActive: nextActive,
-        updatedAt: new Date(),
-      });
+      await medicinesApi.update(String(medicine.id), { isActive: nextActive });
+      if (typeof medicine.id === 'number') {
+        await db.medicines.update(medicine.id, {
+          isActive: nextActive,
+          updatedAt: new Date(),
+        }).catch(() => {});
+      }
+      await fetchMedicines();
     } catch (err) {
       console.error('Failed to toggle medicine status:', err);
     }
@@ -219,16 +254,24 @@ export function MedicinesListPage() {
     if (!confirmDialog || !confirmDialog.medicine.id) return;
     const { medicine, action } = confirmDialog;
     const medId = medicine.id;
-    if (typeof medId !== 'number') return;
     try {
       if (action === 'delete') {
-        await db.medicines.delete(medId);
+        await medicinesApi.delete(String(medId));
+        if (typeof medId === 'number') {
+          await db.medicines.delete(medId).catch(() => {});
+        }
       } else {
-        await db.medicines.update(medId, {
+        await medicinesApi.update(String(medId), {
           isActive: false,
-          updatedAt: new Date(),
         });
+        if (typeof medId === 'number') {
+          await db.medicines.update(medId, {
+            isActive: false,
+            updatedAt: new Date(),
+          }).catch(() => {});
+        }
       }
+      await fetchMedicines();
     } catch (err) {
       console.error(`Failed to ${action} medicine:`, err);
     } finally {
@@ -729,6 +772,7 @@ export function MedicinesListPage() {
         onSaved={(_medId) => {
           setModalOpen(false);
           setEditingMedicine(null);
+          void fetchMedicines();
         }}
       />
 

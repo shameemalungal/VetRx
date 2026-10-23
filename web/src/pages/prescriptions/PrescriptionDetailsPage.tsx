@@ -4,7 +4,7 @@
 // Follows Stitch reference: vetrx_prescription_preview_generate_desktop
 // =============================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
@@ -16,17 +16,21 @@ import { generatePdfBlob, savePdfWithFilePicker, savePdfNative, buildPrescriptio
 import { isMobileDevice } from '../../utils/platformDetect';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { PrescriptionDocument } from '../../components/documents/PrescriptionDocument';
+import { DispensePrescriptionModal } from './DispensePrescriptionModal';
+import { ExternalPrescriptionModal } from './ExternalPrescriptionModal';
 import { useAuth } from '../../context/AuthContext';
-import type { PrescriptionWorkflowHistoryItem } from '../../types';
+import { inventoryApi } from '../../services/inventoryApi';
+import { Capacitor } from '@capacitor/core';
+import { nativeService, blobToBase64 } from '../../services/nativeService';
+import { API_BASE } from '../../config/api';
+import type { PrescriptionWorkflowHistoryItem, PrescriptionDispenseRecord } from '../../types';
 import './Prescriptions.css';
-
-const API_BASE = import.meta.env.VITE_API_URL || (window.location.port === '5173' ? 'http://localhost:4000' : '');
 
 export const PrescriptionDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const rxId = id ? parseInt(id, 10) : undefined;
+  const rxId = id ? (/^\d+$/.test(id) ? parseInt(id, 10) : id) : undefined;
 
   const { user, can, hasRole } = useAuth();
   const { practitioner: storePractitioner, organisation: storeOrganisation } = useSettingsStore();
@@ -38,6 +42,7 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [cachedPdfBlob, setCachedPdfBlob] = useState<Blob | null>(null);
+  const [exportedPdf, setExportedPdf] = useState<{ filename: string; path?: string; uri?: string; destination?: string } | null>(null);
 
   // Clinical Approval Workflow States
   const [showForwardModal, setShowForwardModal] = useState(false);
@@ -50,6 +55,13 @@ export const PrescriptionDetailsPage: React.FC = () => {
   const [changeRequestRemarks, setChangeRequestRemarks] = useState('');
   const [eligibleClinicians, setEligibleClinicians] = useState<Array<{ id: string; name: string; email: string; role?: string; isClinicalApprover?: boolean }>>([]);
   const [loadingClinicians, setLoadingClinicians] = useState(false);
+
+  // Dispensing & Stock Management States
+  const [showDispenseModal, setShowDispenseModal] = useState(false);
+  const [dispenseType, setDispenseType] = useState<'DISPENSE' | 'ADMINISTRATION'>('DISPENSE');
+  const [showExternalRxModal, setShowExternalRxModal] = useState(false);
+  const [dispenseHistory, setDispenseHistory] = useState<PrescriptionDispenseRecord[]>([]);
+  const [loadingDispenseHistory, setLoadingDispenseHistory] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -105,6 +117,62 @@ export const PrescriptionDetailsPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to cancel prescription:', err);
       showToast('Error cancelling prescription.');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // ── Dispensing & Stock History ────────────────────────────────
+  const loadDispenseHistory = async () => {
+    if (!prescription) return;
+    const targetId = String((prescription as any).serverId || prescription.id);
+    setLoadingDispenseHistory(true);
+    try {
+      const res = await inventoryApi.getPrescriptionDispenseHistory(targetId);
+      if (res?.dispensings) {
+        setDispenseHistory(res.dispensings);
+      }
+    } catch (err) {
+      console.warn('Failed to load dispense history:', err);
+    } finally {
+      setLoadingDispenseHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (prescription) {
+      void loadDispenseHistory();
+    }
+  }, [prescription?.id, (prescription as any)?.serverId, prescription?.dispenseStatus]);
+
+  const handleReverseDispense = async (dispensingId: string) => {
+    const reason = window.prompt('Please enter the reason for reversing this dispensing (e.g. client returned medicine, entered by mistake):');
+    if (reason === null) return;
+    setIsUpdating(true);
+    try {
+      await inventoryApi.reversePrescriptionDispensing({
+        dispensingId,
+        reason: reason.trim() || 'Dispensing reversal by clinician',
+      });
+      showToast('Dispensing reversed successfully. Stock restored.');
+      await loadDispenseHistory();
+      const targetId = String((prescription as any)?.serverId || prescription?.id);
+      try {
+        const rxRes = await fetch(`${API_BASE}/api/prescriptions/${targetId}`, { credentials: 'include' });
+        if (rxRes.ok) {
+          const freshRx = await rxRes.json();
+          if (prescription?.id) {
+            await db.prescriptions.update(prescription.id, {
+              dispenseStatus: freshRx.dispenseStatus,
+              updatedAt: new Date(),
+            });
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Sync prescription after reversal failed:', syncErr);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reverse dispensing.');
     } finally {
       setIsUpdating(false);
     }
@@ -395,19 +463,38 @@ export const PrescriptionDetailsPage: React.FC = () => {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        setIsGeneratingPdf(true);
+        const sheet = document.getElementById('prescription-sheet');
+        if (!sheet) {
+          showToast('Prescription document could not be rendered for printing.');
+          return;
+        }
+        const blob = cachedPdfBlob || (await generatePdfBlob(sheet));
+        setCachedPdfBlob(blob);
+        const base64 = await blobToBase64(blob);
+        await nativeService.printPdf(base64, `Prescription_${prescription?.rxNumber || 'Rx'}`);
+      } catch (err) {
+        console.error('Failed to trigger native print:', err);
+        showToast('Could not open print dialogue. Please check system printer services.');
+      } finally {
+        setIsGeneratingPdf(false);
+      }
+      return;
+    }
+
     window.print();
   };
 
   const handleSavePdf = async () => {
-    // Desktop: use browser's native print engine for pixel-perfect PDF output
-    // (identical to "Microsoft Print to PDF" / Ctrl+P)
-    if (!isMobileDevice()) {
+    // Desktop browser without native container: use browser print engine for pixel-perfect PDF
+    if (!isMobileDevice() && !Capacitor.isNativePlatform()) {
       savePdfNative();
       return;
     }
 
-    // Mobile: fallback to html2canvas + jsPDF for direct download/share
     try {
       setIsGeneratingPdf(true);
       const sheet = document.getElementById('prescription-sheet');
@@ -419,8 +506,18 @@ export const PrescriptionDetailsPage: React.FC = () => {
       setCachedPdfBlob(blob);
       if (!prescription) return;
       const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
-      await savePdfWithFilePicker(blob, filename);
-      showToast('Prescription PDF saved successfully.');
+      const res = await savePdfWithFilePicker(blob, filename);
+      if (res.success) {
+        setExportedPdf({
+          filename: res.filename || filename,
+          path: res.path,
+          uri: res.uri,
+          destination: res.destination || 'Downloads',
+        });
+        showToast(`Saved to ${res.destination || 'Downloads'}: ${res.filename || filename}`);
+      } else if (!res.canceled) {
+        showToast(res.error || 'Failed to save PDF on device.');
+      }
     } catch (err) {
       console.error('Failed to save PDF on mobile:', err);
       showToast('Failed to generate PDF. Please try again.');
@@ -438,8 +535,19 @@ export const PrescriptionDetailsPage: React.FC = () => {
       setCachedPdfBlob(blob);
 
       const filename = buildPrescriptionFilename(prescription.rxNumber, patient?.name);
-      const file = new File([blob], filename, { type: 'application/pdf' });
 
+      if (Capacitor.isNativePlatform()) {
+        const base64 = await blobToBase64(blob);
+        await nativeService.sharePdfFile({
+          base64Data: base64,
+          filename,
+          title: `Prescription ${prescription.rxNumber}`,
+          text: `VetRx Prescription for ${patient?.name || 'patient'} (Rx #${prescription.rxNumber})`,
+        });
+        return;
+      }
+
+      const file = new File([blob], filename, { type: 'application/pdf' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: `Prescription ${prescription.rxNumber}`,
@@ -653,6 +761,22 @@ export const PrescriptionDetailsPage: React.FC = () => {
               <span className="rx-status-chip ready">
                 <span className="status-dot pulse"></span>
                 Draft
+              </span>
+            )}
+            {prescription.dispenseStatus === 'FULLY_DISPENSED' ? (
+              <span className="rx-status-chip approved" style={{ background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }}>
+                <span className="status-dot" style={{ background: '#16a34a' }}></span>
+                Fully Dispensed
+              </span>
+            ) : prescription.dispenseStatus === 'PARTIALLY_DISPENSED' ? (
+              <span className="rx-status-chip changes-requested" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}>
+                <span className="status-dot" style={{ background: '#d97706' }}></span>
+                Partially Dispensed
+              </span>
+            ) : (
+              <span className="rx-status-chip" style={{ background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0' }}>
+                <span className="status-dot" style={{ background: '#94a3b8' }}></span>
+                Undispensed
               </span>
             )}
           </div>
@@ -1127,19 +1251,94 @@ export const PrescriptionDetailsPage: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  style={{ width: '100%', height: '48px', fontSize: '14px', fontWeight: 700 }}
-                  onClick={handlePrint}
+                  style={{
+                    width: '100%',
+                    height: '46px',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    background: '#047857',
+                    borderColor: '#065f46',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                  onClick={() => {
+                    setDispenseType('DISPENSE');
+                    setShowDispenseModal(true);
+                  }}
                 >
-                  <Icon name="printer" size={20} />
-                  <span>Print Approved Prescription</span>
+                  <Icon name="pill" size={18} color="#ffffff" />
+                  <span>Dispense Medicines</span>
                 </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    background: '#e0e7ff',
+                    color: '#3730a3',
+                    borderColor: '#c7d2fe',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                  onClick={() => {
+                    setDispenseType('ADMINISTRATION');
+                    setShowDispenseModal(true);
+                  }}
+                >
+                  <Icon name="activity" size={16} color="#3730a3" />
+                  <span>Administered in Clinic</span>
+                </button>
+
+                {items?.some((i) => i.isExternal) && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      background: '#f0fdf4',
+                      color: '#15803d',
+                      borderColor: '#bbf7d0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                    }}
+                    onClick={() => setShowExternalRxModal(true)}
+                    title="Generate separate professional prescription for external medicines not stocked in hospital"
+                  >
+                    <Icon name="prescription" size={16} color="#15803d" />
+                    <span>Generate External Medicine Prescription</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className="btn btn-secondary"
                   style={{ width: '100%', height: '40px', fontSize: '13px', fontWeight: 600 }}
+                  onClick={handlePrint}
+                >
+                  <Icon name="printer" size={16} />
+                  <span>Print Approved Prescription</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', height: '38px', fontSize: '12.5px', fontWeight: 600 }}
                   onClick={() => setShowReviseModal(true)}
                 >
-                  <Icon name="copy" size={16} />
+                  <Icon name="copy" size={15} />
                   <span>Create New Revision (v{(prescription.version || 1) + 1})</span>
                 </button>
               </div>
@@ -1466,6 +1665,110 @@ export const PrescriptionDetailsPage: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Stock Dispensing & Administration History Card */}
+          <div className="rx-action-card" style={{ marginTop: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: 'var(--color-outline)',
+                }}
+              >
+                Stock Dispensing History
+              </span>
+              <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                {dispenseHistory.length} event(s)
+              </span>
+            </div>
+
+            {loadingDispenseHistory ? (
+              <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>
+                Loading dispensing history…
+              </div>
+            ) : dispenseHistory.length === 0 ? (
+              <div style={{ padding: '14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '12px', color: '#64748b' }}>
+                No stock dispensed or administered yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {dispenseHistory.map((rec) => {
+                  const isRev = rec.status === 'REVERSED';
+                  const isAdmin = rec.dispenseType === 'ADMINISTRATION';
+                  return (
+                    <div
+                      key={rec.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        background: isRev ? '#f8fafc' : '#ffffff',
+                        border: isRev ? '1px dashed #cbd5e1' : '1px solid #e2e8f0',
+                        fontSize: '12px',
+                        opacity: isRev ? 0.75 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                        <div>
+                          <strong style={{ color: '#0f172a', fontSize: '12.5px' }}>{rec.itemName || 'Medicine'}</strong>
+                          {rec.batchNumber && (
+                            <span style={{ marginLeft: '6px', fontSize: '11px', color: '#64748b' }}>
+                              (Batch: {rec.batchNumber})
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            background: isRev ? '#fee2e2' : isAdmin ? '#e0e7ff' : '#dcfce7',
+                            color: isRev ? '#b91c1c' : isAdmin ? '#3730a3' : '#15803d',
+                          }}
+                        >
+                          {isRev ? 'REVERSED' : isAdmin ? 'IN CLINIC' : 'DISPENSED'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '11.5px', marginTop: '2px' }}>
+                        <span>Qty: <strong>{rec.quantity} {rec.unit || 'units'}</strong></span>
+                        <span>{new Date(rec.createdAt).toLocaleDateString('en-GB')} {new Date(rec.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+
+                      {rec.dispensedByUserName && (
+                        <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '2px' }}>
+                          By: {rec.dispensedByUserName}
+                        </div>
+                      )}
+
+                      {rec.reversalReason && (
+                        <div style={{ fontSize: '10.5px', color: '#b91c1c', marginTop: '3px', fontStyle: 'italic' }}>
+                          Reversal: {rec.reversalReason}
+                        </div>
+                      )}
+
+                      {!isRev && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ height: '24px', fontSize: '10.5px', padding: '0 8px', color: '#dc2626' }}
+                            onClick={() => handleReverseDispense(rec.id)}
+                            disabled={isUpdating}
+                          >
+                            Reverse Movement
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1945,7 +2248,132 @@ export const PrescriptionDetailsPage: React.FC = () => {
           recipientName={patient?.name || 'Patient'}
           pdfBlob={cachedPdfBlob}
           suggestedFilename={buildPrescriptionFilename(patient?.name, prescription.rxNumber)}
-          documentUrl={window.location.href}
+          documentUrl={
+            typeof window !== 'undefined' && window.location.origin.includes('localhost')
+              ? `https://app.vetrx.brightbase.in/prescriptions/${prescription.rxNumber || prescription.id}`
+              : window.location.href
+          }
+        />
+      )}
+
+      {/* Exported PDF Action Toast / Banner */}
+      {exportedPdf && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 9999,
+            backgroundColor: '#00685F',
+            color: '#ffffff',
+            padding: '12px 18px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            maxWidth: '92vw',
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '13px' }}>PDF Exported Successfully</div>
+            <div style={{ fontSize: '12px', opacity: 0.9 }}>
+              {exportedPdf.filename} ({exportedPdf.destination})
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+            {Capacitor.isNativePlatform() && (
+              <button
+                type="button"
+                onClick={() => {
+                  void nativeService.openPdf({
+                    path: exportedPdf.path,
+                    uri: exportedPdf.uri,
+                    filename: exportedPdf.filename,
+                  });
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#ffffff',
+                  color: '#00685F',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Open PDF
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                void handleShare();
+              }}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: '#ffffff',
+                fontWeight: 600,
+                fontSize: '12px',
+                border: '1px solid rgba(255,255,255,0.4)',
+                cursor: 'pointer',
+              }}
+            >
+              Share PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setExportedPdf(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ffffff',
+                cursor: 'pointer',
+                padding: '4px',
+                fontSize: '14px',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dispense Medicines & Administer in Clinic Modal */}
+      {prescription && showDispenseModal && (
+        <DispensePrescriptionModal
+          isOpen={showDispenseModal}
+          onClose={() => setShowDispenseModal(false)}
+          onSuccess={() => {
+            showToast(
+              dispenseType === 'ADMINISTRATION'
+                ? 'Clinical administration recorded and stock updated.'
+                : 'Prescription medicines dispensed and stock deducted.'
+            );
+            void loadDispenseHistory();
+          }}
+          prescription={prescription}
+          items={items || []}
+          dispenseType={dispenseType}
+        />
+      )}
+
+      {/* External Medicine Prescription Modal (Full Prescription Format) */}
+      {prescription && showExternalRxModal && (
+        <ExternalPrescriptionModal
+          isOpen={showExternalRxModal}
+          onClose={() => setShowExternalRxModal(false)}
+          prescription={prescription}
+          items={items || []}
+          patient={patient}
+          owner={owner}
+          activePractitioner={activePractitioner}
+          activeOrganisation={activeOrganisation}
         />
       )}
     </div>

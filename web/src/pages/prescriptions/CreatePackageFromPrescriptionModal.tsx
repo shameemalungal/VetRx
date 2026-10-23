@@ -9,6 +9,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/schema';
 import type { Prescription, PrescriptionItem, Medicine, TreatmentPackage } from '../../types';
 import { Icon } from '../../components/ui/Icon';
+import { packagesApi } from '../../services/api/packagesApi';
 
 interface CreatePackageFromPrescriptionModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ interface CreatePackageFromPrescriptionModalProps {
 
 export interface EditableDraftMedicine {
   id: string; // client-side unique id for keying
-  medicineId?: number;
+  medicineId?: number | string;
   brandName: string;
   genericName?: string;
   presentation: string;
@@ -474,12 +475,46 @@ export const CreatePackageFromPrescriptionModal: React.FC<CreatePackageFromPresc
     setIsSaving(true);
     try {
       const now = new Date();
-      let createdPackageId: number | undefined;
+      let createdPackageId: number | string | undefined;
 
-      // Atomic Dexie transaction ensuring package and all items are saved together
+      const itemsToInsert = draftMedicines.map((itm, idx) => ({
+        medicineId: itm.medicineId,
+        brandName: itm.brandName.trim(),
+        genericName: itm.genericName?.trim(),
+        presentation: itm.presentation.trim() || 'Tablet',
+        strengthVolume: itm.strengthVolume || itm.presentation,
+        dose: itm.dose.trim(),
+        quantity: itm.quantity,
+        unit: itm.unit.trim(),
+        frequency: itm.frequency.trim(),
+        durationDays: itm.durationDays,
+        route: itm.route.trim(),
+        directions: itm.directions ? itm.directions.trim() : undefined,
+        sortOrder: idx + 1,
+      }));
+
+      try {
+        const serverPkg = await packagesApi.create({
+          name: packageName.trim(),
+          description: clinicalIndication.trim(),
+          category: clinicalIndication.trim(),
+          species: targetSpecies.length === 1 ? targetSpecies[0] : (targetSpecies.includes('General') ? 'General' : targetSpecies.join(', ')),
+          targetSpecies: targetSpecies,
+          defaultInstructions: prescription.instructions || '',
+          protocolCode: `PROTO-${Date.now().toString().slice(-4)}`,
+          items: itemsToInsert as any,
+        });
+        if (serverPkg && serverPkg.id) {
+          createdPackageId = serverPkg.id;
+        }
+      } catch (apiErr) {
+        console.warn('Could not save package to backend API directly:', apiErr);
+      }
+
+      // Mirror to Dexie for fast offline/local lookup
       await db.transaction('rw', [db.treatmentPackages, db.treatmentPackageItems], async () => {
-        // 1. Create Treatment Package
-        const pkgData: Omit<TreatmentPackage, 'id'> = {
+        const pkgData: TreatmentPackage = {
+          id: (createdPackageId || Date.now()) as any,
           name: packageName.trim(),
           description: clinicalIndication.trim(),
           category: clinicalIndication.trim(),
@@ -493,28 +528,15 @@ export const CreatePackageFromPrescriptionModal: React.FC<CreatePackageFromPresc
           updatedAt: now,
         };
 
-        const pkgId = await db.treatmentPackages.add(pkgData as TreatmentPackage);
-        createdPackageId = pkgId as number;
+        const pkgId = await db.treatmentPackages.put(pkgData);
+        if (!createdPackageId) createdPackageId = pkgId;
 
-        // 2. Add Package Items deep-copied from the draft
-        const itemsToInsert = draftMedicines.map((itm, idx) => ({
-          packageId: pkgId as number,
-          medicineId: itm.medicineId,
-          brandName: itm.brandName.trim(),
-          genericName: itm.genericName?.trim(),
-          presentation: itm.presentation.trim() || 'Tablet',
-          strengthVolume: itm.strengthVolume || itm.presentation,
-          dose: itm.dose.trim(),
-          quantity: itm.quantity,
-          unit: itm.unit.trim(),
-          frequency: itm.frequency.trim(),
-          durationDays: itm.durationDays,
-          route: itm.route.trim(),
-          directions: itm.directions ? itm.directions.trim() : undefined,
-          sortOrder: idx + 1,
+        const dexieItems = itemsToInsert.map((itm) => ({
+          ...itm,
+          packageId: createdPackageId as any,
         }));
 
-        await db.treatmentPackageItems.bulkAdd(itemsToInsert);
+        await db.treatmentPackageItems.bulkAdd(dexieItems);
       });
 
       onClose();

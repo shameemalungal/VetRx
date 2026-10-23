@@ -40,7 +40,7 @@ export interface Organisation {
 // ── Owner & Patient ───────────────────────────────────────────
 
 export interface Owner {
-  id?: number;
+  id?: number | string;
   serverId?: string;
   name: string;
   phone: string;
@@ -48,6 +48,7 @@ export interface Owner {
   email?: string;
   address?: string;
   notes?: string;
+  syncStatus?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -56,9 +57,9 @@ export type Species = 'Canine' | 'Feline' | 'Avian' | 'Bovine' | 'Equine' | 'Oth
 export type Sex = 'Male' | 'Female' | 'Male (Intact)' | 'Female (Intact)' | 'Unknown';
 
 export interface Patient {
-  id?: number;
+  id?: number | string;
   serverId?: string;
-  ownerId: number;
+  ownerId: number | string;
   serverOwnerId?: string;
   name: string;
   species: Species;
@@ -70,6 +71,7 @@ export interface Patient {
   microchipNumber?: string;
   identificationRef?: string;
   notes?: string;
+  syncStatus?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -147,7 +149,8 @@ export const DOSING_METHOD_OPTIONS: DosingMethodOption[] = [
 // ── Medicine ──────────────────────────────────────────────────
 
 export interface Medicine {
-  id?: number;
+  id?: number | string;
+  serverId?: string;
   brandName: string;
   genericName?: string;
   presentation: string;    // e.g. Tablet, Syrup, Injection, Drops
@@ -239,12 +242,12 @@ export interface PrescriptionWorkflowHistoryItem {
 }
 
 export interface Prescription {
-  id?: number;
+  id?: number | string;
   rxNumber: string;        // e.g. RX-2026-0892
-  patientId: number;
-  ownerId: number;
-  practitionerId?: number;
-  packageId?: number;      // if created from a package
+  patientId: number | string;
+  ownerId: number | string;
+  practitionerId?: number | string;
+  packageId?: number | string;      // if created from a package
   visitId?: number | string; // if created from a field visit or consultation
   visitCaseId?: number | string; // specific linked visit case
   symptoms?: string;
@@ -254,6 +257,7 @@ export interface Prescription {
   recheckIntervalPreset?: string; // 'None' | '3 days' | '5 days' | '7 days' | '14 days' | 'Custom'
   recheckIntervalCustom?: string; // e.g. '10 days', '2 weeks', 'After 5 days'
   status: PrescriptionStatus;
+  dispenseStatus?: 'UNDISPENSED' | 'PARTIALLY_DISPENSED' | 'FULLY_DISPENSED';
   version?: number;
   forwardingRemarks?: string | null;
   forwardedByUserId?: string | null;
@@ -272,6 +276,7 @@ export interface Prescription {
   changeRequestRemarks?: string | null;
   workflowHistory?: PrescriptionWorkflowHistoryItem[];
   items?: PrescriptionItem[];
+  dispensings?: PrescriptionDispenseRecord[];
   patient?: any;
   issuedAt?: Date;
   cancelledAt?: Date;
@@ -281,9 +286,11 @@ export interface Prescription {
 }
 
 export interface PrescriptionItem {
-  id?: number;
-  prescriptionId: number;
-  medicineId?: number;
+  id?: number | string;
+  prescriptionId: number | string;
+  medicineId?: number | string;
+  inventoryItemId?: string | null;
+  isExternal?: boolean;
   brandName: string;       // snapshot at time of Rx
   genericName?: string;
   presentation: string;
@@ -292,10 +299,13 @@ export interface PrescriptionItem {
   strengthVolume?: string;
   dose?: string;           // Final approved numeric or clinical dose e.g. "240", "1.17"
   doseUnit?: string;       // Clinical dose unit e.g. "mg", "g", "mL", "mg/kg"
-  quantity: number;        // Dispense quantity
-  unit: string;            // Dispense unit e.g. "tablets", "vial", "bottle", "mL"
-  dispenseQuantity?: number; // Explicit alias for quantity
-  dispenseUnit?: string;   // Explicit alias for unit
+  quantity: number;        // Prescribed quantity
+  unit: string;            // Prescribed unit e.g. "tablets", "vial", "bottle", "mL"
+  dispenseQuantity?: number; // Quantity in current dispense action
+  dispenseUnit?: string;   // Unit in current dispense action
+  dispensedQuantity?: number; // Total quantity historically supplied/administered
+  dispenseStatus?: 'PENDING' | 'PARTIALLY_DISPENSED' | 'FULLY_DISPENSED';
+  dispensings?: PrescriptionDispenseRecord[];
   frequency: string;       // SID, BID, TID, q12h …
   durationDays?: number;
   route?: string;          // PO, SC, IV, Topical …
@@ -303,16 +313,74 @@ export interface PrescriptionItem {
   sortOrder: number;
 }
 
+export interface PrescriptionDispenseRecord {
+  id: string;
+  practiceId: string;
+  prescriptionId: string;
+  prescriptionItemId: string;
+  inventoryItemId?: string | null;
+  itemName?: string | null;
+  inventoryBatchId?: string | null;
+  batchNumber?: string | null;
+  dispenseType: 'DISPENSE' | 'ADMINISTRATION' | 'WASTAGE' | string;
+  quantity: number;
+  unit?: string | null;
+  baseQuantity?: number | null;
+  baseUnit?: string | null;
+  status: 'COMPLETED' | 'REVERSED' | string;
+  notes?: string | null;
+  reversalReason?: string | null;
+  reversedAt?: string | null;
+  reversedByUserId?: string | null;
+  dispensedByUserId?: string | null;
+  dispensedByUserName?: string | null;
+  createdAt: string;
+}
+
+export interface DispensePrescriptionRequest {
+  prescriptionId: string;
+  dispenseType: 'DISPENSE' | 'ADMINISTRATION';
+  idempotencyKey?: string | null;
+  notes?: string | null;
+  items: Array<{
+    prescriptionItemId: string;
+    inventoryItemId?: string | null;
+    inventoryBatchId?: string | null;
+    batchNumber?: string | null;
+    dispenseQuantity: number;
+    dispenseUnit?: string | null;
+    isExternal?: boolean;
+    notes?: string | null;
+    isWastage?: boolean;
+  }>;
+}
+
+export interface DispensePrescriptionResponse {
+  success: boolean;
+  prescriptionId: string;
+  dispenseStatus: 'UNDISPENSED' | 'PARTIALLY_DISPENSED' | 'FULLY_DISPENSED';
+  dispensedRecords: PrescriptionDispenseRecord[];
+  updatedStockBalances: Array<{
+    inventoryItemId: string;
+    itemName: string;
+    batchId: string;
+    batchNumber: string;
+    remainingQuantity: number;
+    baseUnit: string;
+    containerBreakdown: any;
+  }>;
+}
+
 // ── Treatment Package ─────────────────────────────────────────
 
 export interface TreatmentPackage {
-  id?: number;
+  id?: number | string;
   name: string;
   description?: string;
   category?: string;
   species?: string;
   targetSpecies?: string[];
-  sourcePrescriptionId?: number;
+  sourcePrescriptionId?: number | string;
   defaultInstructions?: string;
   protocolCode?: string;
   usageCount: number;
@@ -322,9 +390,9 @@ export interface TreatmentPackage {
 }
 
 export interface TreatmentPackageItem {
-  id?: number;
-  packageId: number;
-  medicineId?: number;
+  id?: number | string;
+  packageId: number | string;
+  medicineId?: number | string;
   brandName: string;
   genericName?: string;
   presentation: string;
@@ -357,13 +425,13 @@ export type InvoiceItemCategory =
   | 'Other';
 
 export interface Invoice {
-  id?: number;
+  id?: number | string;
   invoiceNumber: string;   // e.g. INV-2026-00125
-  patientId: number;
-  ownerId: number;
-  practitionerId: number;
-  prescriptionId?: number;
-  prescriptionIds?: number[];
+  patientId: number | string;
+  ownerId: number | string;
+  practitionerId: number | string;
+  prescriptionId?: number | string;
+  prescriptionIds?: Array<number | string>;
   visitId?: number | string;
   invoiceDate: Date;
   notes?: string;
@@ -378,8 +446,8 @@ export interface Invoice {
 }
 
 export interface InvoiceItem {
-  id?: number;
-  invoiceId: number;
+  id?: number | string;
+  invoiceId: number | string;
   category: InvoiceItemCategory;
   description: string;
   quantity: number;
@@ -399,18 +467,18 @@ export interface InvoiceItem {
   rateControlled?: boolean; // locks rate from alteration during invoice creation
 
   // Multi-prescription & visit procedure source metadata snapshot:
-  prescriptionId?: number;
+  prescriptionId?: number | string;
   prescriptionNumber?: string;
   prescriptionDate?: Date | string;
   visitId?: number | string;
   visitCaseId?: number | string;
   procedureId?: number | string;
-  patientId?: number;
+  patientId?: number | string;
   patientName?: string;
   patientSubtitle?: string;
-  ownerId?: number;
+  ownerId?: number | string;
   ownerName?: string;
-  medicineId?: number;
+  medicineId?: number | string;
 }
 
 // ── Audit ─────────────────────────────────────────────────────

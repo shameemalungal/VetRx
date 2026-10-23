@@ -616,6 +616,68 @@ inventoryRouter.post('/prescriptions/resolve-stock', requirePracticePermission(P
 });
 
 // ------------------------------------------------------------------------------
+// Prescription Dispensing & Clinical Administration
+// ------------------------------------------------------------------------------
+
+inventoryRouter.post('/prescriptions/dispense', requirePracticeAnyPermission(PERMISSIONS.INVENTORY_MANAGE, PERMISSIONS.PRESCRIPTION_APPROVE, PERMISSIONS.PRESCRIPTION_UPDATE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      prescriptionId: z.string(),
+      dispenseType: z.enum(['DISPENSE', 'ADMINISTRATION']).default('DISPENSE'),
+      idempotencyKey: z.string().nullable().optional(),
+      notes: z.string().nullable().optional(),
+      items: z.array(
+        z.object({
+          prescriptionItemId: z.string(),
+          inventoryItemId: z.string().nullable().optional(),
+          inventoryBatchId: z.string().nullable().optional(),
+          batchNumber: z.string().nullable().optional(),
+          dispenseQuantity: z.number().positive(),
+          dispenseUnit: z.string().nullable().optional(),
+          isExternal: z.boolean().optional(),
+          notes: z.string().nullable().optional(),
+          isWastage: z.boolean().optional(),
+        })
+      ),
+    });
+
+    const parsed = schema.parse(req.body);
+    const result = await InventoryService.dispensePrescription(practiceId, parsed, req.user?.id);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.post('/prescriptions/reverse-dispense', requirePracticeAnyPermission(PERMISSIONS.INVENTORY_MANAGE, PERMISSIONS.PRESCRIPTION_APPROVE), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const schema = z.object({
+      dispensingId: z.string(),
+      reason: z.string().min(1, 'A mandatory reason is required to reverse a dispensing record.'),
+    });
+
+    const { dispensingId, reason } = schema.parse(req.body);
+    const result = await InventoryService.reversePrescriptionDispensing(practiceId, dispensingId, reason, req.user?.id);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+inventoryRouter.get('/prescriptions/:id/dispense-history', requirePracticePermission(PERMISSIONS.INVENTORY_VIEW), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const practiceId = getPracticeId(req);
+    const prescriptionId = Array.isArray(req.params.id) ? req.params.id[0] : (req.params.id as string);
+    const history = await InventoryService.getPrescriptionDispenseHistory(practiceId, prescriptionId);
+    res.status(200).json({ history });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ------------------------------------------------------------------------------
 // Invoice Stock Deduction & Cancellation Reversal
 // ------------------------------------------------------------------------------
 

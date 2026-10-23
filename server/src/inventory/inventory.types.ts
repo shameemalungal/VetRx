@@ -373,3 +373,73 @@ export interface FieldUsageDeductionResult {
   requestedQuantity?: number;
 }
 
+// ------------------------------------------------------------------------------
+// Prescription Dispensing & Administration DTOs
+// ------------------------------------------------------------------------------
+
+export interface DispensePrescriptionItemDTO {
+  prescriptionItemId: string;
+  inventoryItemId?: string | null;
+  inventoryBatchId?: string | null;
+  batchNumber?: string | null;
+  dispenseQuantity: number;
+  dispenseUnit?: string | null;
+  isExternal?: boolean;
+  notes?: string | null;
+  isWastage?: boolean;
+}
+
+export interface DispensePrescriptionRequestDTO {
+  prescriptionId: string;
+  dispenseType: 'DISPENSE' | 'ADMINISTRATION';
+  idempotencyKey?: string | null;
+  items: DispensePrescriptionItemDTO[];
+  notes?: string | null;
+}
+
+export interface PrescriptionDispenseRecordDTO {
+  id: string;
+  practiceId: string;
+  prescriptionId: string;
+  prescriptionItemId: string;
+  inventoryItemId?: string | null;
+  itemName?: string | null;
+  inventoryBatchId?: string | null;
+  batchNumber?: string | null;
+  dispenseType: string;
+  quantity: number;
+  unit?: string | null;
+  baseQuantity?: number | null;
+  baseUnit?: string | null;
+  status: string;
+  notes?: string | null;
+  reversalReason?: string | null;
+  reversedAt?: string | null;
+  reversedByUserId?: string | null;
+  dispensedByUserId?: string | null;
+  dispensedByUserName?: string | null;
+  createdAt: string;
+}
+
+export interface DispensePrescriptionResponseDTO {
+  success: boolean;
+  prescriptionId: string;
+  dispenseStatus: 'UNDISPENSED' | 'PARTIALLY_DISPENSED' | 'FULLY_DISPENSED';
+  dispensedRecords: PrescriptionDispenseRecordDTO[];
+  updatedStockBalances: Array<{
+    inventoryItemId: string;
+    itemName: string;
+    batchId: string;
+    batchNumber: string;
+    remainingQuantity: number;
+    baseUnit: string;
+    containerBreakdown: any;
+  }>;
+}
+
+export interface ReverseDispenseRequestDTO {
+  dispensingId: string;
+  reason: string;
+}
+
+

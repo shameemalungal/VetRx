@@ -60,10 +60,10 @@ export const InvoiceDetailsPage: React.FC = () => {
   } = useSettingsStore();
 
   // Load invoice & items
-  const invoiceId = parseInt(id || '0', 10);
-  const invoice = useLiveQuery(() => db.invoices.get(invoiceId), [invoiceId]);
+  const invoiceId = id ? (isNaN(Number(id)) ? id : Number(id)) : 0;
+  const invoice = useLiveQuery(() => db.invoices.get(invoiceId as any), [invoiceId]);
   const items = useLiveQuery(
-    () => db.invoiceItems.where('invoiceId').equals(invoiceId).sortBy('sortOrder'),
+    () => db.invoiceItems.where('invoiceId').equals(invoiceId as any).sortBy('sortOrder'),
     [invoiceId]
   ) || [];
 
@@ -82,7 +82,7 @@ export const InvoiceDetailsPage: React.FC = () => {
 
   const allLinkedPrescriptions = useLiveQuery(async () => {
     if (!invoice) return [];
-    const ids: number[] = [];
+    const ids: (number | string)[] = [];
     if (invoice.prescriptionId) ids.push(invoice.prescriptionId);
     if (invoice.prescriptionIds && Array.isArray(invoice.prescriptionIds)) {
       ids.push(...invoice.prescriptionIds);
@@ -90,9 +90,9 @@ export const InvoiceDetailsPage: React.FC = () => {
     items.forEach((it) => {
       if (it.prescriptionId) ids.push(it.prescriptionId);
     });
-    const uniqueIds = Array.from(new Set(ids)).filter((pid): pid is number => typeof pid === 'number' && pid > 0);
+    const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
     if (uniqueIds.length === 0) return [];
-    return db.prescriptions.where('id').anyOf(uniqueIds).toArray();
+    return db.prescriptions.where('id').anyOf(uniqueIds as any).toArray();
   }, [invoice, items]) || [];
 
   const linkedRxNumbers = useMemo(() => {

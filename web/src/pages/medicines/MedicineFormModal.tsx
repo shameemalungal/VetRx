@@ -23,6 +23,8 @@ import {
   defaultPackSizeUnitForPresentation,
 } from '../../utils/doseCalculator';
 
+import { medicinesApi } from '../../services/api/medicinesApi';
+
 export { COMMON_PRESENTATIONS };
 
 const COMMON_CATEGORIES = [
@@ -47,7 +49,7 @@ interface MedicineFormModalProps {
   initialBrandName?: string;
   isFromPrescription?: boolean;
   onClose: () => void;
-  onSaved: (medicineId: number) => void;
+  onSaved: (medicineId: number | string) => void;
 }
 
 export function MedicineFormModal({
@@ -234,7 +236,7 @@ export function MedicineFormModal({
     });
   };
 
-  const handleUseExisting = (existingId?: number) => {
+  const handleUseExisting = (existingId?: number | string) => {
     if (existingId) {
       onSaved(existingId);
       onClose();
@@ -330,18 +332,27 @@ export function MedicineFormModal({
         updatedAt: now,
       };
 
-      let savedId: number;
+      let savedId: number | string;
 
       if (isEdit && medicine?.id) {
-        // Edit existing medicine
-        await db.medicines.update(medicine.id, medicinePayload);
-        savedId = medicine.id;
+        // Edit existing medicine on server
+        const updated = await medicinesApi.update(String(medicine.id), medicinePayload);
+        savedId = updated.id || medicine.id;
+        // Keep local cache updated if applicable
+        if (typeof medicine.id === 'number') {
+          await db.medicines.update(medicine.id, medicinePayload).catch(() => {});
+        }
       } else {
-        // Create new canonical medicine master
-        savedId = (await db.medicines.add({
+        // Create new canonical medicine on server
+        const created = await medicinesApi.create(medicinePayload);
+        savedId = created.id || Date.now();
+        // Mirror to local cache
+        await db.medicines.add({
           ...medicinePayload,
+          id: typeof created.id === 'number' ? created.id : undefined,
+          serverId: typeof created.id === 'string' ? created.id : undefined,
           createdAt: now,
-        } as Medicine)) as number;
+        } as Medicine).catch(() => {});
       }
 
       onSaved(savedId);

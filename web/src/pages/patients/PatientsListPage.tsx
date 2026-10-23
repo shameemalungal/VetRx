@@ -11,6 +11,8 @@ import { db } from '../../db/schema';
 import { Icon } from '../../components/ui/Icon';
 import { formatAnimalSubtitle, formatOwnerPrimary } from '../../utils/patientFormat';
 import type { Patient, Owner, Species } from '../../types';
+import { patientsApi } from '../../services/api/patientsApi';
+import { ownersApi } from '../../services/api/ownersApi';
 import './Patients.css';
 
 const SPECIES_OPTIONS: Species[] = ['Canine', 'Feline', 'Avian', 'Bovine', 'Equine', 'Other'];
@@ -22,13 +24,45 @@ export const PatientsListPage: React.FC = () => {
   const [selectedSpecies, setSelectedSpecies] = useState<'All' | Species>('All');
   const [viewMode, setViewMode] = useState<'animals' | 'owners'>('animals');
 
+  // Background synchronize authoritative patients & owners from PostgreSQL to Dexie
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      patientsApi.list().catch(() => []),
+      ownersApi.list().catch(() => []),
+    ]).then(([serverPatients, serverOwners]) => {
+      if (cancelled) return;
+      if (serverOwners && serverOwners.length > 0) {
+        db.owners.bulkPut(
+          serverOwners.map((o) => ({
+            ...o,
+            createdAt: new Date(o.createdAt),
+            updatedAt: new Date(o.updatedAt),
+          } as any))
+        );
+      }
+      if (serverPatients && serverPatients.length > 0) {
+        db.patients.bulkPut(
+          serverPatients.map((p) => ({
+            ...p,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt),
+          } as any))
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // ── Live Query Data ───────────────────────────────────────────
   const patients = useLiveQuery(() => db.patients.toArray(), []);
   const owners = useLiveQuery(() => db.owners.toArray(), []);
 
   // Map owners by ID
   const ownerMap = useMemo(() => {
-    const map = new Map<number, Owner>();
+    const map = new Map<number | string, Owner>();
     owners?.forEach((o) => {
       if (o.id) map.set(o.id, o);
     });
@@ -288,7 +322,7 @@ export const PatientsListPage: React.FC = () => {
             <div className="patients-grid" id="patients-card-grid">
               {filteredPatients.map((patient) => {
                 const age = formatAge(patient);
-                const identification = patient.identificationRef || (patient.id ? `#CAN-${8800 + patient.id}` : undefined);
+                const identification = patient.identificationRef || (patient.id ? (typeof patient.id === 'number' ? `#CAN-${8800 + patient.id}` : `#CAN-${String(patient.id).slice(0, 8)}`) : undefined);
 
                 return (
                   <article key={patient.id} className="patient-card">
